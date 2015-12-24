@@ -1,0 +1,13 @@
+[package]
+name = "bellman"
+version = "0.0.1"
+authors = ["Sean Bowe <ewillbefull@gmail.com>"]
+homepage = "https://github.com/ebfull/bellman"
+repository = "https://github.com/ebfull/bellman"
+documentation = "https://github.com/ebfull/bellman"
+license = "MIT"
+description = "zk-SNARK library"
+
+[dependencies.tinysnark]
+path = "tinysnark"
+version = "0.0.1"
