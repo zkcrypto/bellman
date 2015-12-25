@@ -1,4 +1,5 @@
-#![feature(box_syntax, test)]
+#![feature(box_syntax)]
+#![cfg_attr(test, feature(test))]
 extern crate libc;
 
 mod arith;

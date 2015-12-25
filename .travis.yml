@@ -16,4 +16,6 @@ addons:
     - libgmp-dev
 
 script:
+  - cd tinysnark && cargo test
   - cargo run --release
+  - cargo test

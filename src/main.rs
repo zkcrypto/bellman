@@ -1,5 +1,7 @@
 extern crate tinysnark;
 
 fn main() {
-	tinysnark::test();
+    tinysnark::init();
+
+    tinysnark::test();
 }
