@@ -1,10 +1,13 @@
 #![feature(box_syntax)]
+#![allow(improper_ctypes)]
 //#![cfg_attr(test, feature(test))]
 extern crate libc;
 
 mod arith;
+mod r1cs;
 
 pub use self::arith::*;
+pub use self::r1cs::*;
 
 use std::sync::{Once, ONCE_INIT};
 
@@ -13,7 +16,6 @@ static mut INITIALIZED: bool = false;
 
 extern "C" {
     fn tinysnark_init_public_params();
-    fn tinysnark_test();
 }
 
 pub fn init() {
@@ -27,15 +29,47 @@ pub fn is_initialized() -> bool {
     unsafe { INITIALIZED }
 }
 
-pub fn test() {
-    unsafe { tinysnark_test(); }
-}
-
 #[cfg(test)]
 mod tests {
     //extern crate test;
-    use super::{init, FieldT};
+    use super::{init, FieldT, Proof, Keypair, LinearTerm, ConstraintSystem};
     //use self::test::Bencher;
+
+    #[test]
+    fn test_zk() {
+        init();
+        {
+            let mut cs = ConstraintSystem::new(1, 2);
+            // zkpok { (a, b) c = a * b }
+            cs.add_constraint(
+                &[LinearTerm{coeff: FieldT::one(), index: 2}],
+                &[LinearTerm{coeff: FieldT::one(), index: 3}],
+                &[LinearTerm{coeff: FieldT::one(), index: 1}]
+            );
+            assert!(cs.test(&[10.into()], &[5.into(), 2.into()]));
+            assert!(!cs.test(&[10.into()], &[6.into(), 2.into()]));
+
+            let kp = Keypair::new(&cs);
+            let proof = Proof::new(&kp, &cs, &[10.into()], &[5.into(), 2.into()]);
+            assert!(proof.verify(&kp, &cs, &[10.into()]));
+        }
+        {
+            let mut cs = ConstraintSystem::new(0, 1);
+            // simple boolean constraint
+            cs.add_constraint(
+                &[LinearTerm{coeff: FieldT::one(), index: 0}, LinearTerm{coeff: -FieldT::one(), index: 1}],
+                &[LinearTerm{coeff: FieldT::one(), index: 1}],
+                &[LinearTerm{coeff: FieldT::zero(), index: 0}]
+            );
+            assert!(cs.test(&[], &[1.into()]));
+            assert!(cs.test(&[], &[0.into()]));
+            assert!(!cs.test(&[], &[2.into()]));
+
+            let kp = Keypair::new(&cs);
+            let proof = Proof::new(&kp, &cs, &[], &[1.into()]);
+            assert!(proof.verify(&kp, &cs, &[]));
+        }
+    }
 
     #[test]
     fn test_one() {

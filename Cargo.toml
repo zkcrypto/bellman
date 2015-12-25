@@ -8,6 +8,9 @@ name = "bellman"
 repository = "https://github.com/ebfull/bellman"
 version = "0.0.1"
 
+[dependencies]
+rand = "0.3.12"
+
 [dependencies.tinysnark]
 path = "tinysnark"
 version = "0.0.1"
