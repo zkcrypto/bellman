@@ -50,8 +50,8 @@ mod tests {
             assert!(!cs.test(&[10.into()], &[6.into(), 2.into()]));
 
             let kp = Keypair::new(&cs);
-            let proof = Proof::new(&kp, &cs, &[10.into()], &[5.into(), 2.into()]);
-            assert!(proof.verify(&kp, &cs, &[10.into()]));
+            let proof = Proof::new(&kp, &[10.into()], &[5.into(), 2.into()]);
+            assert!(proof.verify(&kp, &[10.into()]));
         }
         {
             let mut cs = ConstraintSystem::new(0, 1);
@@ -66,8 +66,8 @@ mod tests {
             assert!(!cs.test(&[], &[2.into()]));
 
             let kp = Keypair::new(&cs);
-            let proof = Proof::new(&kp, &cs, &[], &[1.into()]);
-            assert!(proof.verify(&kp, &cs, &[]));
+            let proof = Proof::new(&kp, &[], &[1.into()]);
+            assert!(proof.verify(&kp, &[]));
         }
     }
 

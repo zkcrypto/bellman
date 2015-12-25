@@ -18,12 +18,11 @@ struct tinysnark_linear_term {
     size_t index;
 };
 
-extern "C" void * tinysnark_gen_proof(void * kp, void * ics, FieldT* primary, FieldT* aux) {
-    r1cs_constraint_system<FieldT>* cs = static_cast<r1cs_constraint_system<FieldT>*>(ics);
+extern "C" void * tinysnark_gen_proof(void * kp, FieldT* primary, FieldT* aux) {
     r1cs_ppzksnark_keypair<default_r1cs_ppzksnark_pp>* keypair = static_cast<r1cs_ppzksnark_keypair<default_r1cs_ppzksnark_pp>*>(kp);
 
-    r1cs_primary_input<FieldT> primary_input(primary, primary+(cs->primary_input_size));
-    r1cs_auxiliary_input<FieldT> aux_input(aux, aux+(cs->auxiliary_input_size));
+    r1cs_primary_input<FieldT> primary_input(primary, primary+(keypair->pk.constraint_system.primary_input_size));
+    r1cs_auxiliary_input<FieldT> aux_input(aux, aux+(keypair->pk.constraint_system.auxiliary_input_size));
 
     auto proof = new r1cs_ppzksnark_proof<default_r1cs_ppzksnark_pp>(
         r1cs_ppzksnark_prover<default_r1cs_ppzksnark_pp>(keypair->pk, primary_input, aux_input)
@@ -32,12 +31,11 @@ extern "C" void * tinysnark_gen_proof(void * kp, void * ics, FieldT* primary, Fi
     return static_cast<void*>(std::move(proof));
 }
 
-extern "C" bool tinysnark_verify_proof(void * iproof, void * kp, void * ics, FieldT* primary) {
+extern "C" bool tinysnark_verify_proof(void * iproof, void * kp, FieldT* primary) {
     r1cs_ppzksnark_proof<default_r1cs_ppzksnark_pp>* proof = static_cast<r1cs_ppzksnark_proof<default_r1cs_ppzksnark_pp>*>(iproof);
-    r1cs_constraint_system<FieldT>* cs = static_cast<r1cs_constraint_system<FieldT>*>(ics);
     r1cs_ppzksnark_keypair<default_r1cs_ppzksnark_pp>* keypair = static_cast<r1cs_ppzksnark_keypair<default_r1cs_ppzksnark_pp>*>(kp);
 
-    r1cs_primary_input<FieldT> primary_input(primary, primary+(cs->primary_input_size));
+    r1cs_primary_input<FieldT> primary_input(primary, primary+(keypair->pk.constraint_system.primary_input_size));
 
     return r1cs_ppzksnark_verifier_strong_IC<default_r1cs_ppzksnark_pp>(keypair->vk, primary_input, *proof);
 }

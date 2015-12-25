@@ -75,13 +75,17 @@ impl ConstraintSystem {
 struct R1CSKeypair;
 
 pub struct Keypair {
-    kp: *mut R1CSKeypair
+    kp: *mut R1CSKeypair,
+    primary_size: usize,
+    aux_size: usize
 }
 
 impl Keypair {
     pub fn new(constraint_system: &ConstraintSystem) -> Keypair {
         Keypair {
-            kp: unsafe { tinysnark_gen_keypair(constraint_system.cs) }
+            kp: unsafe { tinysnark_gen_keypair(constraint_system.cs) },
+            primary_size: constraint_system.primary_size,
+            aux_size: constraint_system.aux_size
         }
     }
 }
@@ -105,22 +109,24 @@ pub struct Proof {
 }
 
 impl Proof {
-    pub fn new(keypair: &Keypair, constraint_system: &ConstraintSystem, primary: &[FieldT], aux: &[FieldT])
+    pub fn new(keypair: &Keypair, primary: &[FieldT], aux: &[FieldT])
         -> Proof
     {
-        assert_eq!(primary.len(), constraint_system.primary_size);
-        assert_eq!(aux.len(), constraint_system.aux_size);
+        assert_eq!(primary.len(), keypair.primary_size);
+        assert_eq!(aux.len(), keypair.aux_size);
 
         unsafe {
             Proof {
-                proof: tinysnark_gen_proof(keypair.kp, constraint_system.cs, primary.get_unchecked(0), aux.get_unchecked(0))
+                proof: tinysnark_gen_proof(keypair.kp, primary.get_unchecked(0), aux.get_unchecked(0))
             }
         }
     }
 
-    pub fn verify(&self, keypair: &Keypair, constraint_system: &ConstraintSystem, primary: &[FieldT]) -> bool {
+    pub fn verify(&self, keypair: &Keypair, primary: &[FieldT]) -> bool {
+        assert_eq!(primary.len(), keypair.primary_size);
+
         unsafe {
-            tinysnark_verify_proof(self.proof, keypair.kp, constraint_system.cs, primary.get_unchecked(0))
+            tinysnark_verify_proof(self.proof, keypair.kp, primary.get_unchecked(0))
         }
     }
 }
@@ -133,12 +139,10 @@ impl Drop for Proof {
 
 extern "C" {
     fn tinysnark_gen_proof(keypair: *mut R1CSKeypair,
-                           cs: *mut R1ConstraintSystem,
                            primary: *const FieldT,
                            aux: *const FieldT) -> *mut R1CSProof;
     fn tinysnark_verify_proof(proof: *mut R1CSProof,
                               keypair: *mut R1CSKeypair,
-                              cs: *mut R1ConstraintSystem,
                               primary: *const FieldT) -> bool;
     fn tinysnark_drop_proof(proof: *mut R1CSProof);
 }
