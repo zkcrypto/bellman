@@ -17,5 +17,5 @@ addons:
 
 script:
   - cd tinysnark && cargo test
-  - cargo run --release
+  - cd .. && cargo run --release
   - cargo test
