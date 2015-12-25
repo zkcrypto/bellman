@@ -1,5 +1,5 @@
 #![feature(box_syntax)]
-#![cfg_attr(test, feature(test))]
+//#![cfg_attr(test, feature(test))]
 extern crate libc;
 
 mod arith;
@@ -33,9 +33,9 @@ pub fn test() {
 
 #[cfg(test)]
 mod tests {
-    extern crate test;
+    //extern crate test;
     use super::{init, FieldT};
-    use self::test::Bencher;
+    //use self::test::Bencher;
 
     #[test]
     fn test_one() {
