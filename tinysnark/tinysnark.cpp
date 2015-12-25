@@ -11,13 +11,49 @@ zk-SNARK support using the ALT_BN128 curve.
 using namespace libsnark;
 using namespace std;
 
+typedef Fr<default_r1cs_ppzksnark_pp> FieldT;
+
+extern "C" FieldT tinysnark_fieldt_mul(FieldT a, FieldT b) {
+    return a * b;
+}
+
+extern "C" FieldT tinysnark_fieldt_add(FieldT a, FieldT b) {
+    return a + b;
+}
+
+extern "C" unsigned long tinysnark_long_from_fieldt(FieldT num) {
+    return num.as_bigint().as_ulong();
+}
+
+extern "C" FieldT tinysnark_fieldt_from_long(long num) {
+    return FieldT(num);
+}
+
+extern "C" FieldT tinysnark_fieldt_one() {
+    return FieldT::one();
+}
+
+extern "C" FieldT tinysnark_fieldt_zero() {
+    return FieldT::zero();
+}
+
+extern "C" FieldT tinysnark_fieldt_neg(FieldT val) {
+    return -val;
+}
+
+extern "C" FieldT tinysnark_fieldt_inverse(FieldT val) {
+    return val.inverse();
+}
+
 extern "C" void tinysnark_init_public_params() {
     default_r1cs_ppzksnark_pp::init_public_params();
+    {
+        auto p = FieldT::one();
+        assert(sizeof(p) == 32);
+    }
 }
 
 extern "C" void tinysnark_test() {
-    typedef Fr<default_r1cs_ppzksnark_pp> FieldT;
-
     protoboard<FieldT> pb;
 
     linear_combination<FieldT> sum;
