@@ -60,7 +60,7 @@ impl ConstraintSystem {
         }
     }
 
-    pub fn test(&mut self, primary: &[FieldT], aux: &[FieldT]) -> bool
+    pub fn test(&self, primary: &[FieldT], aux: &[FieldT]) -> bool
     {
         assert_eq!(primary.len(), self.primary_size);
         assert_eq!(aux.len(), self.aux_size);

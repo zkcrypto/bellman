@@ -37,6 +37,24 @@ mod tests {
 
     #[test]
     fn test_zk() {
+        fn test_cs_and_prove<N: Into<FieldT> + Copy>(cs: &ConstraintSystem, primary: &[N], aux: &[N]) -> bool
+        {
+            let primary: Vec<FieldT> = primary.iter().map(|n| (*n).into()).collect();
+            let aux: Vec<FieldT> = aux.iter().map(|n| (*n).into()).collect();
+
+            if !cs.test(&primary, &aux) {
+                return false;
+            }
+
+            let kp = Keypair::new(cs);
+            let proof = Proof::new(&kp, &primary, &aux);
+            // If we construct a proof, it should be impossible
+            // that it doesn't verify.
+            assert!(proof.verify(&kp, &primary));
+
+            return true;
+        }
+
         init();
         {
             let mut cs = ConstraintSystem::new(1, 2);
@@ -46,28 +64,49 @@ mod tests {
                 &[LinearTerm{coeff: FieldT::one(), index: 3}],
                 &[LinearTerm{coeff: FieldT::one(), index: 1}]
             );
-            assert!(cs.test(&[10.into()], &[5.into(), 2.into()]));
-            assert!(!cs.test(&[10.into()], &[6.into(), 2.into()]));
 
-            let kp = Keypair::new(&cs);
-            let proof = Proof::new(&kp, &[10.into()], &[5.into(), 2.into()]);
-            assert!(proof.verify(&kp, &[10.into()]));
+            assert!(test_cs_and_prove(&cs, &[1], &[1, 1]));
+            assert!(test_cs_and_prove(&cs, &[0], &[0, 1]));
+            assert!(test_cs_and_prove(&cs, &[10], &[5, 2]));
+            assert!(!test_cs_and_prove(&cs, &[10], &[6, 2]));
         }
         {
             let mut cs = ConstraintSystem::new(0, 1);
             // simple boolean constraint
+            // (1-x) * x = 0
             cs.add_constraint(
-                &[LinearTerm{coeff: FieldT::one(), index: 0}, LinearTerm{coeff: -FieldT::one(), index: 1}],
+                &[LinearTerm{coeff: FieldT::one(), index: 0},
+                  LinearTerm{coeff: -FieldT::one(), index: 1}],
                 &[LinearTerm{coeff: FieldT::one(), index: 1}],
                 &[LinearTerm{coeff: FieldT::zero(), index: 0}]
             );
-            assert!(cs.test(&[], &[1.into()]));
-            assert!(cs.test(&[], &[0.into()]));
-            assert!(!cs.test(&[], &[2.into()]));
 
-            let kp = Keypair::new(&cs);
-            let proof = Proof::new(&kp, &[], &[1.into()]);
-            assert!(proof.verify(&kp, &[]));
+            assert!(test_cs_and_prove(&cs, &[], &[0]));
+            assert!(test_cs_and_prove(&cs, &[], &[1]));
+            assert!(!test_cs_and_prove(&cs, &[], &[2]));
+        }
+        {
+            let mut cs = ConstraintSystem::new(2, 1);
+            // boolean + xor
+            cs.add_constraint(
+                &[LinearTerm{coeff: FieldT::one(), index: 0},
+                  LinearTerm{coeff: -FieldT::one(), index: 3}],
+                &[LinearTerm{coeff: FieldT::one(), index: 3}],
+                &[LinearTerm{coeff: FieldT::zero(), index: 0}]
+            );
+            cs.add_constraint(
+                &[LinearTerm{coeff: FieldT::from(2), index: 2}],
+                &[LinearTerm{coeff: FieldT::one(), index: 3}],
+                &[LinearTerm{coeff: FieldT::one(), index: 2},
+                  LinearTerm{coeff: FieldT::one(), index: 3},
+                  LinearTerm{coeff: -FieldT::one(), index: 1}]
+            );
+
+            assert!(test_cs_and_prove(&cs, &[0, 0], &[0]));
+            assert!(test_cs_and_prove(&cs, &[1, 1], &[0]));
+            assert!(test_cs_and_prove(&cs, &[1, 0], &[1]));
+            assert!(test_cs_and_prove(&cs, &[0, 1], &[1]));
+            assert!(!test_cs_and_prove(&cs, &[0, 1], &[100]));
         }
     }
 

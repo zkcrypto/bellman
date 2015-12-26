@@ -6,11 +6,20 @@ use tinysnark::{Proof, Keypair, FieldT, LinearTerm, ConstraintSystem};
 fn main() {
     tinysnark::init();
 
-    let mut cs = ConstraintSystem::new(1, 2);
+    let mut cs = ConstraintSystem::new(2, 1);
+    // xor
+    // (2*b) * c = b+c - a
     cs.add_constraint(
-        &[LinearTerm{coeff: FieldT::one(), index: 2}],
+        &[LinearTerm{coeff: FieldT::from(2), index: 2}],
         &[LinearTerm{coeff: FieldT::one(), index: 3}],
-        &[LinearTerm{coeff: FieldT::one(), index: 1}]
+        &[LinearTerm{coeff: FieldT::one(), index: 2},
+          LinearTerm{coeff: FieldT::one(), index: 3},
+          LinearTerm{coeff: -FieldT::one(), index: 1}]
     );
-    assert!(cs.test(&[100.into()], &[10.into(), 10.into()]));
+    let prompt = [0.into(), 1.into()];
+    let solution = [1.into()];
+    assert!(cs.test(&prompt, &solution));
+    let kp = Keypair::new(&cs);
+    let proof = Proof::new(&kp, &prompt, &solution);
+    assert!(proof.verify(&kp, &prompt));
 }
