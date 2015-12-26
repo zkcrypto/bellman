@@ -1,11 +1,17 @@
+#![feature(clone_from_slice)]
+
 extern crate tinysnark;
 extern crate rand;
 
 use tinysnark::{Proof, Keypair, FieldT, LinearTerm, ConstraintSystem};
+use std::marker::PhantomData;
+
+mod keccak;
 
 fn main() {
     tinysnark::init();
 
+    /*
     let mut cs = ConstraintSystem::new(2, 1);
     // xor
     // (2*b) * c = b+c - a
@@ -22,4 +28,5 @@ fn main() {
     let kp = Keypair::new(&cs);
     let proof = Proof::new(&kp, &prompt, &solution);
     assert!(proof.verify(&kp, &prompt));
+    */
 }
