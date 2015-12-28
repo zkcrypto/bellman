@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "keccak.h"
+#include <inttypes.h>
 
 // test each length
 
@@ -79,7 +80,7 @@ int main(int argc, char **argv)
  
     return 0;
     */
-
+/*
     uint8_t in[144] = {
                    0xBB, 0x3B, 0x1B, 0x0B, 0xFF,
                    0xBB, 0x3B, 0x1B, 0x0B, 0xFF,
@@ -123,40 +124,42 @@ int main(int argc, char **argv)
     for (int i = 0; i < 32; i++) {
         printf("%02x ", md[i]);
     }
-
-/*
+*/
     uint64_t st[25] = {
         0xabcdef0123456789,
-        0x9abcdef012345678,
-        0x89abcdef01234567,
-        0x789abcdef0123456,
-        0x6789abcdef012345,
-        0x56789abcdef01234,
-        0x456789abcdef0123,
-        0x3456789abcdef012,
-        0x23456789abcdef01,
-        0x123456789abcdef0,
-        0x0123456789abcdef,
-        0xf0123456789abcde,
-        0xef0123456789abcd,
-        0xdef0123456789abc,
-        0xcdef0123456789ab,
         0xbcdef0123456789a,
-        0xabcdef0123456789,
-        0x9abcdef012345678,
-        0x89abcdef01234567,
-        0x789abcdef0123456,
-        0x6789abcdef012345,
-        0x56789abcdef01234,
-        0x456789abcdef0123,
+        0xcdef0123456789ab,
+        0xdef0123456789abc,
+        0xef0123456789abcd,
+
+        0xf0123456789abcde,
+        0x0123456789abcdef,
+        0x123456789abcdef0,
+        0x23456789abcdef01,
         0x3456789abcdef012,
-        0x23456789abcdef01
+        
+        0x456789abcdef0123,
+        0x56789abcdef01234,
+        0x6789abcdef012345,
+        0x789abcdef0123456,
+        0x89abcdef01234567,
+
+        0x9abcdef012345678,
+        0xabcdef0123456789,
+        0xbcdef0123456789a,
+        0xcdef0123456789ab,
+        0xdef0123456789abc,
+
+        0xef0123456789abcd,
+        0xf0123456789abcde,
+        0x0123456789abcdef,
+        0x123456789abcdef0,
+        0x23456789abcdef01,
     };
 
     keccakf(st, 24);
 
-    if(st[24] == 0x3300e5d2414b6a93) {
-        printf("wow good job\n");
+    for (int i = 0; i < 25; i++) {
+      printf("%" PRIx64 "\n", st[i]);
     }
-*/
 }

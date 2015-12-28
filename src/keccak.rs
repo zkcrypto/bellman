@@ -24,8 +24,9 @@ const keccakf_piln: [usize; 24] =
     15, 23, 19, 13, 12, 2, 20, 14, 22, 9,  6,  1 
 ];
 
-fn keccakf(st: &mut [Chunk; 25], rounds: usize)
+fn keccakf(st: &mut [Chunk], rounds: usize)
 {
+    assert_eq!(st.len(), 25);
     for round in 0..rounds {
         /*
         // Theta
@@ -33,22 +34,12 @@ fn keccakf(st: &mut [Chunk; 25], rounds: usize)
             bc[i] = st[i] ^ st[i + 5] ^ st[i + 10] ^ st[i + 15] ^ st[i + 20];
         */
 
-        // TODO: Rust arrays don't implement FromIterator.
-        let mut bc: [Option<Chunk>; 5] = [None, None, None, None, None];
-
-        for i in 0..5 {
-            bc[i] = Some(st[i]
-                         .xor(&st[i+5])
-                         .xor(&st[i+10])
-                         .xor(&st[i+15])
-                         .xor(&st[i+20]));
-        }
-
-        let mut bc: [Chunk; 5] = [bc[0].take().unwrap(),
-                                  bc[1].take().unwrap(),
-                                  bc[2].take().unwrap(),
-                                  bc[3].take().unwrap(),
-                                  bc[4].take().unwrap()];
+        let mut bc: Vec<Chunk> = (0..5).map(|i| st[i]
+                                                .xor(&st[i+5])
+                                                .xor(&st[i+10])
+                                                .xor(&st[i+15])
+                                                .xor(&st[i+20])
+                                           ).collect();
 
         /*
         for (i = 0; i < 5; i++) {
@@ -119,17 +110,10 @@ fn keccakf(st: &mut [Chunk; 25], rounds: usize)
     }
 }
 
-// TODO: don't return a vec. currently don't have any
-// more patience for rust's awful arrays
-fn keccak256(mut input: &[[Bit; 8]]) -> Vec<Bit> {
+fn keccak256(mut input: &[Byte]) -> Vec<Bit> {
     assert_eq!(input.len(), 144);
 
-    let mut st: [Chunk; 25] = [Chunk::from(0), Chunk::from(0), Chunk::from(0), Chunk::from(0), Chunk::from(0),
-                               Chunk::from(0), Chunk::from(0), Chunk::from(0), Chunk::from(0), Chunk::from(0), 
-                               Chunk::from(0), Chunk::from(0), Chunk::from(0), Chunk::from(0), Chunk::from(0), 
-                               Chunk::from(0), Chunk::from(0), Chunk::from(0), Chunk::from(0), Chunk::from(0), 
-                               Chunk::from(0), Chunk::from(0), Chunk::from(0), Chunk::from(0), Chunk::from(0)
-                              ];
+    let mut st: Vec<Chunk> = Some(Chunk::from(0)).into_iter().cycle().take(25).collect();
 
     let mdlen = 32; // 256 bit
     let rsiz = 200 - 2 * mdlen;
@@ -145,7 +129,11 @@ fn keccak256(mut input: &[[Bit; 8]]) -> Vec<Bit> {
     let mut v = vec![];
     for i in 0..4 {
         // due to endianness...
-        let tmp: Vec<_> = st[i].bits.chunks(8).rev().flat_map(|x| x.iter()).map(|x| x.clone()).collect();
+        let tmp: Vec<_> = st[i].bits.chunks(8)
+                                    .rev()
+                                    .flat_map(|x| x.iter())
+                                    .map(|x| x.clone())
+                                    .collect();
         v.extend_from_slice(&tmp);
     }
 
@@ -154,54 +142,39 @@ fn keccak256(mut input: &[[Bit; 8]]) -> Vec<Bit> {
     v
 }
 
+#[derive(Clone)]
 struct Chunk {
-    bits: [Bit; 64]
-}
-
-impl Clone for Chunk {
-    fn clone(&self) -> Chunk {
-        let mut new_chunk = Chunk::from(0);
-
-        for i in 0..64 {
-            new_chunk.bits[i] = self.bits[i].clone();
-        }
-
-        new_chunk
-    }
+    bits: Vec<Bit>
 }
 
 impl Chunk {
     fn xor(&self, other: &Chunk) -> Chunk {
-        let mut new_chunk = Chunk::from(0);
-
-        for i in 0..64 {
-            new_chunk.bits[i] = self.bits[i].xor(&other.bits[i]);
+        Chunk {
+            bits: self.bits.iter()
+                           .zip(other.bits.iter())
+                           .map(|(a, b)| a.xor(b))
+                           .collect()
         }
-
-        new_chunk
     }
 
     fn notand(&self, other: &Chunk) -> Chunk {
-        let mut new_chunk = Chunk::from(0);
-
-        for i in 0..64 {
-            new_chunk.bits[i] = self.bits[i].notand(&other.bits[i]);
+        Chunk {
+            bits: self.bits.iter()
+                           .zip(other.bits.iter())
+                           .map(|(a, b)| a.notand(b))
+                           .collect()
         }
-
-        new_chunk
     }
 
-    fn rotl(&self, by: usize) -> Chunk {
-        assert!(by < 64);
-        let mut new_bits = vec![];
+    fn rotl(&self, mut by: usize) -> Chunk {
+        by = by % 64;
 
-        new_bits.extend_from_slice(&self.bits[by..]);
-        new_bits.extend_from_slice(&self.bits[0..by]);
-
-        let mut clone = self.clone();
-        clone.bits.clone_from_slice(&new_bits);
-
-        clone
+        Chunk {
+            bits: self.bits[by..].iter()
+                                 .chain(self.bits[0..by].iter())
+                                 .cloned()
+                                 .collect()
+        }
     }
 }
 
@@ -215,19 +188,16 @@ impl PartialEq for Chunk {
     }
 }
 
-impl<'a> From<&'a [[Bit; 8]]> for Chunk {
-    fn from(bytes: &'a [[Bit; 8]]) -> Chunk {
+impl<'a> From<&'a [Byte]> for Chunk {
+    fn from(bytes: &'a [Byte]) -> Chunk {
         assert!(bytes.len() == 8); // must be 64 bit
 
-        let mut new_chunk = Chunk::from(0);
-
-        for (i, byte) in bytes.iter().rev().enumerate() {
-            for (j, bit) in byte.iter().enumerate() {
-                new_chunk.bits[i*8 + j] = bit.clone();
-            }
+        Chunk {
+            bits: bytes.iter().rev() // endianness
+                       .flat_map(|x| x.bits.iter())
+                       .cloned()
+                       .collect()
         }
-
-        new_chunk
     }
 }
 
@@ -235,93 +205,20 @@ impl<'a> From<&'a [Bit]> for Chunk {
     fn from(bits: &'a [Bit]) -> Chunk {
         assert!(bits.len() == 64); // must be 64 bit
 
-        let mut new_chunk = Chunk::from(0);
-
-        for (i, bit) in bits.iter().enumerate() {
-            new_chunk.bits[i] = bit.clone();
+        Chunk {
+            bits: bits.iter().cloned().collect()
         }
-
-        new_chunk
     }
 }
 
 impl From<u64> for Chunk {
     fn from(num: u64) -> Chunk {
-        use std::mem;
-
         fn bit_at(num: u64, i: usize) -> u8 {
             ((num << i) >> 63) as u8
         }
 
-        // TODO: initialize this with unsafe { }
-        //       sadly... GET INTEGER GENERICS WORKING RUST
         Chunk {
-            bits: [
-                Bit::constant(bit_at(num, 0)),
-                Bit::constant(bit_at(num, 1)),
-                Bit::constant(bit_at(num, 2)),
-                Bit::constant(bit_at(num, 3)),
-                Bit::constant(bit_at(num, 4)),
-                Bit::constant(bit_at(num, 5)),
-                Bit::constant(bit_at(num, 6)),
-                Bit::constant(bit_at(num, 7)),
-                Bit::constant(bit_at(num, 8)),
-                Bit::constant(bit_at(num, 9)),
-                Bit::constant(bit_at(num, 10)),
-                Bit::constant(bit_at(num, 11)),
-                Bit::constant(bit_at(num, 12)),
-                Bit::constant(bit_at(num, 13)),
-                Bit::constant(bit_at(num, 14)),
-                Bit::constant(bit_at(num, 15)),
-                Bit::constant(bit_at(num, 16)),
-                Bit::constant(bit_at(num, 17)),
-                Bit::constant(bit_at(num, 18)),
-                Bit::constant(bit_at(num, 19)),
-                Bit::constant(bit_at(num, 20)),
-                Bit::constant(bit_at(num, 21)),
-                Bit::constant(bit_at(num, 22)),
-                Bit::constant(bit_at(num, 23)),
-                Bit::constant(bit_at(num, 24)),
-                Bit::constant(bit_at(num, 25)),
-                Bit::constant(bit_at(num, 26)),
-                Bit::constant(bit_at(num, 27)),
-                Bit::constant(bit_at(num, 28)),
-                Bit::constant(bit_at(num, 29)),
-                Bit::constant(bit_at(num, 30)),
-                Bit::constant(bit_at(num, 31)),
-                Bit::constant(bit_at(num, 32)),
-                Bit::constant(bit_at(num, 33)),
-                Bit::constant(bit_at(num, 34)),
-                Bit::constant(bit_at(num, 35)),
-                Bit::constant(bit_at(num, 36)),
-                Bit::constant(bit_at(num, 37)),
-                Bit::constant(bit_at(num, 38)),
-                Bit::constant(bit_at(num, 39)),
-                Bit::constant(bit_at(num, 40)),
-                Bit::constant(bit_at(num, 41)),
-                Bit::constant(bit_at(num, 42)),
-                Bit::constant(bit_at(num, 43)),
-                Bit::constant(bit_at(num, 44)),
-                Bit::constant(bit_at(num, 45)),
-                Bit::constant(bit_at(num, 46)),
-                Bit::constant(bit_at(num, 47)),
-                Bit::constant(bit_at(num, 48)),
-                Bit::constant(bit_at(num, 49)),
-                Bit::constant(bit_at(num, 50)),
-                Bit::constant(bit_at(num, 51)),
-                Bit::constant(bit_at(num, 52)),
-                Bit::constant(bit_at(num, 53)),
-                Bit::constant(bit_at(num, 54)),
-                Bit::constant(bit_at(num, 55)),
-                Bit::constant(bit_at(num, 56)),
-                Bit::constant(bit_at(num, 57)),
-                Bit::constant(bit_at(num, 58)),
-                Bit::constant(bit_at(num, 59)),
-                Bit::constant(bit_at(num, 60)),
-                Bit::constant(bit_at(num, 61)),
-                Bit::constant(bit_at(num, 62)),
-                Bit::constant(bit_at(num, 63))
-            ]
+            bits: (0..64).map(|i| Bit::constant(bit_at(num, i))).collect()
         }
     }
 }
@@ -331,18 +228,18 @@ enum Bit {
     Constant(u8)
 }
 
+struct Byte {
+    bits: Vec<Bit>
+}
+
 impl Bit {
-    fn byte(byte: u8) -> [Bit; 8] {
-        [
-            Bit::constant({if byte & 0b10000000 != 0 { 1 } else { 0 }}),
-            Bit::constant({if byte & 0b01000000 != 0 { 1 } else { 0 }}),
-            Bit::constant({if byte & 0b00100000 != 0 { 1 } else { 0 }}),
-            Bit::constant({if byte & 0b00010000 != 0 { 1 } else { 0 }}),
-            Bit::constant({if byte & 0b00001000 != 0 { 1 } else { 0 }}),
-            Bit::constant({if byte & 0b00000100 != 0 { 1 } else { 0 }}),
-            Bit::constant({if byte & 0b00000010 != 0 { 1 } else { 0 }}),
-            Bit::constant({if byte & 0b00000001 != 0 { 1 } else { 0 }}),
-        ]
+    fn byte(byte: u8) -> Byte {
+        Byte {
+            bits: (0..8).map(|i| byte & (0b00000001 << i) != 0)
+                        .map(|b| Bit::constant(if b { 1 } else { 0 }))
+                        .rev()
+                        .collect()
+        }
     }
 
     fn constant(num: u8) -> Bit {
@@ -385,7 +282,7 @@ fn testsha3() {
         }
     };
 
-    let msg: Vec<_> = (0..144).map(bb).collect();
+    let msg: Vec<Byte> = (0..144).map(bb).collect();
 
     let result = keccak256(&msg);
 
@@ -407,66 +304,40 @@ fn testsha3() {
 
 #[test]
 fn testff() {
-    let mut a: [Chunk; 25] =
-    [
-        Chunk::from(0xABCDEF0123456789),
-        Chunk::from(0x9ABCDEF012345678),
-        Chunk::from(0x89ABCDEF01234567),
-        Chunk::from(0x789ABCDEF0123456),
-        Chunk::from(0x6789ABCDEF012345),
-        Chunk::from(0x56789ABCDEF01234),
-        Chunk::from(0x456789ABCDEF0123),
-        Chunk::from(0x3456789ABCDEF012),
-        Chunk::from(0x23456789ABCDEF01),
-        Chunk::from(0x123456789ABCDEF0),
-        Chunk::from(0x0123456789ABCDEF),
-        Chunk::from(0xF0123456789ABCDE),
-        Chunk::from(0xEF0123456789ABCD),
-        Chunk::from(0xDEF0123456789ABC),
-        Chunk::from(0xCDEF0123456789AB),
-        Chunk::from(0xBCDEF0123456789A),
-        Chunk::from(0xABCDEF0123456789),
-        Chunk::from(0x9ABCDEF012345678),
-        Chunk::from(0x89ABCDEF01234567),
-        Chunk::from(0x789ABCDEF0123456),
-        Chunk::from(0x6789ABCDEF012345),
-        Chunk::from(0x56789ABCDEF01234),
-        Chunk::from(0x456789ABCDEF0123),
-        Chunk::from(0x3456789ABCDEF012),
-        Chunk::from(0x23456789ABCDEF01)
-    ];
+    let base = Chunk::from(0xABCDEF0123456789);
+
+    let mut a: Vec<Chunk> = (0..25).map(|i| base.rotl(i*4)).collect();
 
     keccakf(&mut a, 24);
-    /*
-    ebf3844f878a7d3b
-    4c9a23df85c470ef
-    4c2e69353217ca2b
-    a3ffa213a668ba9d
-    34082fa7dc4c944b
-    b8bd0a4331665932
-    bfcee841052def2d
-    09e2f6993a65ac0b
-    ec78b15ef42a11e6
-    5088c480e6a77eb8
-    9c1ff840c7758823
-    df8f367ad977a6b1
-    517b9c3505b4195a
-    04624d3094c46c2c
-    e71674d1b70748e2
-    6739a678e25ae9f4
-    2e64f74a9528d091
-    9c17a1105709cbfe
-    54678a20a3ac5925
-    0297df877fa4a559
-    f55ec61b328a5cc5
-    56637274c0f2c301
-    33943408ffd9b9c5
-    f4b87c711ed56d77
-    3300e5d2414b6a93
-    */
-    assert!(a[0] == Chunk::from(0xebf3844f878a7d3b));
-    assert!(a[1] == Chunk::from(0x4c9a23df85c470ef));
-    assert!(a[2] == Chunk::from(0x4c2e69353217ca2b));
-    assert!(a[3] == Chunk::from(0xa3ffa213a668ba9d));
-    assert!(a[24] == Chunk::from(0x3300e5d2414b6a93));
+    const TEST_VECTOR: [u64; 25] = [
+        0x4c8948fcb6616044,
+        0x75642a21f8bd1299,
+        0xb2e949825ace668e,
+        0x9b73a04c53826c35,
+        0x914989b8d38ea4d1,
+        0xdc73480ade4e2664,
+        0x931394137c6fbd69,
+        0x234fa173896019f5,
+        0x906da29a7796b157,
+        0x7666ebe222445610,
+        0x41d77796738c884e,
+        0x8861db16234437fa,
+        0xf07cb925b71f27f2,
+        0xfec25b4810a2202c,
+        0xa8ba9bbfa9076b54,
+        0x18d9b9e748d655b9,
+        0xa2172c0059955be6,
+        0xea602c863b7947b8,
+        0xc77f9f23851bc2bd,
+        0x0e8ab0a29b3fef79,
+        0xfd73c2cd3b443de4,
+        0x447892bf2c03c2ef,
+        0xd5b3dae382c238b1,
+        0x2103d8a64e9f4cb6,
+        0xfe1f57d88e2de92f
+    ];
+
+    for i in 0..25 {
+        assert!(a[i] == Chunk::from(TEST_VECTOR[i]));
+    }
 }
