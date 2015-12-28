@@ -22,9 +22,89 @@ const KECCAKF_PILN: [usize; 24] =
     15, 23, 19, 13, 12, 2, 20, 14, 22, 9,  6,  1 
 ];
 
-fn keccakf(st: &mut [Chunk], rounds: usize)
+fn keccakf(st: &mut [Byte], rounds: usize)
 {
+    use std::borrow::Borrow;
+
+    struct State<B: Borrow<Bit>> {
+        bits: Vec<B>
+    }
+
+    impl<'a> State<&'a mut Bit> {
+        fn new(bytes: &'a mut [Byte]) -> State<&'a mut Bit> {
+            assert_eq!(bytes.len(), 8); // 64 bit lanes
+
+            State {
+                bits: bytes.iter_mut()
+                            .rev() // Endianness
+                            .flat_map(|b| b.bits.iter_mut())
+                            .collect()
+            }
+        }
+
+        fn set(&mut self, to: State<Bit>) {
+            for (a, b) in self.bits.iter_mut()
+                                   .zip(to.bits.into_iter()) {
+                **a = b;
+            }
+        }
+    }
+
+    impl From<u64> for State<Bit> {
+        fn from(num: u64) -> State<Bit> {
+            fn bit_at(num: u64, i: usize) -> u8 {
+                ((num << i) >> 63) as u8
+            }
+
+            State {
+                bits: (0..64).map(|i| Bit::constant(bit_at(num, i))).collect()
+            }
+        }
+    }
+
+    impl<A: Borrow<Bit>> State<A> {
+        fn duplicate(&self) -> State<Bit> {
+            State {
+                bits: self.bits.iter().map(|a| a.borrow())
+                                      .map(|a| (*a).clone())
+                                      .collect()
+            }
+        }
+
+        fn xor<B: Borrow<Bit>>(&self, other: &State<B>) -> State<Bit> {
+            State {
+                bits: self.bits.iter().map(|a| a.borrow())
+                                        .zip(other.bits.iter().map(|a| a.borrow()))
+                                        .map(|(a, b)| a.xor(b))
+                                        .collect()
+            }
+        }
+
+        fn notand<B: Borrow<Bit>>(&self, other: &State<B>) -> State<Bit> {
+            State {
+                bits: self.bits.iter().map(|a| a.borrow())
+                                        .zip(other.bits.iter().map(|a| a.borrow()))
+                                        .map(|(a, b)| a.notand(b))
+                                        .collect()
+            }
+        }
+
+        fn rotl(&self, by: usize) -> State<Bit> {
+            let by = by % 64;
+
+            State {
+                bits: self.bits[by..].iter().map(|a| a.borrow())
+                                     .chain(self.bits[0..by].iter().map(|a| a.borrow()))
+                                     .cloned()
+                                     .collect()
+            }
+        }
+    }
+
+    let mut st: Vec<_> = st.chunks_mut(8).map(|c| State::new(c)).collect();
+
     assert_eq!(st.len(), 25);
+
     for round in 0..rounds {
         /*
         // Theta
@@ -32,12 +112,12 @@ fn keccakf(st: &mut [Chunk], rounds: usize)
             bc[i] = st[i] ^ st[i + 5] ^ st[i + 10] ^ st[i + 15] ^ st[i + 20];
         */
 
-        let mut bc: Vec<Chunk> = (0..5).map(|i| st[i]
-                                                .xor(&st[i+5])
-                                                .xor(&st[i+10])
-                                                .xor(&st[i+15])
-                                                .xor(&st[i+20])
-                                           ).collect();
+        let mut bc: Vec<State<Bit>> = (0..5).map(|i| st[i]
+                                                     .xor(&st[i+5])
+                                                     .xor(&st[i+10])
+                                                     .xor(&st[i+15])
+                                                     .xor(&st[i+20])
+                                                ).collect();
 
         /*
         for (i = 0; i < 5; i++) {
@@ -51,7 +131,8 @@ fn keccakf(st: &mut [Chunk], rounds: usize)
             let tmp = bc[(i + 4) % 5].xor(&bc[(i + 1) % 5].rotl(1));
 
             for j in (0..25).filter(|a| a % 5 == 0) {
-                st[j + i] = tmp.xor(&st[j + i]);
+                let new = tmp.xor(&st[j + i]);
+                st[j + i].set(new);
             }
         }
 
@@ -66,14 +147,14 @@ fn keccakf(st: &mut [Chunk], rounds: usize)
                 t = bc[0];
             }
             */
-            let mut tmp = st[1].clone();
+            let mut tmp = st[1].duplicate();
 
             for i in 0..24 {
                 let j = KECCAKF_PILN[i];
 
-                bc[0] = st[j].clone();
-                st[j] = tmp.rotl(KECCAKF_ROTC[i]);
-                tmp = bc[0].clone();
+                bc[0] = st[j].duplicate();
+                st[j].set(tmp.rotl(KECCAKF_ROTC[i]));
+                tmp = bc[0].duplicate();
             }
         }
 
@@ -90,11 +171,12 @@ fn keccakf(st: &mut [Chunk], rounds: usize)
 
             for j in (0..25).filter(|a| a % 5 == 0) {
                 for i in 0..5 {
-                    bc[i] = st[j + i].clone();
+                    bc[i] = st[j + i].duplicate();
                 }
 
                 for i in 0..5 {
-                    st[j + i] = st[j + i].xor(&bc[(i + 1) % 5].notand(&bc[(i + 2) % 5]));
+                    let n = st[j + i].xor(&bc[(i + 1) % 5].notand(&bc[(i + 2) % 5]));
+                    st[j + i].set(n);
                 }
             }
         }
@@ -104,16 +186,17 @@ fn keccakf(st: &mut [Chunk], rounds: usize)
         st[0] ^= keccakf_rndc[round];
         */
 
-        st[0] = st[0].xor(&KECCAKF_RNDC[round].into());
+        let n = st[0].xor(&KECCAKF_RNDC[round].into());
+        st[0].set(n);
     }
 }
 
 fn sha3_256(message: &[Byte]) -> Vec<Byte> {
     // As defined by FIPS202
-    keccak(1088, 512, message, 0x06, 32)
+    keccak(1088, 512, message, 0x06, 32, 24)
 }
 
-fn keccak(rate: usize, capacity: usize, mut input: &[Byte], delimited_suffix: u8, mut mdlen: usize)
+fn keccak(rate: usize, capacity: usize, mut input: &[Byte], delimited_suffix: u8, mut mdlen: usize, num_rounds: usize)
     -> Vec<Byte>
 {
     use std::cmp::min;
@@ -139,7 +222,7 @@ fn keccak(rate: usize, capacity: usize, mut input: &[Byte], delimited_suffix: u8
         inputByteLen -= blockSize;
 
         if blockSize == rateInBytes {
-            temporary_shim(&mut st);
+            keccakf(&mut st, num_rounds);
             blockSize = 0;
         }
     }
@@ -147,12 +230,12 @@ fn keccak(rate: usize, capacity: usize, mut input: &[Byte], delimited_suffix: u8
     st[blockSize] = st[blockSize].xor(&Bit::byte(delimited_suffix));
 
     if ((delimited_suffix & 0x80) != 0) && (blockSize == (rateInBytes-1)) {
-        temporary_shim(&mut st);
+        keccakf(&mut st, num_rounds);
     }
 
     st[rateInBytes-1] = st[rateInBytes-1].xor(&Bit::byte(0x80));
 
-    temporary_shim(&mut st);
+    keccakf(&mut st, num_rounds);
 
     let mut output = Vec::with_capacity(mdlen);
 
@@ -162,37 +245,11 @@ fn keccak(rate: usize, capacity: usize, mut input: &[Byte], delimited_suffix: u8
         mdlen -= blockSize;
 
         if mdlen > 0 {
-            temporary_shim(&mut st);
+            keccakf(&mut st, num_rounds);
         }
     }
 
     output
-}
-
-fn temporary_shim(state: &mut [Byte]) {
-    assert_eq!(state.len(), 200);
-
-    println!("RUNNING TEMPORARY SHIM!");
-
-    let mut chunks = Vec::with_capacity(25);
-    for i in 0..25 {
-        chunks.push(Chunk::from(0x0000000000000000));
-    }
-
-    for (chunk_bit, input_bit) in chunks.iter_mut().flat_map(|c| c.bits.iter_mut())
-                                        //.zip(state.iter().flat_map(|c| c.bits.iter()))
-                                        .zip(state.chunks(8).flat_map(|e| e.iter().rev()).flat_map(|c| c.bits.iter()))
-    {
-        *chunk_bit = input_bit.clone();
-    }
-
-    keccakf(&mut chunks, 24);
-
-    for (chunk_bit, input_bit) in chunks.iter().flat_map(|c| c.bits.iter())
-                                        .zip(state.chunks_mut(8).flat_map(|e| e.iter_mut().rev()).flat_map(|c| c.bits.iter_mut()))
-    {
-        *input_bit = chunk_bit.clone();
-    }
 }
 
 #[derive(Clone)]
@@ -287,7 +344,8 @@ struct Byte {
 }
 
 impl Byte {
-    fn grab(&self) -> u8 {
+    // TODO: change this name
+    fn unwrap_constant(&self) -> u8 {
         let mut cur = 7;
         let mut acc = 0;
 
@@ -372,57 +430,21 @@ fn test_sha3_256() {
     ];
 
     for (i, &(ref message, ref expected)) in test_vector.iter().enumerate() {
-        let result: Vec<u8> = sha3_256(message).into_iter().map(|a| a.grab()).collect();
+        let result: Vec<u8> = sha3_256(message).into_iter().map(|a| a.unwrap_constant()).collect();
 
         if &*result != expected {
-            print!("Expected: ");
+            print!("Got: ");
             for i in result.iter() {
                 print!("0x{:02x},", i);
             }
+            print!("\nExpected: ");
+            for i in expected.iter() {
+                print!("0x{:02x},", i);
+            }
+            println!("");
             panic!("Hash {} failed!", i+1);
         } else {
             println!("--- HASH {} SUCCESS ---", i+1);
         }
-    }
-}
-
-#[test]
-fn test_keccakf() {
-    let base = Chunk::from(0xABCDEF0123456789);
-
-    let mut a: Vec<Chunk> = (0..25).map(|i| base.rotl(i*4)).collect();
-
-    keccakf(&mut a, 24);
-
-    const TEST_VECTOR: [u64; 25] = [
-        0x4c8948fcb6616044,
-        0x75642a21f8bd1299,
-        0xb2e949825ace668e,
-        0x9b73a04c53826c35,
-        0x914989b8d38ea4d1,
-        0xdc73480ade4e2664,
-        0x931394137c6fbd69,
-        0x234fa173896019f5,
-        0x906da29a7796b157,
-        0x7666ebe222445610,
-        0x41d77796738c884e,
-        0x8861db16234437fa,
-        0xf07cb925b71f27f2,
-        0xfec25b4810a2202c,
-        0xa8ba9bbfa9076b54,
-        0x18d9b9e748d655b9,
-        0xa2172c0059955be6,
-        0xea602c863b7947b8,
-        0xc77f9f23851bc2bd,
-        0x0e8ab0a29b3fef79,
-        0xfd73c2cd3b443de4,
-        0x447892bf2c03c2ef,
-        0xd5b3dae382c238b1,
-        0x2103d8a64e9f4cb6,
-        0xfe1f57d88e2de92f
-    ];
-
-    for i in 0..25 {
-        assert!(a[i] == Chunk::from(TEST_VECTOR[i]));
     }
 }
