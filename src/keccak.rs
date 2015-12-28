@@ -32,8 +32,6 @@ fn keccakf(st: &mut [Byte], rounds: usize)
 
     impl<'a> State<&'a mut Bit> {
         fn new(bytes: &'a mut [Byte]) -> State<&'a mut Bit> {
-            assert_eq!(bytes.len(), 8); // 64 bit lanes
-
             State {
                 bits: bytes.iter_mut()
                             .rev() // Endianness
@@ -52,8 +50,8 @@ fn keccakf(st: &mut [Byte], rounds: usize)
 
     impl From<u64> for State<Bit> {
         fn from(num: u64) -> State<Bit> {
-            fn bit_at(num: u64, i: usize) -> u8 {
-                ((num << i) >> 63) as u8
+            fn bit_at(num: u64, i: usize) -> bool {
+                ((num << i) >> 63) == 1
             }
 
             State {
@@ -103,8 +101,6 @@ fn keccakf(st: &mut [Byte], rounds: usize)
     }
 
     let mut st: Vec<_> = st.chunks_mut(8).map(|c| State::new(c)).collect();
-
-    assert_eq!(st.len(), 25);
 
     for round in 0..rounds {
         /*
@@ -255,7 +251,7 @@ fn keccak(rate: usize, capacity: usize, mut input: &[Byte], delimited_suffix: u8
 
 #[derive(Debug, PartialEq, Clone)]
 enum Bit {
-    Constant(u8)
+    Constant(bool)
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -270,11 +266,11 @@ impl Byte {
 
         for bit in &self.bits {
             match bit {
-                &Bit::Constant(1) => {
-                    acc |= 0b00000001 << cur;
+                &Bit::Constant(true) => {
+                    acc |= 1 << cur;
                 },
-                &Bit::Constant(0) => {},
-                _ => panic!("Tried to unwrap a constant from a non-constant")
+                &Bit::Constant(false) => {},
+                //_ => panic!("Tried to unwrap a constant from a non-constant")
             }
             cur -= 1;
         }
@@ -295,16 +291,13 @@ impl Byte {
 impl Bit {
     fn byte(byte: u8) -> Byte {
         Byte {
-            bits: (0..8).map(|i| byte & (0b00000001 << i) != 0)
-                        .map(|b| Bit::constant(if b { 1 } else { 0 }))
+            bits: (0..8).map(|i| Bit::constant(byte & (1 << i) != 0))
                         .rev()
                         .collect()
         }
     }
 
-    fn constant(num: u8) -> Bit {
-        assert_eq!((1 - num) * num, 0); // haha
-
+    fn constant(num: bool) -> Bit {
         Bit::Constant(num)
     }
 
@@ -312,7 +305,7 @@ impl Bit {
     fn xor(&self, other: &Bit) -> Bit {
         match (self, other) {
             (&Bit::Constant(a), &Bit::Constant(b)) => {
-                Bit::constant(a ^ b)
+                Bit::constant(a != b)
             },
             //_ => unimplemented!()
         }
@@ -322,7 +315,7 @@ impl Bit {
     fn notand(&self, other: &Bit) -> Bit {
         match (self, other) {
             (&Bit::Constant(a), &Bit::Constant(b)) => {
-                Bit::constant((a ^ 1) & b)
+                Bit::constant((!a) && b)
             },
             //_ => unimplemented!()
         }
