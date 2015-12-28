@@ -203,46 +203,46 @@ fn keccak(rate: usize, capacity: usize, mut input: &[Byte], delimited_suffix: u8
 
     let mut st: Vec<Byte> = Some(Bit::byte(0)).into_iter().cycle().take(200).collect();
 
-    let rateInBytes = rate / 8;
-    let mut inputByteLen = input.len();
-    let mut blockSize = 0;
+    let rate_in_bytes = rate / 8;
+    let mut input_byte_len = input.len();
+    let mut block_size = 0;
 
     if ((rate + capacity) != 1600) || ((rate % 8) != 0) {
         panic!("invalid parameters");
     }
 
-    while inputByteLen > 0 {
-        blockSize = min(inputByteLen, rateInBytes);
+    while input_byte_len > 0 {
+        block_size = min(input_byte_len, rate_in_bytes);
 
-        for i in 0..blockSize {
+        for i in 0..block_size {
             st[i] = st[i].xor(&input[i]);
         }
 
-        input = &input[blockSize..];
-        inputByteLen -= blockSize;
+        input = &input[block_size..];
+        input_byte_len -= block_size;
 
-        if blockSize == rateInBytes {
+        if block_size == rate_in_bytes {
             keccakf(&mut st, num_rounds);
-            blockSize = 0;
+            block_size = 0;
         }
     }
 
-    st[blockSize] = st[blockSize].xor(&Bit::byte(delimited_suffix));
+    st[block_size] = st[block_size].xor(&Bit::byte(delimited_suffix));
 
-    if ((delimited_suffix & 0x80) != 0) && (blockSize == (rateInBytes-1)) {
+    if ((delimited_suffix & 0x80) != 0) && (block_size == (rate_in_bytes-1)) {
         keccakf(&mut st, num_rounds);
     }
 
-    st[rateInBytes-1] = st[rateInBytes-1].xor(&Bit::byte(0x80));
+    st[rate_in_bytes-1] = st[rate_in_bytes-1].xor(&Bit::byte(0x80));
 
     keccakf(&mut st, num_rounds);
 
     let mut output = Vec::with_capacity(mdlen);
 
     while mdlen > 0 {
-        blockSize = min(mdlen, rateInBytes);
-        output.extend_from_slice(&st[0..blockSize]);
-        mdlen -= blockSize;
+        block_size = min(mdlen, rate_in_bytes);
+        output.extend_from_slice(&st[0..block_size]);
+        mdlen -= block_size;
 
         if mdlen > 0 {
             keccakf(&mut st, num_rounds);
@@ -250,87 +250,6 @@ fn keccak(rate: usize, capacity: usize, mut input: &[Byte], delimited_suffix: u8
     }
 
     output
-}
-
-#[derive(Clone)]
-struct Chunk {
-    bits: Vec<Bit>
-}
-
-impl Chunk {
-    fn xor(&self, other: &Chunk) -> Chunk {
-        Chunk {
-            bits: self.bits.iter()
-                           .zip(other.bits.iter())
-                           .map(|(a, b)| a.xor(b))
-                           .collect()
-        }
-    }
-
-    fn notand(&self, other: &Chunk) -> Chunk {
-        Chunk {
-            bits: self.bits.iter()
-                           .zip(other.bits.iter())
-                           .map(|(a, b)| a.notand(b))
-                           .collect()
-        }
-    }
-
-    fn rotl(&self, mut by: usize) -> Chunk {
-        by = by % 64;
-
-        Chunk {
-            bits: self.bits[by..].iter()
-                                 .chain(self.bits[0..by].iter())
-                                 .cloned()
-                                 .collect()
-        }
-    }
-}
-
-impl PartialEq for Chunk {
-    fn eq(&self, other: &Chunk) -> bool {
-        for (a, b) in self.bits.iter().zip(other.bits.iter()) {
-            if a != b { return false; }
-        }
-
-        true
-    }
-}
-
-impl<'a> From<&'a [Byte]> for Chunk {
-    fn from(bytes: &'a [Byte]) -> Chunk {
-        assert!(bytes.len() == 8); // must be 64 bit
-
-        Chunk {
-            bits: bytes.iter().rev() // endianness
-                       .flat_map(|x| x.bits.iter())
-                       .cloned()
-                       .collect()
-        }
-    }
-}
-
-impl<'a> From<&'a [Bit]> for Chunk {
-    fn from(bits: &'a [Bit]) -> Chunk {
-        assert!(bits.len() == 64); // must be 64 bit
-
-        Chunk {
-            bits: bits.iter().cloned().collect()
-        }
-    }
-}
-
-impl From<u64> for Chunk {
-    fn from(num: u64) -> Chunk {
-        fn bit_at(num: u64, i: usize) -> u8 {
-            ((num << i) >> 63) as u8
-        }
-
-        Chunk {
-            bits: (0..64).map(|i| Bit::constant(bit_at(num, i))).collect()
-        }
-    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
