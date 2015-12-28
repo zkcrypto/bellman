@@ -1,6 +1,4 @@
-//use tinysnark::FieldT;
-
-const keccakf_rndc: [u64; 24] = 
+const KECCAKF_RNDC: [u64; 24] = 
 [
     0x0000000000000001, 0x0000000000008082, 0x800000000000808a,
     0x8000000080008000, 0x000000000000808b, 0x0000000080000001,
@@ -12,13 +10,13 @@ const keccakf_rndc: [u64; 24] =
     0x8000000000008080, 0x0000000080000001, 0x8000000080008008
 ];
 
-const keccakf_rotc: [usize; 24] = 
+const KECCAKF_ROTC: [usize; 24] = 
 [
     1,  3,  6,  10, 15, 21, 28, 36, 45, 55, 2,  14, 
     27, 41, 56, 8,  25, 43, 62, 18, 39, 61, 20, 44
 ];
 
-const keccakf_piln: [usize; 24] = 
+const KECCAKF_PILN: [usize; 24] = 
 [
     10, 7,  11, 17, 18, 3, 5,  16, 8,  21, 24, 4, 
     15, 23, 19, 13, 12, 2, 20, 14, 22, 9,  6,  1 
@@ -71,10 +69,10 @@ fn keccakf(st: &mut [Chunk], rounds: usize)
             let mut tmp = st[1].clone();
 
             for i in 0..24 {
-                let j = keccakf_piln[i];
+                let j = KECCAKF_PILN[i];
 
                 bc[0] = st[j].clone();
-                st[j] = tmp.rotl(keccakf_rotc[i]);
+                st[j] = tmp.rotl(KECCAKF_ROTC[i]);
                 tmp = bc[0].clone();
             }
         }
@@ -106,11 +104,11 @@ fn keccakf(st: &mut [Chunk], rounds: usize)
         st[0] ^= keccakf_rndc[round];
         */
 
-        st[0] = st[0].xor(&keccakf_rndc[round].into());
+        st[0] = st[0].xor(&KECCAKF_RNDC[round].into());
     }
 }
 
-fn keccak256(mut input: &[Byte]) -> Vec<Bit> {
+fn keccak256(input: &[Byte]) -> Vec<Bit> {
     assert_eq!(input.len(), 144);
 
     let mut st: Vec<Chunk> = Some(Chunk::from(0)).into_iter().cycle().take(25).collect();
