@@ -113,15 +113,21 @@ fn temporary_shim(state: &mut [Byte]) {
 
     let mut chunks = Vec::with_capacity(25);
     for i in 0..25 {
-        let i = i * 8;
+        chunks.push(Chunk::from(0x0000000000000000));
+    }
 
-        chunks.push(Chunk::from(&state[i..i+8]));
+    for (chunk_bit, input_bit) in chunks.iter_mut().flat_map(|c| c.bits.iter_mut())
+                                        .zip(state.iter().flat_map(|c| c.bits.iter()))
+    {
+        *chunk_bit = input_bit.clone();
     }
 
     keccakf(&mut chunks, 24);
 
-    for (i, bit) in chunks.iter().flat_map(|c| c.bits.iter()).enumerate() {
-        state[i / 8].bits[i % 8] = bit.clone();
+    for (chunk_bit, input_bit) in chunks.iter().flat_map(|c| c.bits.iter())
+                                        .zip(state.iter_mut().flat_map(|c| c.bits.iter_mut()))
+    {
+        *input_bit = chunk_bit.clone();
     }
 }
 
@@ -309,6 +315,20 @@ struct Byte {
 }
 
 impl Byte {
+    fn grab(&self) -> u8 {
+        let mut cur = 7;
+        let mut acc = 0;
+
+        for bit in &self.bits {
+            if let &Bit::Constant(1) = bit {
+                acc |= 0b00000001 << cur;
+            }
+            cur -= 1;
+        }
+
+        acc
+    }
+
     fn xor(&self, other: &Byte) -> Byte {
         Byte {
             bits: self.bits.iter()
@@ -386,12 +406,24 @@ fn test_shim() {
 }
 
 #[test]
+fn byte_grab_works() {
+    {
+        let b = Bit::byte(0xef);
+
+        assert_eq!(0xef, b.grab());
+    }
+}
+
+#[test]
 fn woohoo() {
     let message = [Bit::byte(0x30)];
     let test = sha3_256(&message);
 
-    println!("{:?}", test);
-    assert!(test[0] == Bit::byte(0xf9));
+    for i in 0..32 {
+        print!("{:02x} ", test[i].grab());
+    }
+    println!("");
+    panic!("fuck");
 }
 
 #[test]
