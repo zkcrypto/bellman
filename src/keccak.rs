@@ -71,22 +71,23 @@ fn keccakf(st: &mut [Byte], rounds: usize)
             }
         }
 
-        fn xor<B: Borrow<Bit>>(&self, other: &State<B>) -> State<Bit> {
+        fn binary_map<F, B>(&self, other: &State<B>, f: F) -> State<Bit>
+            where F: Fn(&Bit, &Bit) -> Bit, B: Borrow<Bit>
+        {
             State {
                 bits: self.bits.iter().map(|a| a.borrow())
                                         .zip(other.bits.iter().map(|a| a.borrow()))
-                                        .map(|(a, b)| a.xor(b))
+                                        .map(|(a, b)| f(a, b))
                                         .collect()
             }
         }
 
+        fn xor<B: Borrow<Bit>>(&self, other: &State<B>) -> State<Bit> {
+            self.binary_map(other, Bit::xor)
+        }
+
         fn notand<B: Borrow<Bit>>(&self, other: &State<B>) -> State<Bit> {
-            State {
-                bits: self.bits.iter().map(|a| a.borrow())
-                                        .zip(other.bits.iter().map(|a| a.borrow()))
-                                        .map(|(a, b)| a.notand(b))
-                                        .collect()
-            }
+            self.binary_map(other, Bit::notand)
         }
 
         fn rotl(&self, by: usize) -> State<Bit> {
