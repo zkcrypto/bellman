@@ -108,30 +108,8 @@ fn keccakf(st: &mut [Chunk], rounds: usize)
     }
 }
 
-fn temporary_shim(state: &mut [Byte]) {
-    assert_eq!(state.len(), 200);
-
-    let mut chunks = Vec::with_capacity(25);
-    for i in 0..25 {
-        chunks.push(Chunk::from(0x0000000000000000));
-    }
-
-    for (chunk_bit, input_bit) in chunks.iter_mut().flat_map(|c| c.bits.iter_mut())
-                                        .zip(state.iter().flat_map(|c| c.bits.iter()))
-    {
-        *chunk_bit = input_bit.clone();
-    }
-
-    keccakf(&mut chunks, 24);
-
-    for (chunk_bit, input_bit) in chunks.iter().flat_map(|c| c.bits.iter())
-                                        .zip(state.iter_mut().flat_map(|c| c.bits.iter_mut()))
-    {
-        *input_bit = chunk_bit.clone();
-    }
-}
-
 fn sha3_256(message: &[Byte]) -> Vec<Byte> {
+    // As defined by FIPS202
     keccak(1088, 512, message, 0x06, 32)
 }
 
@@ -191,36 +169,30 @@ fn keccak(rate: usize, capacity: usize, mut input: &[Byte], delimited_suffix: u8
     output
 }
 
-fn keccak256(input: &[Byte]) -> Vec<Bit> {
-    assert_eq!(input.len(), 144);
+fn temporary_shim(state: &mut [Byte]) {
+    assert_eq!(state.len(), 200);
 
-    let mut st: Vec<Chunk> = Some(Chunk::from(0)).into_iter().cycle().take(25).collect();
+    println!("RUNNING TEMPORARY SHIM!");
 
-    let mdlen = 32; // 256 bit
-    let rsiz = 200 - 2 * mdlen;
-    let rsizw = rsiz / 8;
-
-    for i in 0..rsizw {
-        let j = i * 8;
-        st[i] = st[i].xor(&Chunk::from(&input[j..(j+8)]));
+    let mut chunks = Vec::with_capacity(25);
+    for i in 0..25 {
+        chunks.push(Chunk::from(0x0000000000000000));
     }
 
-    keccakf(&mut st, 24);
-
-    let mut v = vec![];
-    for i in 0..4 {
-        // due to endianness...
-        let tmp: Vec<_> = st[i].bits.chunks(8)
-                                    .rev()
-                                    .flat_map(|x| x.iter())
-                                    .map(|x| x.clone())
-                                    .collect();
-        v.extend_from_slice(&tmp);
+    for (chunk_bit, input_bit) in chunks.iter_mut().flat_map(|c| c.bits.iter_mut())
+                                        //.zip(state.iter().flat_map(|c| c.bits.iter()))
+                                        .zip(state.chunks(8).flat_map(|e| e.iter().rev()).flat_map(|c| c.bits.iter()))
+    {
+        *chunk_bit = input_bit.clone();
     }
 
-    assert!(v.len() == 256);
+    keccakf(&mut chunks, 24);
 
-    v
+    for (chunk_bit, input_bit) in chunks.iter().flat_map(|c| c.bits.iter())
+                                        .zip(state.chunks_mut(8).flat_map(|e| e.iter_mut().rev()).flat_map(|c| c.bits.iter_mut()))
+    {
+        *input_bit = chunk_bit.clone();
+    }
 }
 
 #[derive(Clone)]
@@ -377,95 +349,51 @@ impl Bit {
 }
 
 #[test]
-fn test_shim() {
-    let mut chunks: Vec<_> = (0..25).map(|_| Chunk::from(0xABCDEF0123456789)).collect();
-    keccakf(&mut chunks, 24);
+fn test_sha3_256() {
+    let test_vector: Vec<(Vec<Byte>, [u8; 32])> = vec![
+        (vec![Bit::byte(0x30)],
+         [0xf9,0xe2,0xea,0xaa,0x42,0xd9,0xfe,0x9e,0x55,0x8a,0x9b,0x8e,0xf1,0xbf,0x36,0x6f,0x19,0x0a,0xac,0xaa,0x83,0xba,0xd2,0x64,0x1e,0xe1,0x06,0xe9,0x04,0x10,0x96,0xe4]
+        ),
+        (vec![Bit::byte(0x30),Bit::byte(0x30)],
+         [0x2e,0x16,0xaa,0xb4,0x83,0xcb,0x95,0x57,0x7c,0x50,0xd3,0x8c,0x8d,0x0d,0x70,0x40,0xf4,0x67,0x26,0x83,0x23,0x84,0x46,0xc9,0x90,0xba,0xbb,0xca,0x5a,0xe1,0x33,0xc8]
+        ),
+        ((0..64).map(|_| Bit::byte(0x30)).collect::<Vec<_>>(),
+         [0xc6,0xfd,0xd7,0xa7,0xf7,0x08,0x62,0xb3,0x6a,0x26,0xcc,0xd1,0x47,0x52,0x26,0x80,0x61,0xe9,0x81,0x03,0x29,0x9b,0x28,0xfe,0x77,0x63,0xbd,0x96,0x29,0x92,0x6f,0x4b]
+        ),
+        ((0..128).map(|_| Bit::byte(0x30)).collect::<Vec<_>>(),
+         [0x99,0x9d,0xb4,0xd4,0x28,0x7b,0x52,0x15,0x20,0x8d,0x11,0xe4,0x0a,0x27,0xca,0x54,0xac,0xa0,0x09,0xb2,0x5c,0x4f,0x7a,0xb9,0x1a,0xd8,0xaa,0x93,0x60,0xf0,0x63,0x71]
+        ),
+        ((0..256).map(|_| Bit::byte(0x30)).collect::<Vec<_>>(),
+         [0x11,0xea,0x74,0x37,0x7b,0x74,0xf1,0x53,0x9f,0x2e,0xd9,0x0a,0xb8,0xca,0x9e,0xb1,0xe0,0x70,0x8a,0x4b,0xfb,0xad,0x4e,0x81,0xcc,0x77,0xd9,0xa1,0x61,0x9a,0x10,0xdb]
+        ),
+        ((0..512).map(|_| Bit::byte(0x30)).collect::<Vec<_>>(),
+         [0x1c,0x80,0x1b,0x16,0x3a,0x2a,0xbe,0xd0,0xe8,0x07,0x1e,0x7f,0xf2,0x60,0x4e,0x98,0x11,0x22,0x80,0x54,0x14,0xf3,0xc8,0xfd,0x96,0x59,0x5d,0x7e,0xe1,0xd6,0x54,0xe2]
+        ),
+    ];
 
-    let mut bytes: Vec<Byte> = (0..200).map(|i| {
-        match i % 8 {
-            0 => Bit::byte(0xAB),
-            1 => Bit::byte(0xCD),
-            2 => Bit::byte(0xEF),
-            3 => Bit::byte(0x01),
-            4 => Bit::byte(0x23),
-            5 => Bit::byte(0x45),
-            6 => Bit::byte(0x67),
-            7 => Bit::byte(0x89),
-            _ => unreachable!()
+    for (i, &(ref message, ref expected)) in test_vector.iter().enumerate() {
+        let result: Vec<u8> = sha3_256(message).into_iter().map(|a| a.grab()).collect();
+
+        if &*result != expected {
+            print!("Expected: ");
+            for i in result.iter() {
+                print!("0x{:02x},", i);
+            }
+            panic!("Hash {} failed!", i+1);
+        } else {
+            println!("--- HASH {} SUCCESS ---", i+1);
         }
-    }).collect();
-
-    temporary_shim(&mut bytes);
-
-    for (i, bit) in bytes.iter().flat_map(|c| c.bits.iter()).enumerate() {
-        //println!("i = {}", i);
-        if &chunks[i / 64].bits[i % 64] != bit {
-            panic!("fuck.");
-        }
     }
 }
 
 #[test]
-fn byte_grab_works() {
-    {
-        let b = Bit::byte(0xef);
-
-        assert_eq!(0xef, b.grab());
-    }
-}
-
-#[test]
-fn woohoo() {
-    let message = [Bit::byte(0x30)];
-    let test = sha3_256(&message);
-
-    for i in 0..32 {
-        print!("{:02x} ", test[i].grab());
-    }
-    println!("");
-    panic!("fuck");
-}
-
-#[test]
-fn testsha3() {
-    let bb = |x: usize| {
-        match x % 5 {
-            0 => Bit::byte(0xBB),
-            1 => Bit::byte(0x3B),
-            2 => Bit::byte(0x1B),
-            3 => Bit::byte(0x0B),
-            4 => Bit::byte(0xFF),
-            _ => unreachable!()
-        }
-    };
-
-    let msg: Vec<Byte> = (0..144).map(bb).collect();
-
-    let result = keccak256(&msg);
-
-    let correct_result: [u64; 4] = 
-                         [0x6746c5f4559bc1dd,
-                          0x49d08e1adcf3be12,
-                          0x80a2fcca8ce98789,
-                          0x659f40a0053e2989
-                         ];
-
-    for i in 0..4 {
-        let j = i * 64;
-        let ours = Chunk::from(&result[j..(j+64)]);
-        let correct = Chunk::from(correct_result[i]);
-
-        assert!(ours == correct);
-    }
-}
-
-#[test]
-fn testff() {
+fn test_keccakf() {
     let base = Chunk::from(0xABCDEF0123456789);
 
     let mut a: Vec<Chunk> = (0..25).map(|i| base.rotl(i*4)).collect();
 
     keccakf(&mut a, 24);
+
     const TEST_VECTOR: [u64; 25] = [
         0x4c8948fcb6616044,
         0x75642a21f8bd1299,
