@@ -344,14 +344,17 @@ struct Byte {
 }
 
 impl Byte {
-    // TODO: change this name
     fn unwrap_constant(&self) -> u8 {
         let mut cur = 7;
         let mut acc = 0;
 
         for bit in &self.bits {
-            if let &Bit::Constant(1) = bit {
-                acc |= 0b00000001 << cur;
+            match bit {
+                &Bit::Constant(1) => {
+                    acc |= 0b00000001 << cur;
+                },
+                &Bit::Constant(0) => {},
+                _ => panic!("Tried to unwrap a constant from a non-constant")
             }
             cur -= 1;
         }
