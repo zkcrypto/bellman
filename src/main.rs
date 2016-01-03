@@ -15,7 +15,7 @@ mod bit;
 fn main() {
     tinysnark::init();
 
-    let inbytes = 64;
+    let inbytes = 1;
     //for inbits in 0..1024 {
         let inbits = inbytes * 8;
         let input: Vec<Bit> = (0..inbits).map(|i| Bit::new(&Var::new(i+1))).collect();
@@ -34,7 +34,7 @@ fn main() {
         let mut vars: Vec<FieldT> = (0..counter).map(|_| FieldT::zero()).collect();
         vars[0] = FieldT::one();
 
-        satisfy_field_elements(&mut vars, &witness_map);
+        witness_field_elements(&mut vars, &witness_map);
 
         for b in output.iter().flat_map(|e| e.bits()) {
             print!("{}", if b.val(&vars) { 1 } else { 0 });

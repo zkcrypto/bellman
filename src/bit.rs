@@ -11,11 +11,11 @@ pub enum Bit {
 }
 
 fn resolve_not(v: &Var) -> Var {
-    gadget(&[v], 1, |i, o| {
-        if *i[0] == FieldT::zero() {
-            *o[0] = FieldT::one();
+    gadget(&[v], 1, |vars| {
+        if vars.get_input(0) == FieldT::zero() {
+            vars.set_output(0, FieldT::one());
         } else {
-            *o[0] = FieldT::zero();
+            vars.set_output(0, FieldT::zero());
         }
     }, |i, o, cs| {
         // (1 - a) * 1 = b
@@ -47,7 +47,7 @@ impl Bit {
     }
 
     pub fn new(v: &Var) -> Bit {
-        Is(gadget(&[v], 0, |_, _| {}, |i, o, cs| {
+        Is(gadget(&[v], 0, |_| {}, |i, o, cs| {
             cs.push(Constraint);
 
             vec![i[0]]
@@ -74,11 +74,11 @@ impl Bit {
                 }
             },
             (&Is(ref a), &Is(ref b)) => {
-                Is(gadget(&[a, b], 1, |i, o| {
-                    if *i[0] != *i[1] {
-                        *o[0] = FieldT::one();
+                Is(gadget(&[a, b], 1, |vars| {
+                    if vars.get_input(0) != vars.get_input(1) {
+                        vars.set_output(0, FieldT::one());
                     } else {
-                        *o[0] = FieldT::zero();
+                        vars.set_output(0, FieldT::zero());
                     }
                 }, |i, o, cs| {
                     // (2*b) * c = b+c - a
@@ -119,11 +119,11 @@ impl Bit {
                 }
             },
             (&Is(ref a), &Is(ref b)) => {
-                Is(gadget(&[a, b], 1, |i, o| {
-                    if *i[0] == FieldT::one() && *i[1] == FieldT::one() {
-                        *o[0] = FieldT::one();
+                Is(gadget(&[a, b], 1, |vars| {
+                    if vars.get_input(0) == FieldT::one() && vars.get_input(1) == FieldT::one() {
+                        vars.set_output(0, FieldT::one());
                     } else {
-                        *o[0] = FieldT::zero();
+                        vars.set_output(0, FieldT::zero());
                     }
                 }, |i, o, cs| {
                     // a * b = c 
@@ -142,11 +142,11 @@ impl Bit {
             },
             (&Not(ref n), &Is(ref i)) | (&Is(ref i), &Not(ref n)) => {
                 //Is(i.clone()).and(&Is(resolve_not(n)))
-                Is(gadget(&[n, i], 1, |i, o| {
-                    if *i[0] == FieldT::zero() && *i[1] == FieldT::one() {
-                        *o[0] = FieldT::one();
+                Is(gadget(&[n, i], 1, |vars| {
+                    if vars.get_input(0) == FieldT::zero() && vars.get_input(1) == FieldT::one() {
+                        vars.set_output(0, FieldT::one());
                     } else {
-                        *o[0] = FieldT::zero();
+                        vars.set_output(0, FieldT::zero());
                     }
                 }, |i, o, cs| {
                     // (1-a) * b = c
@@ -157,11 +157,11 @@ impl Bit {
             },
             (&Not(ref a), &Not(ref b)) => {
                 //Is(resolve_not(a)).and(&Is(resolve_not(b)))
-                Is(gadget(&[a, b], 1, |i, o| {
-                    if *i[0] == FieldT::zero() && *i[1] == FieldT::zero() {
-                        *o[0] = FieldT::one();
+                Is(gadget(&[a, b], 1, |vars| {
+                    if vars.get_input(0) == FieldT::zero() && vars.get_input(1) == FieldT::zero() {
+                        vars.set_output(0, FieldT::one());
                     } else {
-                        *o[0] = FieldT::zero();
+                        vars.set_output(0, FieldT::zero());
                     }
                 }, |i, o, cs| {
                     // (1 - a) * (1 - b) = c
@@ -203,7 +203,7 @@ fn test_binary_op<F: Fn(&Bit, &Bit) -> Bit>(op: F, a_in: i64, b_in: i64, c_out: 
     f[1] = FieldT::from(a_in);
     f[2] = FieldT::from(b_in);
 
-    satisfy_field_elements(&mut f, &witness_map);
+    witness_field_elements(&mut f, &witness_map);
 
     assert_eq!(f[3], FieldT::from(c_out));
 }

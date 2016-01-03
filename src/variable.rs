@@ -4,23 +4,38 @@ use std::rc::Rc;
 use std::fmt;
 use std::collections::BTreeMap;
 
-pub type WitnessMap = BTreeMap<usize, Vec<(Vec<usize>, Vec<usize>, Rc<Fn(&[&FieldT], &mut [&mut FieldT]) + 'static>)>>;
+pub type WitnessMap = BTreeMap<usize, Vec<(Vec<usize>, Vec<usize>, Rc<Fn(&mut VariableView) + 'static>)>>;
+
+struct VariableView<'a> {
+    vars: &'a mut [FieldT],
+    inputs: &'a [usize],
+    outputs: &'a [usize]
+}
+
+impl<'a> VariableView<'a> {
+    /// Sets an output variable at `index` to value `to`.
+    pub fn set_output(&mut self, index: usize, to: FieldT) {
+        self.vars[self.outputs[index]] = to;
+    }
+
+    /// Gets the value of an input variable at `index`.
+    pub fn get_input(&self, index: usize) -> FieldT {
+        self.vars[self.inputs[index]]
+    }
+}
 
 use std::collections::Bound::Unbounded;
 
-pub fn satisfy_field_elements(vars: &mut [FieldT], witness_map: &WitnessMap) {
+pub fn witness_field_elements(vars: &mut [FieldT], witness_map: &WitnessMap) {
     for (n, group) in witness_map.range(Unbounded, Unbounded) {
         for &(ref i, ref o, ref f) in group.iter() {
-            let i: Vec<&FieldT> = i.iter().map(|i| &vars[*i]).collect();
-            let o: Vec<&FieldT> = o.iter().map(|o| &vars[*o]).collect();
-
-            let mut o: Vec<&mut FieldT> = unsafe {
-                use std::mem::transmute;
-
-                transmute(o)
+            let mut vars = VariableView {
+                vars: vars,
+                inputs: &*i,
+                outputs: &*o
             };
 
-            f(&i, &mut o);
+            f(&mut vars);
         }
     }
 }
@@ -31,7 +46,7 @@ pub struct Constraint;
 struct Gadget {
     inputs: Vec<Var>,
     aux: Vec<Var>,
-    witness: Rc<Fn(&[&FieldT], &mut [&mut FieldT]) + 'static>,
+    witness: Rc<Fn(&mut VariableView) + 'static>,
     constraints: Vec<Constraint>,
     group: usize,
     visited: Cell<bool>
@@ -109,7 +124,7 @@ pub fn gadget<W, C>(
     constrain: C
 ) -> Vec<Var>
     where C: for<'a> Fn(&[&'a Var], &[&'a Var], &mut Vec<Constraint>) -> Vec<&'a Var>,
-          W: Fn(&[&FieldT], &mut [&mut FieldT]) + 'static
+          W: Fn(&mut VariableView) + 'static
 {
     let this_group = inputs.iter().map(|i| i.group()).max().map(|a| a+1).unwrap_or(0);
 
