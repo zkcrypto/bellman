@@ -1,3 +1,6 @@
+use super::bit::Bit;
+use std::slice::IterMut;
+
 const KECCAKF_RNDC: [u64; 24] = 
 [
     0x0000000000000001, 0x0000000000008082, 0x800000000000808a,
@@ -35,7 +38,7 @@ fn keccakf(st: &mut [Byte], rounds: usize)
             State {
                 bits: bytes.iter_mut()
                             .rev() // Endianness
-                            .flat_map(|b| b.bits.iter_mut())
+                            .flat_map(|b| b.iter_mut())
                             .collect()
             }
         }
@@ -188,7 +191,7 @@ fn keccakf(st: &mut [Byte], rounds: usize)
     }
 }
 
-fn sha3_256(message: &[Byte]) -> Vec<Byte> {
+pub fn sha3_256(message: &[Byte]) -> Vec<Byte> {
     // As defined by FIPS202
     keccak(1088, 512, message, 0x06, 32, 24)
 }
@@ -249,82 +252,15 @@ fn keccak(rate: usize, capacity: usize, mut input: &[Byte], delimited_suffix: u8
     output
 }
 
-#[derive(Debug, PartialEq, Clone)]
-enum Bit {
-    Constant(bool)
-}
-
-#[derive(Clone, Debug, PartialEq)]
-struct Byte {
-    bits: Vec<Bit>
-}
-
-impl Byte {
-    fn new(byte: u8) -> Byte {
-        Byte {
-            bits: (0..8).map(|i| Bit::constant(byte & (1 << i) != 0))
-                        .rev()
-                        .collect()
-        }
-    }
-
-    fn unwrap_constant(&self) -> u8 {
-        let mut cur = 7;
-        let mut acc = 0;
-
-        for bit in &self.bits {
-            match bit {
-                &Bit::Constant(true) => {
-                    acc |= 1 << cur;
-                },
-                &Bit::Constant(false) => {},
-                //_ => panic!("Tried to unwrap a constant from a non-constant")
-            }
-            cur -= 1;
-        }
-
-        acc
-    }
-
-    fn xor(&self, other: &Byte) -> Byte {
-        Byte {
-            bits: self.bits.iter()
-                           .zip(other.bits.iter())
-                           .map(|(a, b)| a.xor(b))
-                           .collect()
-        }
-    }
-}
-
-impl Bit {
-    fn constant(num: bool) -> Bit {
-        Bit::Constant(num)
-    }
-
-    // self xor other
-    fn xor(&self, other: &Bit) -> Bit {
-        match (self, other) {
-            (&Bit::Constant(a), &Bit::Constant(b)) => {
-                Bit::constant(a != b)
-            },
-            //_ => unimplemented!()
-        }
-    }
-
-    // (not self) and other
-    fn notand(&self, other: &Bit) -> Bit {
-        match (self, other) {
-            (&Bit::Constant(a), &Bit::Constant(b)) => {
-                Bit::constant((!a) && b)
-            },
-            //_ => unimplemented!()
-        }
-    }
-}
-
 #[test]
 fn test_sha3_256() {
     let test_vector: Vec<(Vec<u8>, [u8; 32])> = vec![
+        (vec![0xff],
+         [0x44,0x4b,0x89,0xec,0xce,0x39,0x5a,0xec,0x5d,0xc9,0x8f,0x19,0xde,0xfd,0x3a,0x23,0xbc,0xa0,0x82,0x2f,0xc7,0x22,0x26,0xf5,0x8c,0xa4,0x6a,0x17,0xee,0xec,0xa4,0x42]
+        ),
+        (vec![0x00],
+         [0x5d,0x53,0x46,0x9f,0x20,0xfe,0xf4,0xf8,0xea,0xb5,0x2b,0x88,0x04,0x4e,0xde,0x69,0xc7,0x7a,0x6a,0x68,0xa6,0x07,0x28,0x60,0x9f,0xc4,0xa6,0x5f,0xf5,0x31,0xe7,0xd0]
+        ),
         (vec![0x30, 0x31, 0x30, 0x31],
          [0xe5,0xbf,0x4a,0xd7,0xda,0x2b,0x4d,0x64,0x0d,0x2b,0x8d,0xd3,0xae,0x9b,0x6e,0x71,0xb3,0x6e,0x0f,0x3d,0xb7,0x6a,0x1e,0xc0,0xad,0x6b,0x87,0x2f,0x3e,0xcc,0x2e,0xbc]
         ),
@@ -365,6 +301,66 @@ fn test_sha3_256() {
             panic!("Hash {} failed!", i+1);
         } else {
             println!("--- HASH {} SUCCESS ---", i+1);
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct Byte {
+    bits: Vec<Bit>
+}
+
+impl From<Vec<Bit>> for Byte {
+    fn from(a: Vec<Bit>) -> Byte {
+        assert_eq!(8, a.len());
+
+        Byte {
+            bits: a
+        }
+    }
+}
+
+impl Byte {
+    pub fn bits(&self) -> Vec<Bit> {
+        self.bits.clone()
+    }
+
+    pub fn new(byte: u8) -> Byte {
+        Byte {
+            bits: (0..8).map(|i| Bit::constant(byte & (1 << i) != 0))
+                        .rev()
+                        .collect()
+        }
+    }
+
+    pub fn iter_mut(&mut self) -> IterMut<Bit> {
+        self.bits.iter_mut()
+    }
+
+    pub fn unwrap_constant(&self) -> u8 {
+        let mut cur = 7;
+        let mut acc = 0;
+
+        for bit in &self.bits {
+            match bit {
+                &Bit::Constant(true) => {
+                    acc |= 1 << cur;
+                },
+                &Bit::Constant(false) => {},
+                _ => panic!("Tried to unwrap a constant from a non-constant")
+            }
+            cur -= 1;
+        }
+
+        acc
+    }
+
+    pub fn xor(&self, other: &Byte) -> Byte {
+        Byte {
+            bits: self.bits.iter()
+                           .zip(other.bits.iter())
+                           .map(|(a, b)| a.xor(b))
+                           .collect()
         }
     }
 }
