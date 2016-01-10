@@ -16,6 +16,7 @@ static mut INITIALIZED: bool = false;
 
 extern "C" {
     fn tinysnark_init_public_params();
+    pub fn tinysnark_test();
 }
 
 pub fn init() {

@@ -41,7 +41,33 @@ pub fn witness_field_elements(vars: &mut [FieldT], witness_map: &WitnessMap) {
 }
 
 #[derive(Clone)]
-pub struct Constraint;
+pub enum Constraint {
+    Bitness(Rc<Cell<usize>>),
+    And(Rc<Cell<usize>>, Rc<Cell<usize>>, Rc<Cell<usize>>),
+    Nand(Rc<Cell<usize>>, Rc<Cell<usize>>, Rc<Cell<usize>>),
+    Xor(Rc<Cell<usize>>, Rc<Cell<usize>>, Rc<Cell<usize>>),
+    Xnor(Rc<Cell<usize>>, Rc<Cell<usize>>, Rc<Cell<usize>>),
+    MaterialNonimplication(Rc<Cell<usize>>, Rc<Cell<usize>>, Rc<Cell<usize>>),
+    MaterialImplication(Rc<Cell<usize>>, Rc<Cell<usize>>, Rc<Cell<usize>>),
+    Nor(Rc<Cell<usize>>, Rc<Cell<usize>>, Rc<Cell<usize>>),
+    Or(Rc<Cell<usize>>, Rc<Cell<usize>>, Rc<Cell<usize>>)
+}
+
+impl fmt::Debug for Constraint {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", match *self {
+            Constraint::Bitness(ref b) => format!("bitness: {}", b.get()),
+            Constraint::And(ref a, ref b, ref c) => format!("{} = {} AND {}", c.get(), a.get(), b.get()),
+            Constraint::Nand(ref a, ref b, ref c) => format!("{} = {} NAND {}", c.get(), a.get(), b.get()),
+            Constraint::Xor(ref a, ref b, ref c) => format!("{} = {} XOR {}", c.get(), a.get(), b.get()),
+            Constraint::Xnor(ref a, ref b, ref c) => format!("{} = {} XNOR {}", c.get(), a.get(), b.get()),
+            Constraint::MaterialNonimplication(ref a, ref b, ref c) => format!("{} = {} ↛ {}", c.get(), a.get(), b.get()),
+            Constraint::MaterialImplication(ref a, ref b, ref c) => format!("{} = {} <-> {}", c.get(), a.get(), b.get()),
+            Constraint::Nor(ref a, ref b, ref c) => format!("{} = {} NOR {}", c.get(), a.get(), b.get()),
+            Constraint::Or(ref a, ref b, ref c) => format!("{} = {} OR {}", c.get(), a.get(), b.get())
+        })
+    }
+}
 
 struct Gadget {
     inputs: Vec<Var>,
@@ -94,6 +120,11 @@ impl Var {
             index: Rc::new(Cell::new(i)),
             gadget: None
         }
+    }
+
+    // make this not public or unsafe too
+    pub fn index(&self) -> Rc<Cell<usize>> {
+        self.index.clone()
     }
 
     pub fn val(&self, map: &[FieldT]) -> FieldT {

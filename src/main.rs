@@ -15,7 +15,7 @@ mod bit;
 fn main() {
     tinysnark::init();
 
-    let inbytes = 1;
+    let inbytes = 64;
     //for inbits in 0..1024 {
         let inbits = inbytes * 8;
         let input: Vec<Bit> = (0..inbits).map(|i| Bit::new(&Var::new(i+1))).collect();

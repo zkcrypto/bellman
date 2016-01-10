@@ -7,6 +7,7 @@ zk-SNARK support using the ALT_BN128 curve.
 #include "zk_proof_systems/ppzksnark/r1cs_ppzksnark/r1cs_ppzksnark.hpp"
 #include "common/default_types/r1cs_ppzksnark_pp.hpp"
 #include "common/utils.hpp"
+#include "gadgetlib1/gadgets/hashes/sha256/sha256_gadget.hpp"
 
 using namespace libsnark;
 using namespace std;
@@ -169,4 +170,32 @@ extern "C" void tinysnark_init_public_params() {
         auto p = FieldT::one();
         assert(sizeof(p) == 32);
     }
+}
+
+
+
+extern "C" void tinysnark_test() {
+    typedef Fr<default_r1cs_ppzksnark_pp> FieldT;
+
+    protoboard<FieldT> pb;
+
+    auto input_bits = new digest_variable<FieldT>(pb, 512, "input_bits");
+    auto output_bits = new digest_variable<FieldT>(pb, 256, "output_bits");
+    auto input_block = new block_variable<FieldT>(pb, {
+        input_bits->bits
+    }, "input_block");
+    auto IV = SHA256_default_IV(pb);
+    auto sha256 = new sha256_compression_function_gadget<FieldT>(pb,
+                                                          IV,
+                                                          input_block->bits,
+                                                          *output_bits,
+                                                          "sha256");
+
+    input_bits->generate_r1cs_constraints();
+    output_bits->generate_r1cs_constraints();
+    sha256->generate_r1cs_constraints();
+
+    const r1cs_constraint_system<FieldT> constraint_system = pb.get_constraint_system();
+
+    cout << "Number of R1CS constraints: " << constraint_system.num_constraints() << endl;
 }
