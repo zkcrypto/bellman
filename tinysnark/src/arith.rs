@@ -38,7 +38,7 @@ impl FieldT {
 
     #[cfg(test)]
     pub fn debug_equal(&self, is: [u8; 32]) -> bool {
-        &FieldT(is) == self
+        &FieldT(is, []) == self
     }
 }
 
