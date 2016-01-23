@@ -75,7 +75,7 @@ macro_rules! mirror_match {
         )
     };
     
-    ($e:expr { $($arms:tt)* }) => {
+    (($e:expr) { $($arms:tt)* }) => {
         mirror_match!(@parse $e, (); $($arms)*)
     };
 }
@@ -275,7 +275,7 @@ impl Bit {
 
     // self xor other
     pub fn xor(&self, other: &Bit) -> Bit {
-        mirror_match!((self, other) {
+        mirror_match!(((self, other)) {
             (&Constant(a), &Constant(b)) => {
                 Constant(a != b)
             },
@@ -326,7 +326,7 @@ impl Bit {
     }
 
     pub fn and(&self, other: &Bit) -> Bit {
-        mirror_match!((self, other) {
+        mirror_match!(((self, other)) {
             (&Constant(a), &Constant(b)) => {
                 Constant(a && b)
             },
