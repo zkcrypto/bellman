@@ -13,8 +13,12 @@ extern "C" {
 }
 
 #[derive(Copy, Clone, Debug)]
+#[repr(simd)]
+struct EightBytes(u64);
+
+#[derive(Copy, Clone, Debug)]
 #[repr(C)]
-pub struct FieldT([u8; 32]);
+pub struct FieldT([u8; 32], [EightBytes; 0]);
 
 impl FieldT {
     #[inline(always)]

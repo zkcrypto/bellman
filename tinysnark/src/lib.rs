@@ -1,4 +1,4 @@
-#![feature(box_syntax)]
+#![feature(box_syntax, repr_simd)]
 #![allow(improper_ctypes)]
 //#![cfg_attr(test, feature(test))]
 extern crate libc;
