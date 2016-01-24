@@ -214,14 +214,68 @@ fn resolve(a: &Var, b: &Var, op: Op) -> Var {
         vals.set_output(0, op.val(a, b));
     }, |i, o, cs| {
         cs.push(match op {
-            And => Constraint::And(i[0].index(), i[1].index(), o[0].index()),
-            Nand => Constraint::Nand(i[0].index(), i[1].index(), o[0].index()),
-            Xor => Constraint::Xor(i[0].index(), i[1].index(), o[0].index()),
-            Xnor => Constraint::Xnor(i[0].index(), i[1].index(), o[0].index()),
-            Nor => Constraint::Nor(i[0].index(), i[1].index(), o[0].index()),
-            Or => Constraint::Or(i[0].index(), i[1].index(), o[0].index()),
-            MaterialNonimplication => Constraint::MaterialNonimplication(i[0].index(), i[1].index(), o[0].index()),
-            MaterialImplication => Constraint::MaterialImplication(i[0].index(), i[1].index(), o[0].index())
+            // a * b = c
+            And => Constraint(vec![(FieldT::one(), i[0].clone())],
+                              vec![(FieldT::one(), i[1].clone())],
+                              vec![(FieldT::one(), o[0].clone())]
+                             ),
+            // a * b = 1 - c
+            Nand => Constraint(vec![(FieldT::one(), i[0].clone())],
+                               vec![(FieldT::one(), i[1].clone())],
+                               vec![(FieldT::one(), Var::one()),
+                                    (-FieldT::one(), o[0].clone())
+                                   ]
+                              ),
+            // 2a * b = a + b - c
+            Xor => Constraint(vec![(FieldT::from(2), i[0].clone())],
+                              vec![(FieldT::one(), i[1].clone())],
+                              vec![(FieldT::one(), i[0].clone()),
+                                   (FieldT::one(), i[1].clone()),
+                                   (-FieldT::one(), o[0].clone())
+                                  ]
+                             ),
+            // 2a * b = a + b + c - 1
+            Xnor => Constraint(vec![(FieldT::from(2), i[0].clone())],
+                               vec![(FieldT::one(), i[1].clone())],
+                               vec![
+                                    (FieldT::one(), i[0].clone()),
+                                    (FieldT::one(), i[1].clone()),
+                                    (FieldT::one(), o[0].clone()),
+                                    (-FieldT::one(), Var::one())
+                                   ]
+                              ),
+            // a * (1 - b) = c
+            MaterialNonimplication => Constraint(vec![(FieldT::one(), i[0].clone())],
+                                                 vec![(FieldT::one(), Var::one()),
+                                                      (-FieldT::one(), i[1].clone())
+                                                     ],
+                                                 vec![(FieldT::one(), o[0].clone())]
+                                                ),
+            // a * b = a + c - 1
+            MaterialImplication => Constraint(vec![(FieldT::one(), i[0].clone())],
+                                              vec![(FieldT::one(), i[1].clone())],
+                                              vec![(FieldT::one(), i[0].clone()),
+                                                   (FieldT::one(), o[0].clone()),
+                                                   (-FieldT::one(), Var::one())
+                                                  ]
+                                             ),
+            // (1 - a) * (1 - b) = c
+            Nor => Constraint(vec![(FieldT::one(), Var::one()),
+                                   (-FieldT::one(), i[0].clone())
+                                  ],
+                              vec![(FieldT::one(), Var::one()),
+                                   (-FieldT::one(), i[1].clone())
+                                  ],
+                              vec![(FieldT::one(), o[0].clone())]
+                             ),
+            // a * b = a + b - c
+            Or => Constraint(vec![(FieldT::one(), i[0].clone())],
+                             vec![(FieldT::one(), i[1].clone())],
+                             vec![(FieldT::one(), i[0].clone()),
+                                  (FieldT::one(), i[1].clone()),
+                                  (-FieldT::one(), o[0].clone())
+                                 ]
+                            ),
         });
 
         vec![o[0]]
@@ -263,7 +317,13 @@ impl Bit {
 
     pub fn new(v: &Var) -> Bit {
         Is(gadget(&[v], 0, |_| {}, |i, o, cs| {
-            cs.push(Constraint::Bitness(i[0].index()));
+            // boolean constraint:
+            // (1 - a) * a = 0
+            cs.push(Constraint(vec![(FieldT::one(), Var::one()),
+                                    (-FieldT::one(), i[0].clone())],
+                               vec![(FieldT::one(), i[0].clone())],
+                               vec![(FieldT::zero(), Var::one())]
+                              ));
 
             vec![i[0]]
         }).remove(0))
