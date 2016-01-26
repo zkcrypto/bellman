@@ -313,12 +313,12 @@ pub struct Byte {
     bits: Vec<Bit>
 }
 
-impl From<Vec<Bit>> for Byte {
-    fn from(a: Vec<Bit>) -> Byte {
+impl<'a> From<&'a [Bit]> for Byte {
+    fn from(a: &'a [Bit]) -> Byte {
         assert_eq!(8, a.len());
 
         Byte {
-            bits: a
+            bits: a.to_owned()
         }
     }
 }

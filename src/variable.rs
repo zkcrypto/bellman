@@ -160,7 +160,7 @@ pub fn gadget<W, C>(
 
         // TODO: we should augment the gadget instead
         // of replacing it
-        debug_assert!(a.gadget.is_none());
+        assert!(a.gadget.is_none());
 
         a.gadget = Some(gadget.clone());
         a
