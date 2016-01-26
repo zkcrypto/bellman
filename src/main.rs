@@ -19,7 +19,7 @@ fn main() {
     //for inbits in 0..1024 {
         let inbits = inbytes * 8;
         let input: Vec<Bit> = (0..inbits).map(|i| Bit::new(&Var::new(i+1))).collect();
-        let input: Vec<Byte> = input.chunks(8).map(|c| Byte::from(c.to_owned())).collect();
+        let input: Vec<Byte> = input.chunks(8).map(|c| Byte::from(c)).collect();
 
         let output = sha3_256(&input);
 
