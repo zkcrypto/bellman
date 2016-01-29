@@ -88,6 +88,15 @@ impl Keypair {
             aux_size: constraint_system.aux_size
         }
     }
+
+    pub fn is_satisfied(&self, primary: &[FieldT], aux: &[FieldT]) -> bool {
+        assert_eq!(primary.len(), self.primary_size);
+        assert_eq!(aux.len(), self.aux_size);
+
+        unsafe {
+            tinysnark_keypair_satisfies_test(self.kp, primary.get_unchecked(0), aux.get_unchecked(0))
+        }
+    }
 }
 
 impl Drop for Keypair {
@@ -99,6 +108,7 @@ impl Drop for Keypair {
 extern "C" {
     fn tinysnark_gen_keypair(cs: *mut R1ConstraintSystem) -> *mut R1CSKeypair;
     fn tinysnark_drop_keypair(cs: *mut R1CSKeypair);
+    fn tinysnark_keypair_satisfies_test(kp: *mut R1CSKeypair, primary: *const FieldT, aux: *const FieldT) -> bool;
 }
 
 #[repr(C)]

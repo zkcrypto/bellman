@@ -2,6 +2,7 @@ use tinysnark::FieldT;
 use std::cell::Cell;
 use std::rc::Rc;
 use std::collections::BTreeMap;
+use super::circuit::ConstraintWalker;
 
 pub type WitnessMap = BTreeMap<usize, Vec<(Vec<usize>, Vec<usize>, Rc<Fn(&mut VariableView) + 'static>)>>;
 
@@ -20,6 +21,14 @@ impl<'a> VariableView<'a> {
     /// Gets the value of an input variable at `index`.
     pub fn get_input(&self, index: usize) -> FieldT {
         self.vars[self.inputs[index]]
+    }
+
+    /// Sets the value of an input variable. This is unsafe
+    /// because theoretically this should not be necessary,
+    /// and could cause soundness problems, but I've temporarily
+    /// done this to make testing easier.
+    pub fn set_input(&mut self, index: usize, to: FieldT) {
+        self.vars[self.inputs[index]] = to;
     }
 }
 
@@ -102,9 +111,8 @@ impl Var {
         }
     }
 
-    // make this not public or unsafe too
-    pub fn index(&self) -> Rc<Cell<usize>> {
-        self.index.clone()
+    pub fn index(&self) -> usize {
+        self.index.get()
     }
 
     pub fn val(&self, map: &[FieldT]) -> FieldT {
@@ -119,8 +127,10 @@ impl Var {
             Some(ref g) => g.group
         }
     }
+}
 
-    pub fn walk(&self, counter: &mut usize, constraints: &mut Vec<Constraint>, witness_map: &mut WitnessMap) {
+impl ConstraintWalker for Var {
+    fn walk(&self, counter: &mut usize, constraints: &mut Vec<Constraint>, witness_map: &mut WitnessMap) {
         match self.gadget {
             None => {},
             Some(ref g) => g.walk(counter, constraints, witness_map)

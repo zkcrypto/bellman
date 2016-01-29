@@ -78,6 +78,18 @@ extern "C" void tinysnark_drop_r1cs(void * ics) {
     delete cs;
 }
 
+extern "C" bool tinysnark_keypair_satisfies_test(void * kp, FieldT* primary, FieldT* aux)
+{
+    r1cs_ppzksnark_keypair<default_r1cs_ppzksnark_pp>* keypair = static_cast<r1cs_ppzksnark_keypair<default_r1cs_ppzksnark_pp>*>(kp);
+
+    r1cs_constraint_system<FieldT>* cs = &keypair->pk.constraint_system;
+
+    r1cs_primary_input<FieldT> primary_input(primary, primary+(cs->primary_input_size));
+    r1cs_auxiliary_input<FieldT> aux_input(aux, aux+(cs->auxiliary_input_size));
+
+    return cs->is_valid() && cs->is_satisfied(primary_input, aux_input);
+}
+
 extern "C" bool tinysnark_satisfy_test(void * ics, FieldT* primary, FieldT* aux) {
     r1cs_constraint_system<FieldT>* cs = static_cast<r1cs_constraint_system<FieldT>*>(ics);
 

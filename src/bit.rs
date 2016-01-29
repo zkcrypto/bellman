@@ -5,6 +5,7 @@ use std::cell::RefCell;
 use super::variable::*;
 use self::Bit::*;
 use self::Op::*;
+use super::circuit::*;
 
 macro_rules! mirror {
     ($a:pat, $b:pat) => (($a, $b) | ($b, $a))
@@ -206,6 +207,59 @@ pub enum Bit {
     Bin(BinaryOp, bool)
 }
 
+struct BitEquality {
+    a: Bit,
+    b: Var
+}
+
+impl Constrainable for BitEquality {
+    type Result = Var;
+
+    fn synthesize(&self, enforce: &Bit) -> Var {
+        // TODO: currently only support unconditional enforcement
+        match enforce {
+            &Bit::Constant(true) => {},
+            _ => unimplemented!()
+        }
+
+        match self.a {
+            Bin(ref binop, inverted) => {
+                // TODO: figure this out later
+                assert!(binop.resolved.borrow().is_none());
+
+                let mut op = binop.op;
+
+                if inverted {
+                    op = op.not();
+                }
+
+                gadget(&[&binop.a, &binop.b, &self.b], 0, move |vals| {
+                    let a = vals.get_input(0);
+                    let b = vals.get_input(1);
+
+                    unsafe { vals.set_input(2, op.val(a, b)) };
+                }, |i, o, cs| {
+                    cs.push(binaryop_constraint(i[0], i[1], i[2], op));
+
+                    vec![i[2]]
+                }).remove(0)
+            },
+            _ => unimplemented!()
+        }
+    }
+}
+
+impl Equals<Var> for Bit {
+    type Result = BitEquality;
+
+    fn must_equal(&self, other: &Var) -> BitEquality {
+        BitEquality {
+            a: self.clone(),
+            b: other.clone()
+        }
+    }
+}
+
 fn binaryop_constraint(a: &Var, b: &Var, c: &Var, op: Op) -> Constraint {
     match op {
         // a * b = c
@@ -286,6 +340,24 @@ fn resolve(a: &Var, b: &Var, op: Op) -> Var {
     }).remove(0)
 }
 
+impl ConstraintWalker for Bit {
+    fn walk(&self, counter: &mut usize, constraints: &mut Vec<Constraint>, witness_map: &mut WitnessMap)
+    {
+        match *self {
+            Constant(_) => {},
+            Not(ref v) => {
+                v.walk(counter, constraints, witness_map);
+            },
+            Is(ref v) => {
+                v.walk(counter, constraints, witness_map);
+            },
+            Bin(ref bin, _) => {
+                bin.walk(counter, constraints, witness_map);
+            }
+        }
+    }
+}
+
 impl Bit {
     pub fn val(&self, map: &[FieldT]) -> bool {
         match *self {
@@ -301,21 +373,6 @@ impl Bit {
         match *self {
             Bin(ref bin, inverted) => bin.resolve(inverted),
             _ => self.clone()
-        }
-    }
-
-    pub fn walk(&self, counter: &mut usize, constraints: &mut Vec<Constraint>, witness_map: &mut WitnessMap) {
-        match *self {
-            Constant(_) => {},
-            Not(ref v) => {
-                v.walk(counter, constraints, witness_map);
-            },
-            Is(ref v) => {
-                v.walk(counter, constraints, witness_map);
-            },
-            Bin(ref bin, _) => {
-                bin.walk(counter, constraints, witness_map);
-            }
         }
     }
 

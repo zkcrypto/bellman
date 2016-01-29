@@ -191,13 +191,13 @@ fn keccakf(st: &mut [Byte], rounds: usize)
     }
 }
 
-pub fn sha3_256(message: &[Byte]) -> Vec<Byte> {
+pub fn sha3_256(message: &[Byte]) -> Vec<Bit> {
     // As defined by FIPS202
     keccak(1088, 512, message, 0x06, 32, 24)
 }
 
 fn keccak(rate: usize, capacity: usize, mut input: &[Byte], delimited_suffix: u8, mut mdlen: usize, num_rounds: usize)
-    -> Vec<Byte>
+    -> Vec<Bit>
 {
     use std::cmp::min;
 
@@ -249,11 +249,15 @@ fn keccak(rate: usize, capacity: usize, mut input: &[Byte], delimited_suffix: u8
         }
     }
 
-    output
+    output.into_iter().flat_map(|byte| byte.bits.into_iter()).collect()
 }
 
 #[test]
 fn test_sha3_256() {
+    use super::circuit::{CircuitBuilder,Equals};
+    use super::variable::Var;
+    use tinysnark::{self,FieldT};
+
     let test_vector: Vec<(Vec<u8>, [u8; 32])> = vec![
         (vec![0xff],
          [0x44,0x4b,0x89,0xec,0xce,0x39,0x5a,0xec,0x5d,0xc9,0x8f,0x19,0xde,0xfd,0x3a,0x23,0xbc,0xa0,0x82,0x2f,0xc7,0x22,0x26,0xf5,0x8c,0xa4,0x6a,0x17,0xee,0xec,0xa4,0x42]
@@ -289,7 +293,11 @@ fn test_sha3_256() {
 
     for (i, &(ref message, ref expected)) in test_vector.iter().enumerate() {
         let message: Vec<Byte> = message.iter().map(|a| Byte::new(*a)).collect();
-        let result: Vec<u8> = sha3_256(&message).into_iter().map(|a| a.unwrap_constant()).collect();
+        let result: Vec<u8> = sha3_256(&message)
+                                 .chunks(8)
+                                 .map(|a| Byte::from(a))
+                                 .map(|a| a.unwrap_constant())
+                                 .collect();
 
         if &*result != expected {
             print!("Got: ");
@@ -305,6 +313,44 @@ fn test_sha3_256() {
         } else {
             println!("--- HASH {} SUCCESS ---", i+1);
         }
+    }
+
+    tinysnark::init();
+
+    for (i, &(ref message, ref expected)) in test_vector.iter().enumerate() {
+        fn into_bytes(a: &[Var]) -> Vec<Byte> {
+            let a: Vec<_> = a.into_iter().map(|a| Bit::new(a)).collect();
+            
+            a.chunks(8).map(|a| Byte::from(a)).collect()
+        }
+
+        fn into_fieldt(a: &[u8], vars: &mut [FieldT]) {
+            let mut counter = 0;
+
+            for byte in a {
+                for bit in (0..8).map(|i| byte & (1 << i) != 0).rev() {
+                    if bit { vars[counter] = FieldT::one() } else { vars[counter] = FieldT::zero() }
+                    counter += 1;
+                }
+            }
+        }
+
+        let (public, private, mut circuit) = CircuitBuilder::new(expected.len() * 8, message.len() * 8);
+
+        let private = into_bytes(&private);
+
+        circuit.constrain(sha3_256(&private).must_equal(&public));
+
+        let circuit = circuit.finalize();
+
+        let mut input: Vec<FieldT> = (0..message.len() * 8).map(|_| FieldT::zero()).collect();
+        let mut output: Vec<FieldT> = (0..expected.len() * 8).map(|_| FieldT::zero()).collect();
+
+        into_fieldt(message, &mut input);
+        into_fieldt(expected, &mut output);
+
+        let proof = circuit.prove(&output, &input).unwrap();
+        assert!(circuit.verify(&proof, &output));
     }
 }
 
