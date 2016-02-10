@@ -311,8 +311,12 @@ fn test_sha3_256() {
             println!("");
             panic!("Hash {} failed!", i+1);
         } else {
-            println!("--- HASH {} SUCCESS ---", i+1);
+            //println!("--- HASH {} SUCCESS ---", i+1);
         }
+    }
+
+    if option_env!("DEBUG_NOPROVE").is_some() {
+        return;
     }
 
     tinysnark::init();

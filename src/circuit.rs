@@ -55,11 +55,16 @@ pub struct Circuit {
     public_inputs: usize,
     private_inputs: usize,
     aux_inputs: usize,
+    num_constraints: usize,
     keypair: Keypair,
     witness_map: WitnessMap
 }
 
 impl Circuit {
+    pub fn num_constraints(&self) -> usize {
+        self.num_constraints
+    }
+
     pub fn verify(&self, proof: &Proof, public: &[FieldT]) -> bool
     {
         proof.verify(&self.keypair, public)
@@ -126,6 +131,8 @@ impl CircuitBuilder {
 
         let mut cs = ConstraintSystem::new(self.public_inputs, (counter - 1) - self.public_inputs);
 
+        let num_constraints = constraints.len();
+
         for Constraint(a, b, c) in constraints {
             let a: Vec<_> = a.into_iter().map(|x| LinearTerm { coeff: x.0, index: x.1.index() }).collect();
             let b: Vec<_> = b.into_iter().map(|x| LinearTerm { coeff: x.0, index: x.1.index() }).collect();
@@ -139,6 +146,7 @@ impl CircuitBuilder {
         Circuit {
             public_inputs: self.public_inputs,
             private_inputs: self.private_inputs,
+            num_constraints: num_constraints,
             aux_inputs: ((counter - 1) - self.public_inputs) - self.private_inputs,
             keypair: kp,
             witness_map: witness_map

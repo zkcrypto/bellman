@@ -31,6 +31,15 @@ impl FieldT {
         unsafe { tinysnark_fieldt_zero() }
     }
 
+    pub fn exp(&self, by: usize) -> FieldT {
+        let mut acc = FieldT::one();
+        for _ in 0..by {
+            acc = acc * (*self);
+        }
+
+        acc
+    }
+
     #[inline(always)]
     pub fn inverse(self) -> FieldT {
         unsafe { tinysnark_fieldt_inverse(self) }
