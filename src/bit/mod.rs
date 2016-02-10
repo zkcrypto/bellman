@@ -7,6 +7,8 @@ use self::Bit::*;
 use self::Op::*;
 use super::circuit::*;
 
+mod addition;
+
 macro_rules! mirror {
     ($a:pat, $b:pat) => (($a, $b) | ($b, $a))
 }
@@ -92,6 +94,9 @@ enum Op {
     MaterialNonimplication,
     MaterialImplication,
 
+    ConverseImplication,
+    ConverseNonimplication,
+
     Nor,
     Or
 }
@@ -109,7 +114,10 @@ impl Op {
             Or => Nor,
 
             MaterialNonimplication => MaterialImplication,
-            MaterialImplication => MaterialNonimplication
+            MaterialImplication => MaterialNonimplication,
+
+            ConverseNonimplication => ConverseImplication,
+            ConverseImplication => ConverseNonimplication
         }
     }
 
@@ -124,7 +132,9 @@ impl Op {
             Or => a || b,
             Nor => !(a || b),
             MaterialNonimplication => a && (!b),
-            MaterialImplication => !(a && (!b))
+            MaterialImplication => !(a && (!b)),
+            ConverseImplication => a || (!b),
+            ConverseNonimplication => !(a || (!b))
         };
 
         if res {
@@ -222,10 +232,10 @@ impl Constrainable for BitEquality {
             _ => unimplemented!()
         }
 
-        match self.a {
-            Bin(ref binop, inverted) => {
+        match &self.a {
+            &Bin(ref binop, inverted) => {
                 // TODO: figure this out later
-                assert!(binop.resolved.borrow().is_none());
+                //assert!(binop.resolved.borrow().is_none());
 
                 let mut op = binop.op;
 
@@ -244,7 +254,33 @@ impl Constrainable for BitEquality {
                     vec![i[2]]
                 }).remove(0)
             },
-            _ => unimplemented!()
+            &Is(ref v) => {
+                // TODO: no, we should _equate_ them, that is, make them use
+                // the same variable.
+                gadget(&[&self.b, v], 0, |vars| {
+                    let x = vars.get_input(1);
+                    unsafe { vars.set_input(0, x); }
+                }, |i, o, cs| {
+                    cs.push(Constraint(
+                        vec![(FieldT::one(), i[0].clone())],
+                        vec![(FieldT::one(), Var::one())],
+                        vec![(FieldT::one(), i[1].clone())]
+                    ));
+
+                    vec![i[0]]
+                }).remove(0)
+            },
+            &Constant(b) => {
+                unimplemented!()
+            },
+            b @ &Not(_) => {
+                // TODO: is this the right approach
+
+                (BitEquality {
+                    a: b.resolve(),
+                    b: self.b.clone()
+                }).synthesize(enforce)
+            }
         }
     }
 }
@@ -292,6 +328,21 @@ fn binaryop_constraint(a: &Var, b: &Var, c: &Var, op: Op) -> Constraint {
                                 (-FieldT::one(), Var::one())
                                ]
                           ),
+        // a * b = b + c - 1
+        ConverseImplication => Constraint(vec![(FieldT::one(), a.clone())],
+                                          vec![(FieldT::one(), b.clone())],
+                                          vec![(-FieldT::one(), Var::one()),
+                                               (FieldT::one(), b.clone()),
+                                               (FieldT::one(), c.clone())
+                                              ]
+                                         ),
+        // a * b = b - c
+        ConverseNonimplication => Constraint(vec![(FieldT::one(), a.clone())],
+                                             vec![(FieldT::one(), b.clone())],
+                                             vec![(FieldT::one(), b.clone()),
+                                                  (-FieldT::one(), c.clone())
+                                                 ]
+                                            ),
         // a * (1 - b) = c
         MaterialNonimplication => Constraint(vec![(FieldT::one(), a.clone())],
                                              vec![(FieldT::one(), Var::one()),
@@ -358,6 +409,27 @@ impl ConstraintWalker for Bit {
     }
 }
 
+pub fn add(a: &[Bit], b: &[Bit]) -> Vec<Bit> {
+    addition::add(a, b)
+}
+
+/*
+pub fn add(a: &[Bit], b: &[Bit]) -> Vec<Bit> {
+    let mut carry = Bit::Constant(false);
+
+    let res = a.iter().rev().zip(b.iter().rev())
+    .map(|(a, b)| {
+        let res = a.xor(b).xor(&carry);
+
+        carry = (a.and(b)).or(&carry.and(&a.xor(b)));
+
+        res
+    }).collect::<Vec<_>>();
+
+    res.into_iter().rev().collect()
+}
+*/
+
 impl Bit {
     pub fn val(&self, map: &[FieldT]) -> bool {
         match *self {
@@ -372,6 +444,22 @@ impl Bit {
     pub fn resolve(&self) -> Bit {
         match *self {
             Bin(ref bin, inverted) => bin.resolve(inverted),
+            Not(ref v) => Is(gadget(&[v], 1, |vars| {
+                if vars.get_input(0) == FieldT::one() {
+                    vars.set_output(0, FieldT::zero());
+                } else {
+                    vars.set_output(0, FieldT::one());
+                }
+            }, |i, o, cs| {
+                cs.push(Constraint(vec![(FieldT::one(), Var::one()),
+                                        (-FieldT::one(), i[0].clone())
+                                       ],
+                                   vec![(FieldT::one(), Var::one())],
+                                   vec![(FieldT::one(), o[0].clone())]
+                                  ));
+
+                vec![o[0]]
+            }).remove(0)),
             _ => self.clone()
         }
     }
@@ -392,6 +480,53 @@ impl Bit {
 
     pub fn constant(num: bool) -> Bit {
         Constant(num)
+    }
+
+    pub fn or(&self, other: &Bit) -> Bit {
+        mirror_match!(((self, other)) {
+            (&Constant(a), &Constant(b)) => {
+                Constant(a || b)
+            },
+            mirror!(&Is(ref v), &Constant(a)) => {
+                if a {
+                    Constant(true)
+                } else {
+                    Is(v.clone())
+                }
+            },
+            mirror!(&Not(ref v), &Constant(a)) => {
+                if a {
+                    Constant(true)
+                } else {
+                    Not(v.clone())
+                }
+            },
+            mirror!(&Bin(ref bin, inverted), &Constant(c)) => {
+                if c {
+                    Constant(true)
+                } else {
+                    Bin(bin.clone(), inverted)
+                }
+            },
+            mirror!(&Bin(ref bin, inverted), &Is(ref i)) => {
+                bin.resolve(inverted).or(&Is(i.clone()))
+            },
+            (&Bin(ref bin1, inverted1), &Bin(ref bin2, inverted2)) => {
+                bin1.resolve(inverted1).or(&bin2.resolve(inverted2))
+            },
+            mirror!(&Bin(ref bin, inverted), &Not(ref n)) => {
+                bin.resolve(inverted).or(&Not(n.clone()))
+            },
+            (&Not(ref a), &Not(ref b)) => {
+                Bin(BinaryOp::new(a.clone(), b.clone(), Nand), false)
+            },
+            mirror!(&Is(ref i), &Not(ref n)) => {
+                Bin(BinaryOp::new(i.clone(), n.clone(), ConverseImplication), false)
+            },
+            (&Is(ref a), &Is(ref b)) => {
+                Bin(BinaryOp::new(a.clone(), b.clone(), Or), false)
+            },
+        })
     }
 
     // self xor other
@@ -499,9 +634,13 @@ impl Bit {
         })
     }
 
+    pub fn not(&self) -> Bit {
+        self.xor(&Constant(true))
+    }
+
     // (not self) and other
     pub fn notand(&self, other: &Bit) -> Bit {
-        self.xor(&Constant(true)).and(other)
+        self.not().and(other)
     }
 }
 
@@ -557,4 +696,32 @@ fn test_and() {
     test_binary_op(Bit::and, 0, 1, 0);
     test_binary_op(Bit::and, 1, 0, 0);
     test_binary_op(Bit::and, 1, 1, 1);
+}
+
+#[test]
+fn test_adder() {
+    use tinysnark;
+    use super::circuit::CircuitBuilder;
+
+    tinysnark::init();
+
+    let (public, private, mut circuit) = CircuitBuilder::new(4, 8);
+    let private: Vec<_> = private.iter().map(|b| Bit::new(b)).collect();
+
+    circuit.constrain(add(&private[0..4], &private[4..8]).must_equal(&public));
+
+    let circuit = circuit.finalize();
+
+    //let input: Vec<_> = (0..128).map(|_| FieldT::zero()).collect();
+    //let output: Vec<_> = (0..64).map(|_| FieldT::zero()).collect();
+
+    let input = vec![FieldT::one(), FieldT::one(), FieldT::one(), FieldT::one(),
+                    // +
+                     FieldT::one(), FieldT::one(), FieldT::one(), FieldT::one()
+                    ];
+
+    let output = vec![FieldT::one(), FieldT::one(), FieldT::one(), FieldT::zero()];
+
+    let proof = circuit.prove(&output, &input).unwrap();
+    assert!(circuit.verify(&proof, &output));
 }

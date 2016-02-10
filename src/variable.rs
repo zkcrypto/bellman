@@ -1,18 +1,32 @@
 use tinysnark::FieldT;
 use std::cell::Cell;
+use std::borrow::Borrow;
 use std::rc::Rc;
 use std::collections::BTreeMap;
 use super::circuit::ConstraintWalker;
 
 pub type WitnessMap = BTreeMap<usize, Vec<(Vec<usize>, Vec<usize>, Rc<Fn(&mut VariableView) + 'static>)>>;
 
-struct VariableView<'a> {
+pub struct VariableView<'a> {
     vars: &'a mut [FieldT],
     inputs: &'a [usize],
-    outputs: &'a [usize]
+    outputs: &'a [usize],
+    cache: Vec<bool>
 }
 
 impl<'a> VariableView<'a> {
+    pub fn get_cache(&self, num: usize) -> Option<&bool> {
+        self.cache.get(num)
+    }
+
+    pub fn set_cache(&mut self, num: usize, to: bool) {
+        while self.cache.len() <= num {
+            self.cache.push(false);
+        }
+
+        self.cache[num] = to;
+    }
+
     /// Sets an output variable at `index` to value `to`.
     pub fn set_output(&mut self, index: usize, to: FieldT) {
         self.vars[self.outputs[index]] = to;
@@ -40,7 +54,8 @@ pub fn witness_field_elements(vars: &mut [FieldT], witness_map: &WitnessMap) {
             let mut vars = VariableView {
                 vars: vars,
                 inputs: &*i,
-                outputs: &*o
+                outputs: &*o,
+                cache: vec![]
             };
 
             f(&mut vars);
@@ -115,6 +130,10 @@ impl Var {
         self.index.get()
     }
 
+    pub unsafe fn set_index(&self, to: &Var) {
+        self.index.set(to.index());
+    }
+
     pub fn val(&self, map: &[FieldT]) -> FieldT {
         let index = self.index.get();
         assert!(index != 0);
@@ -138,8 +157,8 @@ impl ConstraintWalker for Var {
     }
 }
 
-pub fn gadget<W, C>(
-    inputs: &[&Var],
+pub fn gadget<W, C, V: Borrow<Var>>(
+    inputs: &[V],
     aux: usize,
     witness: W,
     constrain: C
@@ -147,6 +166,8 @@ pub fn gadget<W, C>(
     where C: for<'a> Fn(&[&'a Var], &[&'a Var], &mut Vec<Constraint>) -> Vec<&'a Var>,
           W: Fn(&mut VariableView) + 'static
 {
+    let inputs: Vec<&Var> = inputs.iter().map(|v| v.borrow()).collect();
+
     let this_group = inputs.iter().map(|i| i.group()).max().map(|a| a+1).unwrap_or(0);
 
     let aux: Vec<_> = (0..aux).map(|_| Var::new(0)).collect();
@@ -154,7 +175,7 @@ pub fn gadget<W, C>(
 
     let mut constraints = vec![];
 
-    let outputs = constrain(inputs, &*aux, &mut constraints);
+    let outputs = constrain(&inputs, &*aux, &mut constraints);
 
     let gadget = Rc::new(Gadget {
         inputs: inputs.iter().map(|a| (*a).clone()).collect(),
@@ -170,7 +191,7 @@ pub fn gadget<W, C>(
 
         // TODO: we should augment the gadget instead
         // of replacing it
-        assert!(a.gadget.is_none());
+        //assert!(a.gadget.is_none());
 
         a.gadget = Some(gadget.clone());
         a
