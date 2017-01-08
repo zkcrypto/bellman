@@ -1,21 +1,7 @@
 sudo: false
 language: rust
 rust:
-  - nightly
-
-install:
-- export CXX="g++-4.8" CC="gcc-4.8"
-
-addons:
-  apt:
-    sources:
-    - ubuntu-toolchain-r-test
-    packages:
-    - g++-4.8
-    - gcc-4.8
-    - libgmp-dev
+  - stable
 
 script:
-  - cd tinysnark && cargo test
-  - cd .. && cargo run --release
-  - cargo test
+  - cargo test --release

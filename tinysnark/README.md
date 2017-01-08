@@ -1,1 +1,0 @@
-This is a tiny wrapper around libsnark's r1cs_ppzksnark on ALT_BN128.
