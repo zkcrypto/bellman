@@ -9,4 +9,10 @@ repository = "https://github.com/ebfull/bellman"
 version = "0.0.1"
 
 [dependencies]
-rand = "0.3.15"
+rand = "0.3.*"
+rayon = "0.6.*"
+byteorder = "1.*"
+serde = "0.9.*"
+
+[dev-dependencies.bincode]
+git = "https://github.com/TyOverby/bincode.git"
