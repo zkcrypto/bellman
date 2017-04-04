@@ -24,7 +24,7 @@ fn test_multiexp<E: Engine, G: Group<E>>(e: &E) {
         let s: Vec<E::Fr> = (0..1000).map(|_| E::Fr::random(e, rng)).collect();
 
         let naive = naiveexp::<E, G>(e, &g, &s);
-        let multi = e.multiexp::<G>(&g, &s);
+        let multi = e.multiexp::<G>(&g, &s).unwrap();
 
         assert!(naive.is_equal(e, &multi));
         assert!(multi.is_equal(e, &naive));
@@ -36,10 +36,18 @@ fn test_multiexp<E: Engine, G: Group<E>>(e: &E) {
         let s = vec![E::Fr::from_str(e, "3435973836800000000000000000000000").unwrap(), E::Fr::from_str(e, "3435973836700000000000000000000000").unwrap()];
 
         let naive = naiveexp::<E, G>(e, &g, &s);
-        let multi = e.multiexp::<G>(&g, &s);
+        let multi = e.multiexp::<G>(&g, &s).unwrap();
 
         assert!(naive.is_equal(e, &multi));
         assert!(multi.is_equal(e, &naive));
+    }
+
+    {
+        let rng = &mut rand::thread_rng();
+        let s = vec![E::Fr::one(e); 100];
+        let g = vec![G::random(e, rng).to_affine(e); 101];
+
+        assert!(e.multiexp::<G>(&g, &s).is_err());
     }
 }
 

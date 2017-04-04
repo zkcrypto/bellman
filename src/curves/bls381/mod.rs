@@ -3,6 +3,7 @@ use std::fmt;
 
 use std::borrow::Borrow;
 use super::{
+    WindowTable,
     Engine,
     Group,
     GroupAffine,
@@ -690,6 +691,7 @@ impl G2Prepared {
     }
 }
 
+#[derive(Clone)]
 pub struct Bls381 {
     fqparams: FqParams,
     frparams: FrParams,
@@ -724,6 +726,12 @@ impl Engine for Bls381 {
     type G1 = G1;
     type G2 = G2;
 
+    fn with<R, F: for<'a> FnOnce(&'a Self) -> R>(cb: F) -> R {
+        ENGINE.with(|e| {
+            cb(e)
+        })
+    }
+
     fn new() -> Bls381 {
         let mut tmp = Bls381 {
             fqparams: FqParams::partial_init(),
@@ -732,13 +740,15 @@ impl Engine for Bls381 {
                 zero: G1 { x: Fq::zero(), y: Fq::zero(), z: Fq::zero() },
                 one: G1 { x: Fq::zero(), y: Fq::zero(), z: Fq::zero() },
                 coeff_b: Fq::zero(),
-                windows: vec![11, 35, 110]
+                windows: vec![11, 35, 110],
+                batch_windows: (4, vec![2, 3, 10, 20, 53, 111, 266, 426, 1273, 4742, 6054, 6054, 6054])
             },
             g2params: G2Params {
                 zero: G2 { x: Fq2::zero(), y: Fq2::zero(), z: Fq2::zero() },
                 one: G2 { x: Fq2::zero(), y: Fq2::zero(), z: Fq2::zero() },
                 coeff_b: Fq2::zero(),
-                windows: vec![11, 35, 114]
+                windows: vec![11, 35, 114],
+                batch_windows: (4, vec![2, 4, 10, 29, 54, 120, 314, 314, 314, 314])
             },
             frobenius_coeff_fq2: [Fq::zero(); 2],
             frobenius_coeff_fq6_c1: [Fq2::zero(); 6],
@@ -999,36 +1009,58 @@ impl Engine for Bls381 {
         f
     }
 
-    fn batch_baseexp<G: Group<Self>>(&self, base: &G, s: &[Fr]) -> Vec<G::Affine>
+    fn batch_baseexp<G: Group<Self>, S: AsRef<[Self::Fr]>>(&self, table: &WindowTable<Self, G, Vec<G>>, s: S) -> Vec<G::Affine>
     {
-        // TODO: pick an optimal window size based on number of elements and
-        // considering the exact group
-        const WINDOW_SIZE_BASE: usize = 18;
+        use crossbeam;
+        use num_cpus;
 
-        use rayon::prelude::*;
+        let s = s.as_ref();
+        let mut ret = vec![G::zero(self).to_affine(self); s.len()];
 
-        let mut table = vec![];
-        window_table(self, WINDOW_SIZE_BASE, base, &mut table);
+        crossbeam::scope(|scope| {
+            let chunk = (s.len() / num_cpus::get()) + 1;
 
-        s.par_iter().map(|s| {
-            let mut b = G::zero(self);
-            windowed_exp(self, WINDOW_SIZE_BASE, &table, &mut b, &s.into_repr(self));
-            b.to_affine(self)
-        }).collect()
+            for (s, b) in s.chunks(chunk).zip(ret.chunks_mut(chunk)) {
+                let mut table = table.shared();
+
+                scope.spawn(move || {
+                    for (s, b) in s.iter().zip(b.iter_mut()) {
+                        let mut tmp = G::zero(self);
+                        table.exp(self, &mut tmp, s.into_repr(self));
+                        *b = tmp.to_affine(self);
+                    }
+                });
+            }
+        });
+
+        ret
     }
 
-    fn multiexp<G: Group<Self>>(&self, g: &[G::Affine], s: &[Fr]) -> G {
-        use rayon::prelude::*;
-        use rayon::par_iter::zip::ZipIter;
+    fn multiexp<G: Group<Self>>(&self, g: &[G::Affine], s: &[Fr]) -> Result<G, ()> {
+        if g.len() != s.len() {
+            return Err(());
+        }
 
-        return ZipIter::new(
-            g.par_chunks((g.len() / 32) + 1),
-            s.par_chunks((g.len() / 32) + 1)
-        ).map(|(g, s)| {
-            multiexp_inner::<G>(self, g, s)
-        }).reduce(|| G::zero(self), |mut a, b| {
-            a.add_assign(self, &b);
-            a
+        use crossbeam;
+        use num_cpus;
+
+        return crossbeam::scope(|scope| {
+            let mut threads = vec![];
+
+            let chunk = (s.len() / num_cpus::get()) + 1;
+
+            for (g, s) in g.chunks(chunk).zip(s.chunks(chunk)) {
+                threads.push(scope.spawn(move || {
+                    multiexp_inner(self, g, s)
+                }));
+            }
+
+            let mut acc = G::zero(self);
+            for t in threads {
+                acc.add_assign(self, &t.join());
+            }
+
+            Ok(acc)
         });
 
         fn multiexp_inner<G: Group<Bls381>>(engine: &Bls381, g: &[G::Affine], s: &[Fr]) -> G
@@ -1132,7 +1164,7 @@ impl Engine for Bls381 {
                 });
             }
 
-            let mut table_space = vec![];
+            let mut table = WindowTable::new();
 
             while let Some(mut greatest) = heap.pop() {
                 {
@@ -1140,7 +1172,7 @@ impl Engine for Bls381 {
                     if second_greatest.is_none() || greatest.justexp(second_greatest.unwrap()) {
                         // Either this is the last value or multiplying is considered more efficient than
                         // rewriting and reinsertion into the heap.
-                        opt_exp(engine, &mut elements[greatest.index], &greatest.value, &mut table_space);
+                        opt_exp(engine, &mut elements[greatest.index], greatest.value, &mut table);
                         result.add_assign(engine, &elements[greatest.index]);
                         continue;
                     } else {
@@ -1164,87 +1196,72 @@ impl Engine for Bls381 {
     }
 }
 
-// Converts a scalar into wNAF form based on given window size.
-// TODO: instead of a function, and allocating a vector, create a smart
-// iterator.
-fn wnaf(e: &Bls381, window: usize, s: &<Fr as PrimeField<Bls381>>::Repr) -> Vec<i64>
-{
-    use std::default::Default;
-    let mut res = Vec::with_capacity(Fr::num_bits(e) + 1);
-    let mut c = *s;
+impl<G: Group<Bls381>, B: Borrow<[G]>> WindowTable<Bls381, G, B> {
+    fn exp(&mut self, e: &Bls381, into: &mut G, mut c: <Fr as PrimeField<Bls381>>::Repr) {
+        assert!(self.window > 1);
 
-    let mut tmp = <Fr as PrimeField<Bls381>>::Repr::default();
+        self.wnaf.truncate(0);
+        self.wnaf.reserve(Fr::num_bits(e) + 1);
 
-    while !c.iter().all(|&e| e==0) {
-        let mut u;
-        if fr_arith::odd(&c) {
-            u = (c[0] % (1 << (window+1))) as i64;
+        // Convert the scalar `c` into wNAF form.
+        {
+            use std::default::Default;
+            let mut tmp = <Fr as PrimeField<Bls381>>::Repr::default();
 
-            if u > (1 << window) {
-                u -= 1 << (window+1);
+            while !c.iter().all(|&e| e==0) {
+                let mut u;
+                if fr_arith::odd(&c) {
+                    u = (c[0] % (1 << (self.window+1))) as i64;
+
+                    if u > (1 << self.window) {
+                        u -= 1 << (self.window+1);
+                    }
+
+                    if u > 0 {
+                        tmp[0] = u as u64;
+                        fr_arith::sub_noborrow(&mut c, &tmp);
+                    } else {
+                        tmp[0] = (-u) as u64;
+                        fr_arith::add_nocarry(&mut c, &tmp);
+                    }
+                } else {
+                    u = 0;
+                }
+
+                self.wnaf.push(u);
+
+                fr_arith::div2(&mut c);
             }
-
-            if u > 0 {
-                tmp[0] = u as u64;
-                fr_arith::sub_noborrow(&mut c, &tmp);
-            } else {
-                tmp[0] = (-u) as u64;
-                fr_arith::add_nocarry(&mut c, &tmp);
-            }
-        } else {
-            u = 0;
         }
 
-        res.push(u);
+        // Perform wNAF exponentiation.
+        *into = G::zero(e);
 
-        fr_arith::div2(&mut c);
+        for n in self.wnaf.iter().rev() {
+            into.double(e);
+
+            if *n != 0 {
+                if *n > 0 {
+                    into.add_assign(e, &self.table.borrow()[(n/2) as usize]);
+                } else {
+                    into.sub_assign(e, &self.table.borrow()[((-n)/2) as usize]);
+                }
+            }
+        }
     }
-
-    res
 }
 
 // Performs optimal exponentiation
-fn opt_exp<G: Group<Bls381>>(e: &Bls381, base: &mut G, scalar: &<Fr as PrimeField<Bls381>>::Repr, table: &mut Vec<G>)
+fn opt_exp<G: Group<Bls381>>(e: &Bls381, base: &mut G, scalar: <Fr as PrimeField<Bls381>>::Repr, table: &mut WindowTable<Bls381, G, Vec<G>>)
 {
-    let bits = fr_arith::num_bits(scalar);
+    let bits = fr_arith::num_bits(&scalar);
     match G::optimal_window(e, bits) {
         Some(window) => {
-            window_table(e, window, base, table);
-            windowed_exp(e, window, &table, base, scalar);
+            table.set_base(e, base, window);
+            table.exp(e, base, scalar);
         },
         None => {
-            base.mul_assign(e, scalar);
-        }
-    }
-}
-
-fn window_table<G: Group<Bls381>>(e: &Bls381, window: usize, base: &G, table: &mut Vec<G>)
-{
-    table.truncate(0);
-
-    let mut tmp = *base;
-    let mut dbl = tmp;
-    dbl.double(e);
-
-    for _ in 0..(1 << (window-1)) {
-        table.push(tmp);
-        tmp.add_assign(e, &dbl);
-    }
-}
-
-fn windowed_exp<G: Group<Bls381>>(e: &Bls381, window: usize, table: &[G], base: &mut G, scalar: &<Fr as PrimeField<Bls381>>::Repr)
-{
-    *base = G::zero(e);
-
-    for n in wnaf(e, window, scalar).into_iter().rev() {
-        base.double(e);
-
-        if n != 0 {
-            if n > 0 {
-                base.add_assign(e, &table[(n/2) as usize]);
-            } else {
-                base.sub_assign(e, &table[((-n)/2) as usize]);
-            }
+            base.mul_assign(e, &scalar);
         }
     }
 }

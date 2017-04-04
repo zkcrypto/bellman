@@ -1,11 +1,14 @@
 use rand;
 use std::fmt;
 
+use std::ops::Deref;
+use std::borrow::Borrow;
+use std::marker::PhantomData;
 use serde::{Serialize, Deserialize};
 
 pub mod bls381;
 
-pub trait Engine: Sized
+pub trait Engine: Sized + Clone
 {
     type Fq: PrimeField<Self>;
     type Fr: SnarkField<Self>;
@@ -15,6 +18,9 @@ pub trait Engine: Sized
     type G2: Group<Self> + Convert<<Self::G2 as Group<Self>>::Affine, Self>;
 
     fn new() -> Self;
+
+    /// Operate over the thread-local engine instance
+    fn with<R, F: for<'a> FnOnce(&'a Self) -> R>(F) -> R;
 
     fn pairing<G1, G2>(&self, p: &G1, q: &G2) -> Self::Fqk
         where G1: Convert<<Self::G1 as Group<Self>>::Affine, Self>,
@@ -34,8 +40,9 @@ pub trait Engine: Sized
                                )>;
     fn final_exponentiation(&self, &Self::Fqk) -> Self::Fqk;
 
-    fn multiexp<G: Group<Self>>(&self, &[G::Affine], &[Self::Fr]) -> G;
-    fn batch_baseexp<G: Group<Self>>(&self, base: &G, scalars: &[Self::Fr]) -> Vec<G::Affine>;
+    /// Perform multi-exponentiation. g and s must have the same length.
+    fn multiexp<G: Group<Self>>(&self, g: &[G::Affine], s: &[Self::Fr]) -> Result<G, ()>;
+    fn batch_baseexp<G: Group<Self>, S: AsRef<[Self::Fr]>>(&self, table: &WindowTable<Self, G, Vec<G>>, scalars: S) -> Vec<G::Affine>;
 }
 
 pub trait Group<E: Engine>: Sized +
@@ -67,6 +74,7 @@ pub trait Group<E: Engine>: Sized +
     fn mul_assign<S: Convert<[u64], E>>(&mut self, &E, other: &S);
 
     fn optimal_window(&E, scalar_bits: usize) -> Option<usize>;
+    fn optimal_window_batch(&self, &E, scalars: usize) -> WindowTable<E, Self, Vec<Self>>;
 }
 
 pub trait GroupAffine<E: Engine, G: Group<E>>: Copy +
@@ -163,7 +171,7 @@ pub trait SqrtField<E: Engine>: Field<E>
 pub trait PrimeField<E: Engine>: SqrtField<E> + Convert<[u64], E>
 {
     /// Little endian representation of a field element.
-    type Repr: Convert<[u64], E>;
+    type Repr: Convert<[u64], E> + Eq + Clone;
     fn from_u64(&E, u64) -> Self;
     fn from_str(&E, s: &str) -> Result<Self, ()>;
     fn from_repr(&E, Self::Repr) -> Result<Self, ()>;
@@ -196,6 +204,50 @@ pub struct BitIterator<T> {
     n: usize
 }
 
+pub struct WindowTable<E, G, Table: Borrow<[G]>> {
+    table: Table,
+    wnaf: Vec<i64>,
+    window: usize,
+    _marker: PhantomData<(E, G)>
+}
+
+impl<E: Engine, G: Group<E>> WindowTable<E, G, Vec<G>> {
+    fn new() -> Self {
+        WindowTable {
+            table: vec![],
+            wnaf: vec![],
+            window: 0,
+            _marker: PhantomData
+        }
+    }
+
+    fn set_base(&mut self, e: &E, base: &G, window: usize) {
+        assert!(window > 1);
+
+        self.window = window;
+        self.table.truncate(0);
+        self.table.reserve(1 << (window-1));
+
+        let mut tmp = *base;
+        let mut dbl = tmp;
+        dbl.double(e);
+
+        for _ in 0..(1 << (window-1)) {
+            self.table.push(tmp);
+            tmp.add_assign(e, &dbl);
+        }
+    }
+
+    fn shared(&self) -> WindowTable<E, G, &[G]> {
+        WindowTable {
+            table: &self.table[..],
+            wnaf: vec![],
+            window: self.window,
+            _marker: PhantomData
+        }
+    }
+}
+
 impl<T: AsRef<[u64]>> Iterator for BitIterator<T> {
     type Item = bool;
 
@@ -223,9 +275,6 @@ impl<'a> From<&'a [u64]> for BitIterator<&'a [u64]>
         }
     }
 }
-
-use std::ops::Deref;
-use std::borrow::Borrow;
 
 pub enum Cow<'a, T: 'a> {
     Owned(T),

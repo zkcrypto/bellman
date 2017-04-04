@@ -11,6 +11,7 @@ macro_rules! fp_params_impl {
         modulus_minus_1_over_2 = $modulus_minus_1_over_2:expr,
         inv = $inv:expr
     ) => {
+        #[derive(Clone)]
         struct $params_name {
             modulus: [u64; $limbs],
             r1: $name,
@@ -57,6 +58,7 @@ macro_rules! fp_params_impl {
         t_plus_1_over_2 = $t_plus_1_over_2:expr,
         inv = $inv:expr
     ) => {
+        #[derive(Clone)]
         struct $params_name {
             modulus: [u64; $limbs],
             r1: $name,

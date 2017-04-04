@@ -12,12 +12,12 @@ fn test_vectors<E: Engine, G: Group<E>>(e: &E, expected: &[u8]) {
         {
             let acc = acc.to_affine(e);
             let exp: <G::Affine as GroupAffine<E, G>>::Uncompressed =
-                bincode::deserialize_from(&mut expected_reader, bincode::SizeLimit::Infinite).unwrap();
+                bincode::deserialize_from(&mut expected_reader, bincode::Infinite).unwrap();
 
             assert!(acc == exp.to_affine(e).unwrap());
 
             let acc = acc.to_uncompressed(e);
-            bincode::serialize_into(&mut bytes, &acc, bincode::SizeLimit::Infinite).unwrap();
+            bincode::serialize_into(&mut bytes, &acc, bincode::Infinite).unwrap();
         }
         acc.double(e);
         acc.add_assign(e, &G::one(e));

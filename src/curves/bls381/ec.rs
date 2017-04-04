@@ -26,11 +26,13 @@ macro_rules! curve_impl {
             z: $basefield
         }
 
+        #[derive(Clone)]
         struct $params_name {
             zero: $name,
             one: $name,
             coeff_b: $basefield,
-            windows: Vec<usize>
+            windows: Vec<usize>,
+            batch_windows: (usize, Vec<usize>)
         }
 
         impl Convert<$name_affine, $engine> for $name {
@@ -128,6 +130,23 @@ macro_rules! curve_impl {
                 }
 
                 None
+            }
+
+            fn optimal_window_batch(&self, engine: &$engine, scalars: usize) -> WindowTable<$engine, $name, Vec<$name>> {
+                let mut window = engine.$params_field.batch_windows.0;
+
+                for i in &engine.$params_field.batch_windows.1 {
+                    if scalars >= *i {
+                        window += 1;
+                    } else {
+                        break;
+                    }
+                }
+
+                let mut table = WindowTable::new();
+                table.set_base(engine, self, window);
+
+                table
             }
 
             fn zero(engine: &$engine) -> Self {
