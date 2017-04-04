@@ -7,7 +7,7 @@ extern crate byteorder;
 extern crate serde;
 
 pub mod curves;
-pub mod groth;
+pub mod groth16;
 
 use std::collections::HashMap;
 use std::ops;
