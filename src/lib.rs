@@ -118,14 +118,14 @@ impl<'a, E: Engine> LinearCombination<'a, E> {
 }
 
 pub trait Circuit<E: Engine> {
-    type WitnessMap: Witness<E>;
+    type InputMap: Input<E>;
 
     /// Synthesize the circuit into a rank-1 quadratic constraint system
     #[must_use]
-    fn synthesize<CS: ConstraintSystem<E>>(self, engine: &E, cs: &mut CS) -> Self::WitnessMap;
+    fn synthesize<CS: ConstraintSystem<E>>(self, engine: &E, cs: &mut CS) -> Self::InputMap;
 }
 
-pub trait Witness<E: Engine> {
+pub trait Input<E: Engine> {
     /// Synthesize the circuit, except with additional access to public input
     /// variables
     fn synthesize<CS: PublicConstraintSystem<E>>(self, engine: &E, cs: &mut CS);

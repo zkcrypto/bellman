@@ -6,12 +6,12 @@ struct RootCircuit<E: Engine> {
 }
 
 impl<E: Engine> Circuit<E> for RootCircuit<E> {
-    type WitnessMap = RootWitness<E>;
+    type InputMap = RootInput<E>;
 
     fn synthesize<CS: ConstraintSystem<E>>(self,
                                            e: &E,
                                            cs: &mut CS)
-                                           -> Self::WitnessMap
+                                           -> Self::InputMap
     {
         let root_var = cs.alloc(self.root);
 
@@ -31,19 +31,19 @@ impl<E: Engine> Circuit<E> for RootCircuit<E> {
             cur = new;
         }
 
-        RootWitness {
+        RootInput {
             num: cur_val,
             num_var: cur
         }
     }
 }
 
-struct RootWitness<E: Engine> {
+struct RootInput<E: Engine> {
     num: E::Fr,
     num_var: Variable
 }
 
-impl<E: Engine> Witness<E> for RootWitness<E> {
+impl<E: Engine> Input<E> for RootInput<E> {
     fn synthesize<CS: PublicConstraintSystem<E>>(
         self,
         e: &E,
@@ -96,7 +96,7 @@ fn test_snark_system<E: Engine, R: Rng>(
 
     // verify proof
     assert!(verify(e, |cs| {
-        RootWitness {
+        RootInput {
             num: E::Fr::from_str(e, "1267650600228229401496703205376").unwrap(),
             num_var: cs.alloc(E::Fr::one(e))
         }
@@ -104,7 +104,7 @@ fn test_snark_system<E: Engine, R: Rng>(
 
     // verify invalid proof
     assert!(!verify(e, |cs| {
-        RootWitness {
+        RootInput {
             num: E::Fr::from_str(e, "1267650600228229401496703205375").unwrap(),
             num_var: cs.alloc(E::Fr::one(e))
         }
@@ -181,7 +181,7 @@ fn test_snark_system<E: Engine, R: Rng>(
 
     // verify fake proof
     assert!(verify(e, |cs| {
-        RootWitness {
+        RootInput {
             num: E::Fr::from_str(e, "100").unwrap(),
             num_var: cs.alloc(E::Fr::one(e))
         }
@@ -189,7 +189,7 @@ fn test_snark_system<E: Engine, R: Rng>(
 
     // verify fake proof with wrong input
     assert!(!verify(e, |cs| {
-        RootWitness {
+        RootInput {
             num: E::Fr::from_str(e, "101").unwrap(),
             num_var: cs.alloc(E::Fr::one(e))
         }

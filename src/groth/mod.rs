@@ -307,7 +307,7 @@ pub fn prepare_verifying_key<E: Engine>(
     }
 }
 
-pub fn verify<E: Engine, C: Witness<E>, F: FnOnce(&mut ConstraintSystem<E>) -> C>(
+pub fn verify<E: Engine, C: Input<E>, F: FnOnce(&mut ConstraintSystem<E>) -> C>(
     e: &E,
     circuit: F,
     proof: &Proof<E>,
