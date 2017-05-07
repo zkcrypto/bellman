@@ -17,8 +17,8 @@ use super::{
     Cow
 };
 
-use serde::ser::{Serialize, Serializer, SerializeSeq};
-use serde::de::{Deserialize, Deserializer, Visitor, SeqVisitor, Error};
+use serde::ser::{Serialize, Serializer, SerializeTuple};
+use serde::de::{Deserialize, Deserializer, Visitor, SeqAccess, Error};
 
 #[macro_use]
 mod fp;
@@ -105,7 +105,7 @@ impl Serialize for G1PointData {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
         where S: Serializer
     {
-        let mut seq = serializer.serialize_seq_fixed_size(96)?;
+        let mut seq = serializer.serialize_tuple(96)?;
         for i in self.0.iter() {
             seq.serialize_element(i)?;
         }
@@ -113,28 +113,28 @@ impl Serialize for G1PointData {
     }
 }
 
-impl Deserialize for G1PointData {
+impl<'a> Deserialize<'a> for G1PointData {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where D: Deserializer
+        where D: Deserializer<'a>
     {
         struct G1PointVisitor;
 
-        impl Visitor for G1PointVisitor {
+        impl<'a> Visitor<'a> for G1PointVisitor {
             type Value = G1PointData;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
                 write!(formatter, "expected 96-byte G1 point X, Y coordinates")
             }
 
-            fn visit_seq<V>(self, mut visitor: V) -> Result<Self::Value, V::Error>
-                where V: SeqVisitor
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+                where A: SeqAccess<'a>
             {
                 let mut tmp = [0; 96];
                 for i in &mut tmp[..] {
-                    if let Some(v) = visitor.visit()? {
+                    if let Some(v) = seq.next_element()? {
                         *i = v;
                     } else {
-                        return Err(V::Error::custom("not enough bytes"))
+                        return Err(A::Error::custom("not enough bytes"))
                     }
                 }
 
@@ -142,7 +142,7 @@ impl Deserialize for G1PointData {
             }
         }
 
-        deserializer.deserialize_seq_fixed_size(96, G1PointVisitor)
+        deserializer.deserialize_tuple(96, G1PointVisitor)
     }
 }
 
@@ -150,7 +150,7 @@ impl Serialize for G2PointData {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
         where S: Serializer
     {
-        let mut seq = serializer.serialize_seq_fixed_size(192)?;
+        let mut seq = serializer.serialize_tuple(192)?;
         for i in self.0.iter() {
             seq.serialize_element(i)?;
         }
@@ -158,28 +158,28 @@ impl Serialize for G2PointData {
     }
 }
 
-impl Deserialize for G2PointData {
+impl<'a> Deserialize<'a> for G2PointData {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where D: Deserializer
+        where D: Deserializer<'a>
     {
         struct G2PointVisitor;
 
-        impl Visitor for G2PointVisitor {
+        impl<'a> Visitor<'a> for G2PointVisitor {
             type Value = G2PointData;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
                 write!(formatter, "expected 192-byte G2 point X, Y coordinates")
             }
 
-            fn visit_seq<V>(self, mut visitor: V) -> Result<Self::Value, V::Error>
-                where V: SeqVisitor
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+                where A: SeqAccess<'a>
             {
                 let mut tmp = [0; 192];
                 for i in &mut tmp[..] {
-                    if let Some(v) = visitor.visit()? {
+                    if let Some(v) = seq.next_element()? {
                         *i = v;
                     } else {
-                        return Err(V::Error::custom("not enough bytes"))
+                        return Err(A::Error::custom("not enough bytes"))
                     }
                 }
 
@@ -187,7 +187,7 @@ impl Deserialize for G2PointData {
             }
         }
 
-        deserializer.deserialize_seq_fixed_size(192, G2PointVisitor)
+        deserializer.deserialize_tuple(192, G2PointVisitor)
     }
 }
 
@@ -204,15 +204,15 @@ impl Serialize for G1Uncompressed {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
         where S: Serializer
     {
+        let mut tup = serializer.serialize_tuple(2)?;
+
         match *self {
             G1Uncompressed::Infinity => {
-                let mut tup = serializer.serialize_seq_fixed_size(2)?;
                 tup.serialize_element(&0u8)?;
                 tup.serialize_element(&())?;
                 tup.end()
             },
             G1Uncompressed::Point(ref v) => {
-                let mut tup = serializer.serialize_seq_fixed_size(2)?;
                 tup.serialize_element(&4u8)?;
                 tup.serialize_element(v)?;
                 tup.end()
@@ -221,49 +221,49 @@ impl Serialize for G1Uncompressed {
     }
 }
 
-impl Deserialize for G1Uncompressed {
+impl<'a> Deserialize<'a> for G1Uncompressed {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where D: Deserializer
+        where D: Deserializer<'a>
     {
         use std::fmt;
 
         struct G1Visitor;
 
-        impl Visitor for G1Visitor {
+        impl<'a> Visitor<'a> for G1Visitor {
             type Value = G1Uncompressed;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
                 write!(formatter, "expected uncompressed G1 element")
             }
 
-            fn visit_seq<V>(self, mut visitor: V) -> Result<Self::Value, V::Error> 
-                where V: SeqVisitor
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+                where A: SeqAccess<'a>
             {
-                if let Some(t) = visitor.visit::<u8>()? {
+                if let Some(t) = seq.next_element::<u8>()? {
                     if t == 0 {
-                        if let Some(()) = visitor.visit::<()>()? {
+                        if let Some(()) = seq.next_element::<()>()? {
                             Ok(G1Uncompressed::Infinity)
                         } else {
-                            Err(V::Error::custom("expected null coordinate"))
+                            Err(A::Error::custom("expected null coordinate"))
                         }
                     } else if t == 4 {
-                        if let Some(p) = visitor.visit::<G1PointData>()? {
+                        if let Some(p) = seq.next_element::<G1PointData>()? {
                             Ok(G1Uncompressed::Point(p))
                         } else {
-                            Err(V::Error::custom("expected X, Y coordinate"))
+                            Err(A::Error::custom("expected X, Y coordinate"))
                         }
                     } else {
-                        Err(V::Error::custom("expected IEEE prefix for uncompressed G1 element"))
+                        Err(A::Error::custom("expected IEEE prefix for uncompressed G1 element"))
                     }
                 } else {
-                    Err(V::Error::custom("expected IEEE prefix for uncompressed G1 element"))
+                    Err(A::Error::custom("expected IEEE prefix for uncompressed G1 element"))
                 }
             }
         }
 
         let v = G1Visitor;
 
-        deserializer.deserialize_seq_fixed_size(2, v)
+        deserializer.deserialize_tuple(2, v)
     }
 }
 
@@ -271,15 +271,15 @@ impl Serialize for G2Uncompressed {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
         where S: Serializer
     {
+        let mut tup = serializer.serialize_tuple(2)?;
+
         match *self {
             G2Uncompressed::Infinity => {
-                let mut tup = serializer.serialize_seq_fixed_size(2)?;
                 tup.serialize_element(&0u8)?;
                 tup.serialize_element(&())?;
                 tup.end()
             },
             G2Uncompressed::Point(ref v) => {
-                let mut tup = serializer.serialize_seq_fixed_size(2)?;
                 tup.serialize_element(&4u8)?;
                 tup.serialize_element(v)?;
                 tup.end()
@@ -288,49 +288,49 @@ impl Serialize for G2Uncompressed {
     }
 }
 
-impl Deserialize for G2Uncompressed {
+impl<'a> Deserialize<'a> for G2Uncompressed {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where D: Deserializer
+        where D: Deserializer<'a>
     {
         use std::fmt;
 
         struct G2Visitor;
 
-        impl Visitor for G2Visitor {
+        impl<'a> Visitor<'a> for G2Visitor {
             type Value = G2Uncompressed;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
                 write!(formatter, "expected uncompressed G2 element")
             }
 
-            fn visit_seq<V>(self, mut visitor: V) -> Result<Self::Value, V::Error> 
-                where V: SeqVisitor
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+                where A: SeqAccess<'a>
             {
-                if let Some(t) = visitor.visit::<u8>()? {
+                if let Some(t) = seq.next_element::<u8>()? {
                     if t == 0 {
-                        if let Some(()) = visitor.visit::<()>()? {
+                        if let Some(()) = seq.next_element::<()>()? {
                             Ok(G2Uncompressed::Infinity)
                         } else {
-                            Err(V::Error::custom("expected null coordinate"))
+                            Err(A::Error::custom("expected null coordinate"))
                         }
                     } else if t == 4 {
-                        if let Some(p) = visitor.visit::<G2PointData>()? {
+                        if let Some(p) = seq.next_element::<G2PointData>()? {
                             Ok(G2Uncompressed::Point(p))
                         } else {
-                            Err(V::Error::custom("expected X, Y coordinate"))
+                            Err(A::Error::custom("expected X, Y coordinate"))
                         }
                     } else {
-                        Err(V::Error::custom("expected IEEE prefix for uncompressed G2 element"))
+                        Err(A::Error::custom("expected IEEE prefix for uncompressed G2 element"))
                     }
                 } else {
-                    Err(V::Error::custom("expected IEEE prefix for uncompressed G2 element"))
+                    Err(A::Error::custom("expected IEEE prefix for uncompressed G2 element"))
                 }
             }
         }
 
         let v = G2Visitor;
 
-        deserializer.deserialize_seq_fixed_size(2, v)
+        deserializer.deserialize_tuple(2, v)
     }
 }
 

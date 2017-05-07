@@ -106,7 +106,7 @@ pub trait GroupAffine<E: Engine, G: Group<E>>: Copy +
     fn to_uncompressed(&self, &E) -> Self::Uncompressed;
 }
 
-pub trait GroupRepresentation<E: Engine, G: Group<E>>: Serialize + Deserialize
+pub trait GroupRepresentation<E: Engine, G: Group<E>>: Serialize + for<'a> Deserialize<'a>
 {
     /// If the point representation is valid (lies on the curve, correct
     /// subgroup) this function will return it.
