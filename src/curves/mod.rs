@@ -1,10 +1,11 @@
 use rand;
 use std::fmt;
 
-use std::ops::Deref;
 use std::borrow::Borrow;
 use std::marker::PhantomData;
 use serde::{Serialize, Deserialize};
+
+use super::{Cow, Convert};
 
 pub mod bls381;
 
@@ -199,11 +200,6 @@ pub trait SnarkField<E: Engine>: PrimeField<E>
     fn root_of_unity(&E) -> Self;
 }
 
-pub struct BitIterator<T> {
-    t: T,
-    n: usize
-}
-
 pub struct WindowTable<E, G, Table: Borrow<[G]>> {
     table: Table,
     wnaf: Vec<i64>,
@@ -248,6 +244,11 @@ impl<E: Engine, G: Group<E>> WindowTable<E, G, Vec<G>> {
     }
 }
 
+pub struct BitIterator<T> {
+    t: T,
+    n: usize
+}
+
 impl<T: AsRef<[u64]>> Iterator for BitIterator<T> {
     type Item = bool;
 
@@ -273,36 +274,6 @@ impl<'a> From<&'a [u64]> for BitIterator<&'a [u64]>
             t: v,
             n: v.len() * 64
         }
-    }
-}
-
-pub enum Cow<'a, T: 'a> {
-    Owned(T),
-    Borrowed(&'a T)
-}
-
-impl<'a, T: 'a> Deref for Cow<'a, T> {
-    type Target = T;
-
-    fn deref(&self) -> &T {
-        match *self {
-            Cow::Owned(ref v) => v,
-            Cow::Borrowed(v) => v
-        }
-    }
-}
-
-pub trait Convert<T: ?Sized, E> {
-    type Target: Borrow<T>;
-
-    fn convert(&self, &E) -> Cow<Self::Target>;
-}
-
-impl<T, E> Convert<T, E> for T {
-    type Target = T;
-
-    fn convert(&self, _: &E) -> Cow<T> {
-        Cow::Borrowed(self)
     }
 }
 

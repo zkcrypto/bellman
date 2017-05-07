@@ -11,6 +11,8 @@ pub mod groth16;
 
 use std::collections::HashMap;
 use std::ops;
+use std::ops::Deref;
+use std::borrow::Borrow;
 
 use curves::{Engine, Field};
 
@@ -148,4 +150,34 @@ pub trait ConstraintSystem<E: Engine> {
         b: LinearCombination<E>,
         c: LinearCombination<E>
     );
+}
+
+pub enum Cow<'a, T: 'a> {
+    Owned(T),
+    Borrowed(&'a T)
+}
+
+impl<'a, T: 'a> Deref for Cow<'a, T> {
+    type Target = T;
+
+    fn deref(&self) -> &T {
+        match *self {
+            Cow::Owned(ref v) => v,
+            Cow::Borrowed(v) => v
+        }
+    }
+}
+
+pub trait Convert<T: ?Sized, E> {
+    type Target: Borrow<T>;
+
+    fn convert(&self, &E) -> Cow<Self::Target>;
+}
+
+impl<T, E> Convert<T, E> for T {
+    type Target = T;
+
+    fn convert(&self, _: &E) -> Cow<T> {
+        Cow::Borrowed(self)
+    }
 }
