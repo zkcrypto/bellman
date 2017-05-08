@@ -46,7 +46,7 @@ pub trait Engine: Sized + Clone
     fn batch_baseexp<G: Curve<Self>, S: AsRef<[Self::Fr]>>(&self, table: &WindowTable<Self, G, Vec<G>>, scalars: S) -> Vec<G::Affine>;
 }
 
-pub trait Group<E: Engine>
+pub trait Group<E: Engine>: Copy
 {
     fn group_mul_assign(&mut self, &E, scalar: &E::Fr);
     fn group_add_assign(&mut self, &E, other: &Self);

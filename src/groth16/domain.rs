@@ -1,4 +1,4 @@
-use curves::{Engine, Field, SnarkField, PrimeField};
+use curves::{Engine, Field, SnarkField, PrimeField, Group};
 
 pub struct EvaluationDomain<E: Engine> {
     pub m: u64,
@@ -46,12 +46,12 @@ impl<E: Engine> EvaluationDomain<E> {
         tmp
     }
 
-    pub fn ifft(&self, e: &E, v: &mut [E::Fr])
+    pub fn ifft<T: Group<E>>(&self, e: &E, v: &mut [T])
     {
         assert!(v.len() == self.m as usize);
         self._fft(e, v, &self.omegainv);
         for v in v {
-            v.mul_assign(e, &self.minv);
+            v.group_mul_assign(e, &self.minv);
         }
     }
 
@@ -84,12 +84,12 @@ impl<E: Engine> EvaluationDomain<E> {
         }
     }
 
-    pub fn fft(&self, e: &E, a: &mut [E::Fr])
+    pub fn fft<T: Group<E>>(&self, e: &E, a: &mut [T])
     {
         self._fft(e, a, &self.omega);
     }
 
-    fn _fft(&self, e: &E, a: &mut [E::Fr], omega: &E::Fr)
+    fn _fft<T: Group<E>>(&self, e: &E, a: &mut [T], omega: &E::Fr)
     {
         fn bitreverse(mut n: usize, l: u64) -> usize {
             let mut r = 0;
@@ -118,12 +118,12 @@ impl<E: Engine> EvaluationDomain<E> {
             while k < self.m {
                 let mut w = E::Fr::one(e);
                 for j in 0..m {
-                    let mut t = w;
-                    t.mul_assign(e, &a[(k+j+m) as usize]);
+                    let mut t = a[(k+j+m) as usize];
+                    t.group_mul_assign(e, &w);
                     let mut tmp = a[(k+j) as usize];
-                    tmp.sub_assign(e, &t);
+                    tmp.group_sub_assign(e, &t);
                     a[(k+j+m) as usize] = tmp;
-                    a[(k+j) as usize].add_assign(e, &t);
+                    a[(k+j) as usize].group_add_assign(e, &t);
                     w.mul_assign(e, &w_m);
                 }
 
