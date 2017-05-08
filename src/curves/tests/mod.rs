@@ -1,11 +1,11 @@
-use super::{Engine, Group, GroupAffine, Field, PrimeField};
+use super::{Engine, Curve, CurveAffine, Field, PrimeField};
 use rand;
 
 mod fields;
-mod groups;
+mod curves;
 
-fn test_multiexp<E: Engine, G: Group<E>>(e: &E) {
-    fn naiveexp<E: Engine, G: Group<E>>(e: &E, g: &[G::Affine], s: &[E::Fr]) -> G
+fn test_multiexp<E: Engine, G: Curve<E>>(e: &E) {
+    fn naiveexp<E: Engine, G: Curve<E>>(e: &E, g: &[G::Affine], s: &[E::Fr]) -> G
     {
         assert!(g.len() == s.len());
 
@@ -112,8 +112,8 @@ pub fn test_engine<E: Engine>() {
     fields::test_field::<E, E::Fqe>(&engine);
     fields::test_field::<E, E::Fqk>(&engine);
 
-    groups::test_group::<E, E::G1>(&engine);
-    groups::test_group::<E, E::G2>(&engine);
+    curves::test_curve::<E, E::G1>(&engine);
+    curves::test_curve::<E, E::G2>(&engine);
 
     test_bilinearity(&engine);
     test_multimiller(&engine);

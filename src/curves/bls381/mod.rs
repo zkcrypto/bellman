@@ -5,9 +5,9 @@ use std::borrow::Borrow;
 use super::{
     WindowTable,
     Engine,
-    Group,
-    GroupAffine,
-    GroupRepresentation,
+    Curve,
+    CurveAffine,
+    CurveRepresentation,
     PrimeField,
     Field,
     SnarkField,
@@ -334,7 +334,7 @@ impl<'a> Deserialize<'a> for G2Uncompressed {
     }
 }
 
-impl GroupRepresentation<Bls381, G1> for G1Uncompressed {
+impl CurveRepresentation<Bls381, G1> for G1Uncompressed {
     fn to_affine_unchecked(&self, e: &Bls381) -> Result<G1Affine, ()> {
         match self {
             &G1Uncompressed::Infinity => {
@@ -365,7 +365,7 @@ impl GroupRepresentation<Bls381, G1> for G1Uncompressed {
     }
 }
 
-impl GroupRepresentation<Bls381, G2> for G2Uncompressed {
+impl CurveRepresentation<Bls381, G2> for G2Uncompressed {
     fn to_affine_unchecked(&self, e: &Bls381) -> Result<G2Affine, ()> {
         match self {
             &G2Uncompressed::Infinity => {
@@ -948,8 +948,8 @@ impl Engine for Bls381 {
 
     fn miller_loop<'a, I>(&self, i: I) -> Self::Fqk
         where I: IntoIterator<Item=&'a (
-                                    &'a <Self::G1 as Group<Self>>::Prepared,
-                                    &'a <Self::G2 as Group<Self>>::Prepared
+                                    &'a <Self::G1 as Curve<Self>>::Prepared,
+                                    &'a <Self::G2 as Curve<Self>>::Prepared
                                )>
     {
         let mut pairs = vec![];
@@ -1009,7 +1009,7 @@ impl Engine for Bls381 {
         f
     }
 
-    fn batch_baseexp<G: Group<Self>, S: AsRef<[Self::Fr]>>(&self, table: &WindowTable<Self, G, Vec<G>>, s: S) -> Vec<G::Affine>
+    fn batch_baseexp<G: Curve<Self>, S: AsRef<[Self::Fr]>>(&self, table: &WindowTable<Self, G, Vec<G>>, s: S) -> Vec<G::Affine>
     {
         use crossbeam;
         use num_cpus;
@@ -1036,7 +1036,7 @@ impl Engine for Bls381 {
         ret
     }
 
-    fn multiexp<G: Group<Self>>(&self, g: &[G::Affine], s: &[Fr]) -> Result<G, ()> {
+    fn multiexp<G: Curve<Self>>(&self, g: &[G::Affine], s: &[Fr]) -> Result<G, ()> {
         if g.len() != s.len() {
             return Err(());
         }
@@ -1063,7 +1063,7 @@ impl Engine for Bls381 {
             Ok(acc)
         });
 
-        fn multiexp_inner<G: Group<Bls381>>(engine: &Bls381, g: &[G::Affine], s: &[Fr]) -> G
+        fn multiexp_inner<G: Curve<Bls381>>(engine: &Bls381, g: &[G::Affine], s: &[Fr]) -> G
         {
             // This performs a multi-exponentiation calculation, i.e., multiplies
             // each group element by the corresponding scalar and adds all of the
@@ -1196,7 +1196,7 @@ impl Engine for Bls381 {
     }
 }
 
-impl<G: Group<Bls381>, B: Borrow<[G]>> WindowTable<Bls381, G, B> {
+impl<G: Curve<Bls381>, B: Borrow<[G]>> WindowTable<Bls381, G, B> {
     fn exp(&mut self, e: &Bls381, into: &mut G, mut c: <Fr as PrimeField<Bls381>>::Repr) {
         assert!(self.window > 1);
 
@@ -1252,7 +1252,7 @@ impl<G: Group<Bls381>, B: Borrow<[G]>> WindowTable<Bls381, G, B> {
 }
 
 // Performs optimal exponentiation
-fn opt_exp<G: Group<Bls381>>(e: &Bls381, base: &mut G, scalar: <Fr as PrimeField<Bls381>>::Repr, table: &mut WindowTable<Bls381, G, Vec<G>>)
+fn opt_exp<G: Curve<Bls381>>(e: &Bls381, base: &mut G, scalar: <Fr as PrimeField<Bls381>>::Repr, table: &mut WindowTable<Bls381, G, Vec<G>>)
 {
     let bits = fr_arith::num_bits(&scalar);
     match G::optimal_window(e, bits) {

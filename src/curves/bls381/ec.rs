@@ -43,7 +43,7 @@ macro_rules! curve_impl {
             }
         }
 
-        impl GroupAffine<$engine, $name> for $name_affine {
+        impl CurveAffine<$engine, $name> for $name_affine {
             type Uncompressed = $name_uncompressed;
 
             fn is_valid(&self, e: &$engine) -> bool {
@@ -118,7 +118,7 @@ macro_rules! curve_impl {
             }
         }
 
-        impl Group<$engine> for $name {
+        impl Curve<$engine> for $name {
             type Affine = $name_affine;
             type Prepared = $name_prepared;
 

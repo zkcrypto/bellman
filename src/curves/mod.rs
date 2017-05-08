@@ -15,8 +15,8 @@ pub trait Engine: Sized + Clone
     type Fr: SnarkField<Self>;
     type Fqe: SqrtField<Self>;
     type Fqk: Field<Self>;
-    type G1: Group<Self> + Convert<<Self::G1 as Group<Self>>::Affine, Self>;
-    type G2: Group<Self> + Convert<<Self::G2 as Group<Self>>::Affine, Self>;
+    type G1: Curve<Self> + Convert<<Self::G1 as Curve<Self>>::Affine, Self>;
+    type G2: Curve<Self> + Convert<<Self::G2 as Curve<Self>>::Affine, Self>;
 
     fn new() -> Self;
 
@@ -24,8 +24,8 @@ pub trait Engine: Sized + Clone
     fn with<R, F: for<'a> FnOnce(&'a Self) -> R>(F) -> R;
 
     fn pairing<G1, G2>(&self, p: &G1, q: &G2) -> Self::Fqk
-        where G1: Convert<<Self::G1 as Group<Self>>::Affine, Self>,
-              G2: Convert<<Self::G2 as Group<Self>>::Affine, Self>
+        where G1: Convert<<Self::G1 as Curve<Self>>::Affine, Self>,
+              G2: Convert<<Self::G2 as Curve<Self>>::Affine, Self>
     {
         self.final_exponentiation(&self.miller_loop(
             [(
@@ -36,17 +36,17 @@ pub trait Engine: Sized + Clone
     }
     fn miller_loop<'a, I>(&self, I) -> Self::Fqk
         where I: IntoIterator<Item=&'a (
-                                    &'a <Self::G1 as Group<Self>>::Prepared,
-                                    &'a <Self::G2 as Group<Self>>::Prepared
+                                    &'a <Self::G1 as Curve<Self>>::Prepared,
+                                    &'a <Self::G2 as Curve<Self>>::Prepared
                                )>;
     fn final_exponentiation(&self, &Self::Fqk) -> Self::Fqk;
 
     /// Perform multi-exponentiation. g and s must have the same length.
-    fn multiexp<G: Group<Self>>(&self, g: &[G::Affine], s: &[Self::Fr]) -> Result<G, ()>;
-    fn batch_baseexp<G: Group<Self>, S: AsRef<[Self::Fr]>>(&self, table: &WindowTable<Self, G, Vec<G>>, scalars: S) -> Vec<G::Affine>;
+    fn multiexp<G: Curve<Self>>(&self, g: &[G::Affine], s: &[Self::Fr]) -> Result<G, ()>;
+    fn batch_baseexp<G: Curve<Self>, S: AsRef<[Self::Fr]>>(&self, table: &WindowTable<Self, G, Vec<G>>, scalars: S) -> Vec<G::Affine>;
 }
 
-pub trait Group<E: Engine>: Sized +
+pub trait Curve<E: Engine>: Sized +
                             Copy +
                             Clone +
                             Send +
@@ -54,7 +54,7 @@ pub trait Group<E: Engine>: Sized +
                             fmt::Debug +
                             'static
 {
-    type Affine: GroupAffine<E, Self>;
+    type Affine: CurveAffine<E, Self>;
     type Prepared: Clone + Send + Sync + 'static;
 
     fn zero(&E) -> Self;
@@ -78,7 +78,7 @@ pub trait Group<E: Engine>: Sized +
     fn optimal_window_batch(&self, &E, scalars: usize) -> WindowTable<E, Self, Vec<Self>>;
 }
 
-pub trait GroupAffine<E: Engine, G: Group<E>>: Copy +
+pub trait CurveAffine<E: Engine, G: Curve<E>>: Copy +
                                                Clone +
                                                Sized +
                                                Send +
@@ -88,7 +88,7 @@ pub trait GroupAffine<E: Engine, G: Group<E>>: Copy +
                                                Eq +
                                                'static
 {
-    type Uncompressed: GroupRepresentation<E, G>;
+    type Uncompressed: CurveRepresentation<E, G>;
 
     fn to_jacobian(&self, &E) -> G;
     fn prepare(self, &E) -> G::Prepared;
@@ -106,7 +106,7 @@ pub trait GroupAffine<E: Engine, G: Group<E>>: Copy +
     fn to_uncompressed(&self, &E) -> Self::Uncompressed;
 }
 
-pub trait GroupRepresentation<E: Engine, G: Group<E>>: Serialize + for<'a> Deserialize<'a>
+pub trait CurveRepresentation<E: Engine, G: Curve<E>>: Serialize + for<'a> Deserialize<'a>
 {
     /// If the point representation is valid (lies on the curve, correct
     /// subgroup) this function will return it.
@@ -207,7 +207,7 @@ pub struct WindowTable<E, G, Table: Borrow<[G]>> {
     _marker: PhantomData<(E, G)>
 }
 
-impl<E: Engine, G: Group<E>> WindowTable<E, G, Vec<G>> {
+impl<E: Engine, G: Curve<E>> WindowTable<E, G, Vec<G>> {
     fn new() -> Self {
         WindowTable {
             table: vec![],

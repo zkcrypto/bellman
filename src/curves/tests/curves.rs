@@ -1,7 +1,7 @@
 use rand;
-use super::super::{Engine, Field, PrimeField, Group, GroupAffine};
+use super::super::{Engine, Field, PrimeField, Curve, CurveAffine};
 
-fn random_test_mixed_addition<E: Engine, G: Group<E>>(e: &E)
+fn random_test_mixed_addition<E: Engine, G: Curve<E>>(e: &E)
 {
     let rng = &mut rand::thread_rng();
 
@@ -78,7 +78,7 @@ fn random_test_mixed_addition<E: Engine, G: Group<E>>(e: &E)
     }
 }
 
-fn random_test_addition<E: Engine, G: Group<E>>(e: &E) {
+fn random_test_addition<E: Engine, G: Curve<E>>(e: &E) {
     let rng = &mut rand::thread_rng();
 
     for _ in 0..50 {
@@ -111,7 +111,7 @@ fn random_test_addition<E: Engine, G: Group<E>>(e: &E) {
     }
 }
 
-fn random_test_doubling<E: Engine, G: Group<E>>(e: &E) {
+fn random_test_doubling<E: Engine, G: Curve<E>>(e: &E) {
     let rng = &mut rand::thread_rng();
 
     for _ in 0..50 {
@@ -141,7 +141,7 @@ fn random_test_doubling<E: Engine, G: Group<E>>(e: &E) {
     }
 }
 
-fn random_test_dh<E: Engine, G: Group<E>>(e: &E) {
+fn random_test_dh<E: Engine, G: Curve<E>>(e: &E) {
     let rng = &mut rand::thread_rng();
 
     for _ in 0..50 {
@@ -162,7 +162,7 @@ fn random_test_dh<E: Engine, G: Group<E>>(e: &E) {
     }
 }
 
-fn random_mixed_addition<E: Engine, G: Group<E>>(e: &E) {
+fn random_mixed_addition<E: Engine, G: Curve<E>>(e: &E) {
     let rng = &mut rand::thread_rng();
 
     for _ in 0..50 {
@@ -179,7 +179,7 @@ fn random_mixed_addition<E: Engine, G: Group<E>>(e: &E) {
     }
 }
 
-fn random_test_equality<E: Engine, G: Group<E>>(e: &E) {
+fn random_test_equality<E: Engine, G: Curve<E>>(e: &E) {
     let rng = &mut rand::thread_rng();
 
     for _ in 0..50 {
@@ -222,7 +222,7 @@ fn random_test_equality<E: Engine, G: Group<E>>(e: &E) {
     }
 }
 
-pub fn test_group<E: Engine, G: Group<E>>(e: &E) {
+pub fn test_curve<E: Engine, G: Curve<E>>(e: &E) {
     {
         let rng = &mut rand::thread_rng();
         let mut g = G::random(e, rng);

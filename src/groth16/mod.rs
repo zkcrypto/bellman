@@ -4,34 +4,34 @@ use super::*;
 mod domain;
 
 pub struct ProvingKey<E: Engine> {
-    a_inputs: Vec<<E::G1 as Group<E>>::Affine>,
-    b1_inputs: Vec<<E::G1 as Group<E>>::Affine>,
-    b2_inputs: Vec<<E::G2 as Group<E>>::Affine>,
-    a_aux: Vec<<E::G1 as Group<E>>::Affine>,
-    b1_aux: Vec<<E::G1 as Group<E>>::Affine>,
-    b2_aux: Vec<<E::G2 as Group<E>>::Affine>,
-    h: Vec<<E::G1 as Group<E>>::Affine>,
-    l: Vec<<E::G1 as Group<E>>::Affine>,
-    alpha_g1: <E::G1 as Group<E>>::Affine,
-    beta_g1: <E::G1 as Group<E>>::Affine,
-    beta_g2: <E::G2 as Group<E>>::Affine,
-    delta_g1: <E::G1 as Group<E>>::Affine,
-    delta_g2: <E::G2 as Group<E>>::Affine
+    a_inputs: Vec<<E::G1 as Curve<E>>::Affine>,
+    b1_inputs: Vec<<E::G1 as Curve<E>>::Affine>,
+    b2_inputs: Vec<<E::G2 as Curve<E>>::Affine>,
+    a_aux: Vec<<E::G1 as Curve<E>>::Affine>,
+    b1_aux: Vec<<E::G1 as Curve<E>>::Affine>,
+    b2_aux: Vec<<E::G2 as Curve<E>>::Affine>,
+    h: Vec<<E::G1 as Curve<E>>::Affine>,
+    l: Vec<<E::G1 as Curve<E>>::Affine>,
+    alpha_g1: <E::G1 as Curve<E>>::Affine,
+    beta_g1: <E::G1 as Curve<E>>::Affine,
+    beta_g2: <E::G2 as Curve<E>>::Affine,
+    delta_g1: <E::G1 as Curve<E>>::Affine,
+    delta_g2: <E::G2 as Curve<E>>::Affine
 }
 
 pub struct VerifyingKey<E: Engine> {
-    alpha_g1: <E::G1 as Group<E>>::Affine,
-    beta_g2: <E::G2 as Group<E>>::Affine,
-    gamma_g2: <E::G2 as Group<E>>::Affine,
-    delta_g2: <E::G2 as Group<E>>::Affine,
-    ic: Vec<<E::G1 as Group<E>>::Affine>
+    alpha_g1: <E::G1 as Curve<E>>::Affine,
+    beta_g2: <E::G2 as Curve<E>>::Affine,
+    gamma_g2: <E::G2 as Curve<E>>::Affine,
+    delta_g2: <E::G2 as Curve<E>>::Affine,
+    ic: Vec<<E::G1 as Curve<E>>::Affine>
 }
 
 pub struct PreparedVerifyingKey<E: Engine> {
     alpha_g1_beta_g2: E::Fqk,
-    neg_gamma_g2: <E::G2 as Group<E>>::Prepared,
-    neg_delta_g2: <E::G2 as Group<E>>::Prepared,
-    ic: Vec<<E::G1 as Group<E>>::Affine>
+    neg_gamma_g2: <E::G2 as Curve<E>>::Prepared,
+    neg_delta_g2: <E::G2 as Curve<E>>::Prepared,
+    ic: Vec<<E::G1 as Curve<E>>::Affine>
 }
 
 pub struct Proof<E: Engine> {
@@ -317,7 +317,7 @@ pub fn verify<E: Engine, C: Input<E>, F: FnOnce(&mut ConstraintSystem<E>) -> C>(
     struct VerifierInput<'a, E: Engine + 'a> {
         e: &'a E,
         acc: E::G1,
-        ic: &'a [<E::G1 as Group<E>>::Affine],
+        ic: &'a [<E::G1 as Curve<E>>::Affine],
         insufficient_inputs: bool,
         num_inputs: usize,
         num_aux: usize
