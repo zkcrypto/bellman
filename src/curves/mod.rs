@@ -46,13 +46,21 @@ pub trait Engine: Sized + Clone
     fn batch_baseexp<G: Curve<Self>, S: AsRef<[Self::Fr]>>(&self, table: &WindowTable<Self, G, Vec<G>>, scalars: S) -> Vec<G::Affine>;
 }
 
+pub trait Group<E: Engine>
+{
+    fn group_mul_assign(&mut self, &E, scalar: &E::Fr);
+    fn group_add_assign(&mut self, &E, other: &Self);
+    fn group_sub_assign(&mut self, &E, other: &Self);
+}
+
 pub trait Curve<E: Engine>: Sized +
                             Copy +
                             Clone +
                             Send +
                             Sync +
                             fmt::Debug +
-                            'static
+                            'static +
+                            Group<E>
 {
     type Affine: CurveAffine<E, Self>;
     type Prepared: Clone + Send + Sync + 'static;
@@ -193,7 +201,7 @@ pub trait PrimeField<E: Engine>: SqrtField<E> + Convert<[u64], E>
     fn capacity(&E) -> usize;
 }
 
-pub trait SnarkField<E: Engine>: PrimeField<E>
+pub trait SnarkField<E: Engine>: PrimeField<E> + Group<E>
 {
     fn s(&E) -> u64;
     fn multiplicative_generator(&E) -> Self;

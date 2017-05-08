@@ -5,6 +5,7 @@ use std::borrow::Borrow;
 use super::{
     WindowTable,
     Engine,
+    Group,
     Curve,
     CurveAffine,
     CurveRepresentation,
@@ -94,6 +95,18 @@ fp_impl!(
     // - r ^-1 mod 2^64
     inv = 0xfffffffeffffffff
 );
+
+impl Group<Bls381> for Fr {
+    fn group_mul_assign(&mut self, e: &Bls381, scalar: &Fr) {
+        self.mul_assign(e, scalar);
+    }
+    fn group_add_assign(&mut self, e: &Bls381, other: &Self) {
+        self.add_assign(e, other);
+    }
+    fn group_sub_assign(&mut self, e: &Bls381, other: &Self) {
+        self.sub_assign(e, other);
+    }
+}
 
 curve_impl!(Bls381, G1, G1Affine, G1Affine, G1Uncompressed, G1Params, g1params, Fq, Fr);
 curve_impl!(Bls381, G2, G2Affine, G2Prepared, G2Uncompressed, G2Params, g2params, Fq2, Fr);

@@ -43,6 +43,18 @@ macro_rules! curve_impl {
             }
         }
 
+        impl Group<$engine> for $name {
+            fn group_mul_assign(&mut self, e: &$engine, scalar: &$scalarfield) {
+                self.mul_assign(e, scalar);
+            }
+            fn group_add_assign(&mut self, e: &$engine, other: &Self) {
+                self.add_assign(e, other);
+            }
+            fn group_sub_assign(&mut self, e: &$engine, other: &Self) {
+                self.sub_assign(e, other);
+            }
+        }
+
         impl CurveAffine<$engine, $name> for $name_affine {
             type Uncompressed = $name_uncompressed;
 
