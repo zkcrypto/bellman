@@ -9,7 +9,7 @@ use super::{Cow, Convert};
 
 pub mod bls381;
 
-pub trait Engine: Sized + Clone
+pub trait Engine: Sized + Clone + Send + Sync
 {
     type Fq: PrimeField<Self>;
     type Fr: SnarkField<Self>;
@@ -46,8 +46,9 @@ pub trait Engine: Sized + Clone
     fn batch_baseexp<G: Curve<Self>, S: AsRef<[Self::Fr]>>(&self, table: &WindowTable<Self, G, Vec<G>>, scalars: S) -> Vec<G::Affine>;
 }
 
-pub trait Group<E: Engine>: Copy
+pub trait Group<E: Engine>: Copy + Send + Sync + Sized
 {
+    fn group_zero(&E) -> Self;
     fn group_mul_assign(&mut self, &E, scalar: &E::Fr);
     fn group_add_assign(&mut self, &E, other: &Self);
     fn group_sub_assign(&mut self, &E, other: &Self);

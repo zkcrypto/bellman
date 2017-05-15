@@ -97,6 +97,9 @@ fp_impl!(
 );
 
 impl Group<Bls381> for Fr {
+    fn group_zero(_: &Bls381) -> Fr {
+        Fr::zero()
+    }
     fn group_mul_assign(&mut self, e: &Bls381, scalar: &Fr) {
         self.mul_assign(e, scalar);
     }

@@ -44,6 +44,9 @@ macro_rules! curve_impl {
         }
 
         impl Group<$engine> for $name {
+            fn group_zero(e: &$engine) -> $name {
+                $name::zero(e)
+            }
             fn group_mul_assign(&mut self, e: &$engine, scalar: &$scalarfield) {
                 self.mul_assign(e, scalar);
             }
