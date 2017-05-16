@@ -1,8 +1,43 @@
 use super::{Engine, Curve, CurveAffine, Field, PrimeField};
-use rand;
+use rand::{self, Rng};
 
 mod fields;
 mod curves;
+
+fn test_batchexp<E: Engine, G: Curve<E>>(e: &E) {
+    let rng = &mut rand::thread_rng();
+
+    fn test_batchexp_case<E: Engine, G: Curve<E>, R: Rng>(e: &E, rng: &mut R, amount: usize, coeff: Option<&E::Fr>)
+    {
+        let mut g: Vec<G::Affine> = (0..amount).map(|_| G::random(e, rng).to_affine(e)).collect();
+        let mut s: Vec<E::Fr> = (0..amount).map(|_| E::Fr::random(e, rng)).collect();
+
+        let mut g_batch = g.clone();
+
+        e.batchexp::<G, _>(&mut g_batch, &s, coeff);
+
+        for (g, s) in g.iter_mut().zip(s.iter_mut()) {
+            match coeff {
+                Some(coeff) => {
+                    s.mul_assign(e, &coeff);
+                },
+                _ => {}
+            }
+            *g = g.mul(e, s).to_affine(e);
+        }
+
+        assert_eq!(g_batch, g);
+    }
+
+    for amt in 10..100 {
+        if amt % 2 == 0 {
+            let coeff = &E::Fr::random(e, rng);
+            test_batchexp_case::<E, G, _>(e, rng, amt, Some(coeff));
+        } else {
+            test_batchexp_case::<E, G, _>(e, rng, amt, None);
+        }
+    }
+}
 
 fn test_multiexp<E: Engine, G: Curve<E>>(e: &E) {
     fn naiveexp<E: Engine, G: Curve<E>>(e: &E, g: &[G::Affine], s: &[E::Fr]) -> G
@@ -120,6 +155,9 @@ pub fn test_engine<E: Engine>() {
     test_frobenius(&engine);
     test_multiexp::<E, E::G1>(&engine);
     test_multiexp::<E, E::G2>(&engine);
+
+    test_batchexp::<E, E::G1>(&engine);
+    test_batchexp::<E, E::G2>(&engine);
 }
 
 fn test_frobenius<E: Engine>(e: &E) {

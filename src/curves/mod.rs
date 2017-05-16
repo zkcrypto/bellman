@@ -44,6 +44,8 @@ pub trait Engine: Sized + Clone + Send + Sync
     /// Perform multi-exponentiation. g and s must have the same length.
     fn multiexp<G: Curve<Self>>(&self, g: &[G::Affine], s: &[Self::Fr]) -> Result<G, ()>;
     fn batch_baseexp<G: Curve<Self>, S: AsRef<[Self::Fr]>>(&self, table: &WindowTable<Self, G, Vec<G>>, scalars: S) -> Vec<G::Affine>;
+
+    fn batchexp<G: Curve<Self>, S: AsRef<[Self::Fr]>>(&self, g: &mut [G::Affine], scalars: S, coeff: Option<&Self::Fr>);
 }
 
 pub trait Group<E: Engine>: Copy + Send + Sync + Sized

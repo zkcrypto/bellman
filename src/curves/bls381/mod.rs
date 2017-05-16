@@ -1025,6 +1025,37 @@ impl Engine for Bls381 {
         f
     }
 
+    fn batchexp<G: Curve<Self>, S: AsRef<[Self::Fr]>>(&self, g: &mut [G::Affine], scalars: S, coeff: Option<&Self::Fr>)
+    {
+        use crossbeam;
+        use num_cpus;
+
+        assert_eq!(g.len(), scalars.as_ref().len());
+
+        let chunk = (g.len() / num_cpus::get()) + 1;
+
+        crossbeam::scope(|scope| {
+            for (g, s) in g.chunks_mut(chunk).zip(scalars.as_ref().chunks(chunk)) {
+                scope.spawn(move || {
+                    let mut table = WindowTable::new();
+
+                    for (g, s) in g.iter_mut().zip(s.iter()) {
+                        let mut s = *s;
+                        match coeff {
+                            Some(coeff) => {
+                                s.mul_assign(self, coeff);
+                            },
+                            _ => {}
+                        };
+                        let mut newg = g.to_jacobian(self);
+                        opt_exp(self, &mut newg, s.into_repr(self), &mut table);
+                        *g = newg.to_affine(self);
+                    }
+                });
+            }
+        });
+    }
+
     fn batch_baseexp<G: Curve<Self>, S: AsRef<[Self::Fr]>>(&self, table: &WindowTable<Self, G, Vec<G>>, s: S) -> Vec<G::Affine>
     {
         use crossbeam;
