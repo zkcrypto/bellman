@@ -464,12 +464,8 @@ pub fn prove<E: Engine, C: Circuit<E>>(
         domain.coset_fft(e, &mut prover.c);
 
         let mut h = prover.a;
-        for (h, b) in h.iter_mut().zip(prover.b.into_iter()) {
-            h.mul_assign(e, &b);
-        }
-        for (h, c) in h.iter_mut().zip(prover.c.into_iter()) {
-            h.sub_assign(e, &c);
-        }
+        domain.mul_assign(e, &mut h, prover.b);
+        domain.sub_assign(e, &mut h, prover.c);
         domain.divide_by_z_on_coset(e, &mut h);
         domain.icoset_fft(e, &mut h);
 
