@@ -58,7 +58,8 @@ macro_rules! curve_impl {
             }
         }
 
-        impl CurveAffine<$engine, $name> for $name_affine {
+        impl CurveAffine<$engine> for $name_affine {
+            type Jacobian = $name;
             type Uncompressed = $name_uncompressed;
 
             fn is_valid(&self, e: &$engine) -> bool {
@@ -133,6 +134,32 @@ macro_rules! curve_impl {
             }
         }
 
+        impl multiexp::Projective<$engine> for $name {
+            type WindowTable = wnaf::WindowTable<$engine, $name>;
+
+            fn identity(e: &$engine) -> Self {
+                Self::zero(e)
+            }
+
+            fn add_to_projective(&self, e: &$engine, projective: &mut Self) {
+                projective.add_assign(e, self);
+            }
+
+            fn exponentiate(&mut self,
+                            e: &$engine,
+                            scalar: <$scalarfield as PrimeField<$engine>>::Repr,
+                            table: &mut Self::WindowTable,
+                            scratch: &mut wnaf::WNAFTable
+            )
+            {
+                *self = self.optimal_exp(e, scalar, table, scratch);
+            }
+
+            fn new_window_table(e: &$engine) -> Self::WindowTable {
+                wnaf::WindowTable::<$engine, $name>::new(e, $name::zero(e), 2)
+            }
+        }
+
         impl Curve<$engine> for $name {
             type Affine = $name_affine;
             type Prepared = $name_prepared;
@@ -147,7 +174,7 @@ macro_rules! curve_impl {
                 None
             }
 
-            fn optimal_window_batch(&self, engine: &$engine, scalars: usize) -> WindowTable<$engine, $name, Vec<$name>> {
+            fn optimal_window_batch(&self, engine: &$engine, scalars: usize) -> wnaf::WindowTable<$engine, $name> {
                 let mut window = engine.$params_field.batch_windows.0;
 
                 for i in &engine.$params_field.batch_windows.1 {
@@ -158,10 +185,7 @@ macro_rules! curve_impl {
                     }
                 }
 
-                let mut table = WindowTable::new();
-                table.set_base(engine, self, window);
-
-                table
+                wnaf::WindowTable::new(engine, *self, window)
             }
 
             fn zero(engine: &$engine) -> Self {

@@ -2,12 +2,13 @@ use rand;
 use std::fmt;
 
 use std::borrow::Borrow;
-use std::marker::PhantomData;
 use serde::{Serialize, Deserialize};
 
 use super::{Cow, Convert};
 
 pub mod bls381;
+pub mod multiexp;
+pub mod wnaf;
 
 pub trait Engine: Sized + Clone + Send + Sync
 {
@@ -43,7 +44,7 @@ pub trait Engine: Sized + Clone + Send + Sync
 
     /// Perform multi-exponentiation. g and s must have the same length.
     fn multiexp<G: Curve<Self>>(&self, g: &[G::Affine], s: &[Self::Fr]) -> Result<G, ()>;
-    fn batch_baseexp<G: Curve<Self>, S: AsRef<[Self::Fr]>>(&self, table: &WindowTable<Self, G, Vec<G>>, scalars: S) -> Vec<G::Affine>;
+    fn batch_baseexp<G: Curve<Self>, S: AsRef<[Self::Fr]>>(&self, table: &wnaf::WindowTable<Self, G>, scalars: S) -> Vec<G::Affine>;
 
     fn batchexp<G: Curve<Self>, S: AsRef<[Self::Fr]>>(&self, g: &mut [G::Affine], scalars: S, coeff: Option<&Self::Fr>);
 }
@@ -63,9 +64,10 @@ pub trait Curve<E: Engine>: Sized +
                             Sync +
                             fmt::Debug +
                             'static +
-                            Group<E>
+                            Group<E> +
+                            self::multiexp::Projective<E>
 {
-    type Affine: CurveAffine<E, Self>;
+    type Affine: CurveAffine<E, Jacobian=Self>;
     type Prepared: Clone + Send + Sync + 'static;
 
     fn zero(&E) -> Self;
@@ -86,25 +88,50 @@ pub trait Curve<E: Engine>: Sized +
     fn mul_assign<S: Convert<[u64], E>>(&mut self, &E, other: &S);
 
     fn optimal_window(&E, scalar_bits: usize) -> Option<usize>;
-    fn optimal_window_batch(&self, &E, scalars: usize) -> WindowTable<E, Self, Vec<Self>>;
+    fn optimal_window_batch(&self, &E, scalars: usize) -> wnaf::WindowTable<E, Self>;
+
+    /// Performs optimal exponentiation of this curve element given the scalar, using
+    /// wNAF when necessary.
+    fn optimal_exp(
+        &self,
+        e: &E,
+        scalar: <E::Fr as PrimeField<E>>::Repr,
+        table: &mut wnaf::WindowTable<E, Self>,
+        scratch: &mut wnaf::WNAFTable
+    ) -> Self {
+        let bits = E::Fr::repr_num_bits(&scalar);
+        match Self::optimal_window(e, bits) {
+            Some(window) => {
+                table.set_base(e, *self, window);
+                scratch.set_scalar(table, scalar);
+                table.exp(e, scratch)
+            },
+            None => {
+                let mut tmp = *self;
+                tmp.mul_assign(e, &scalar);
+                tmp
+            }
+        }
+    }
 }
 
-pub trait CurveAffine<E: Engine, G: Curve<E>>: Copy +
-                                               Clone +
-                                               Sized +
-                                               Send +
-                                               Sync +
-                                               fmt::Debug +
-                                               PartialEq +
-                                               Eq +
-                                               'static
+pub trait CurveAffine<E: Engine>: Copy +
+                                  Clone +
+                                  Sized +
+                                  Send +
+                                  Sync +
+                                  fmt::Debug +
+                                  PartialEq +
+                                  Eq +
+                                  'static
 {
-    type Uncompressed: CurveRepresentation<E, G>;
+    type Jacobian: Curve<E, Affine=Self>;
+    type Uncompressed: CurveRepresentation<E, Affine=Self>;
 
-    fn to_jacobian(&self, &E) -> G;
-    fn prepare(self, &E) -> G::Prepared;
+    fn to_jacobian(&self, &E) -> Self::Jacobian;
+    fn prepare(self, &E) -> <Self::Jacobian as Curve<E>>::Prepared;
     fn is_zero(&self) -> bool;
-    fn mul<S: Convert<[u64], E>>(&self, &E, other: &S) -> G;
+    fn mul<S: Convert<[u64], E>>(&self, &E, other: &S) -> Self::Jacobian;
     fn negate(&mut self, &E);
 
     /// Returns true iff the point is on the curve and in the correct
@@ -117,11 +144,13 @@ pub trait CurveAffine<E: Engine, G: Curve<E>>: Copy +
     fn to_uncompressed(&self, &E) -> Self::Uncompressed;
 }
 
-pub trait CurveRepresentation<E: Engine, G: Curve<E>>: Serialize + for<'a> Deserialize<'a>
+pub trait CurveRepresentation<E: Engine>: Serialize + for<'a> Deserialize<'a>
 {
+    type Affine: CurveAffine<E>;
+
     /// If the point representation is valid (lies on the curve, correct
     /// subgroup) this function will return it.
-    fn to_affine(&self, e: &E) -> Result<G::Affine, ()> {
+    fn to_affine(&self, e: &E) -> Result<Self::Affine, ()> {
         let p = try!(self.to_affine_unchecked(e));
 
         if p.is_valid(e) {
@@ -133,7 +162,7 @@ pub trait CurveRepresentation<E: Engine, G: Curve<E>>: Serialize + for<'a> Deser
 
     /// Returns the point under the assumption that it is valid. Undefined
     /// behavior if `to_affine` would have rejected the point.
-    fn to_affine_unchecked(&self, &E) -> Result<G::Affine, ()>;
+    fn to_affine_unchecked(&self, &E) -> Result<Self::Affine, ()>;
 }
 
 pub trait Field<E: Engine>: Sized +
@@ -189,6 +218,33 @@ pub trait PrimeField<E: Engine>: SqrtField<E> + Convert<[u64], E>
     fn from_repr(&E, Self::Repr) -> Result<Self, ()>;
     fn into_repr(&self, &E) -> Self::Repr;
 
+    /// Determines if a is less than b
+    fn repr_lt(a: &Self::Repr, b: &Self::Repr) -> bool;
+
+    /// Subtracts b from a. Undefined behavior if b > a.
+    fn repr_sub_noborrow(a: &mut Self::Repr, b: &Self::Repr);
+
+    /// Adds b to a. Undefined behavior if overflow occurs.
+    fn repr_add_nocarry(a: &mut Self::Repr, b: &Self::Repr);
+
+    /// Calculates the number of bits.
+    fn repr_num_bits(a: &Self::Repr) -> usize;
+
+    /// Determines if the representation is of a zero.
+    fn repr_is_zero(a: &Self::Repr) -> bool;
+
+    /// Determines if the representation is odd.
+    fn repr_is_odd(a: &Self::Repr) -> bool;
+
+    /// Divides by two via rightshift.
+    fn repr_div2(a: &mut Self::Repr);
+
+    /// Returns the limb of least significance
+    fn repr_least_significant_limb(a: &Self::Repr) -> u64;
+
+    /// Creates a repr given a u64.
+    fn repr_from_u64(a: u64) -> Self::Repr;
+
     /// Returns an interator over all bits, most significant bit first.
     fn bits(&self, &E) -> BitIterator<Self::Repr>;
 
@@ -209,50 +265,6 @@ pub trait SnarkField<E: Engine>: PrimeField<E> + Group<E>
     fn s(&E) -> u64;
     fn multiplicative_generator(&E) -> Self;
     fn root_of_unity(&E) -> Self;
-}
-
-pub struct WindowTable<E, G, Table: Borrow<[G]>> {
-    table: Table,
-    wnaf: Vec<i64>,
-    window: usize,
-    _marker: PhantomData<(E, G)>
-}
-
-impl<E: Engine, G: Curve<E>> WindowTable<E, G, Vec<G>> {
-    fn new() -> Self {
-        WindowTable {
-            table: vec![],
-            wnaf: vec![],
-            window: 0,
-            _marker: PhantomData
-        }
-    }
-
-    fn set_base(&mut self, e: &E, base: &G, window: usize) {
-        assert!(window > 1);
-
-        self.window = window;
-        self.table.truncate(0);
-        self.table.reserve(1 << (window-1));
-
-        let mut tmp = *base;
-        let mut dbl = tmp;
-        dbl.double(e);
-
-        for _ in 0..(1 << (window-1)) {
-            self.table.push(tmp);
-            tmp.add_assign(e, &dbl);
-        }
-    }
-
-    fn shared(&self) -> WindowTable<E, G, &[G]> {
-        WindowTable {
-            table: &self.table[..],
-            wnaf: vec![],
-            window: self.window,
-            _marker: PhantomData
-        }
-    }
 }
 
 pub struct BitIterator<T> {

@@ -283,6 +283,44 @@ macro_rules! fp_impl {
                 }
             }
 
+            fn repr_lt(a: &Self::Repr, b: &Self::Repr) -> bool {
+                $arith_mod::lt(a, b)
+            }
+
+            fn repr_sub_noborrow(a: &mut Self::Repr, b: &Self::Repr) {
+                $arith_mod::sub_noborrow(a, b);
+            }
+
+            fn repr_add_nocarry(a: &mut Self::Repr, b: &Self::Repr) {
+                $arith_mod::add_nocarry(a, b);
+            }
+
+            fn repr_num_bits(a: &Self::Repr) -> usize {
+                $arith_mod::num_bits(a)
+            }
+
+            fn repr_is_zero(a: &Self::Repr) -> bool {
+                a.iter().all(|&e| e==0)
+            }
+
+            fn repr_is_odd(a: &Self::Repr) -> bool {
+                $arith_mod::odd(a)
+            }
+
+            fn repr_least_significant_limb(a: &Self::Repr) -> u64 {
+                a[0]
+            }
+
+            fn repr_div2(a: &mut Self::Repr) {
+                $arith_mod::div2(a);
+            }
+
+            fn repr_from_u64(a: u64) -> Self::Repr {
+                let mut tmp = Self::Repr::default();
+                tmp[0] = a;
+                tmp
+            }
+
             fn into_repr(&self, engine: &$engine) -> Self::Repr {
                 let mut tmp = *self;
                 tmp.mul_assign(engine, &engine.$params_field.one);

@@ -11,7 +11,7 @@ fn test_vectors<E: Engine, G: Curve<E>>(e: &E, expected: &[u8]) {
     for _ in 0..10000 {
         {
             let acc = acc.to_affine(e);
-            let exp: <G::Affine as CurveAffine<E, G>>::Uncompressed =
+            let exp: <G::Affine as CurveAffine<E>>::Uncompressed =
                 bincode::deserialize_from(&mut expected_reader, bincode::Infinite).unwrap();
 
             assert!(acc == exp.to_affine(e).unwrap());
