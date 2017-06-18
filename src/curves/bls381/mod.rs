@@ -3,6 +3,7 @@ use std::fmt;
 
 use std::cmp::Ordering;
 use std::borrow::Borrow;
+use ::BitIterator;
 use super::{
     Engine,
     Group,
@@ -14,7 +15,6 @@ use super::{
     Field,
     SnarkField,
     SqrtField,
-    BitIterator,
     Convert,
     Cow,
     multiexp,

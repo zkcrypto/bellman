@@ -3,6 +3,7 @@ use std::fmt;
 
 use std::borrow::Borrow;
 use serde::{Serialize, Deserialize};
+use super::BitIterator;
 
 use super::{Cow, Convert};
 
@@ -245,38 +246,6 @@ pub trait SnarkField<E: Engine>: PrimeField<E> + Group<E>
     fn s(&E) -> u64;
     fn multiplicative_generator(&E) -> Self;
     fn root_of_unity(&E) -> Self;
-}
-
-pub struct BitIterator<T> {
-    t: T,
-    n: usize
-}
-
-impl<T: AsRef<[u64]>> BitIterator<T> {
-    fn new(t: T) -> Self {
-        let bits = 64 * t.as_ref().len();
-
-        BitIterator {
-            t: t,
-            n: bits
-        }
-    }
-}
-
-impl<T: AsRef<[u64]>> Iterator for BitIterator<T> {
-    type Item = bool;
-
-    fn next(&mut self) -> Option<bool> {
-        if self.n == 0 {
-            None
-        } else {
-            self.n -= 1;
-            let part = self.n / 64;
-            let bit = self.n - (64 * part);
-
-            Some(self.t.as_ref()[part] & (1 << bit) > 0)
-        }
-    }
 }
 
 #[cfg(test)]
