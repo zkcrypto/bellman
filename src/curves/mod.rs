@@ -10,6 +10,7 @@ use super::{Cow, Convert};
 pub mod bls381;
 pub mod multiexp;
 pub mod wnaf;
+pub mod domain;
 
 pub trait Engine: Sized + Clone + Send + Sync
 {

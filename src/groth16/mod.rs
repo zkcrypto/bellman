@@ -1,8 +1,6 @@
 use curves::*;
 use super::*;
 
-pub mod domain;
-
 pub struct ProvingKey<E: Engine> {
     a_inputs: Vec<<E::G1 as Curve<E>>::Affine>,
     b1_inputs: Vec<<E::G1 as Curve<E>>::Affine>,
