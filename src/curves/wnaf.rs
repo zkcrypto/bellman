@@ -1,5 +1,5 @@
 use std::marker::PhantomData;
-use super::{Engine, Curve, PrimeField};
+use super::{Engine, Curve, PrimeField, PrimeFieldRepr};
 
 /// Represents the scratch space for a wNAF form scalar.
 pub struct WNAFTable {
@@ -20,19 +20,19 @@ impl WNAFTable {
         self.window = table.window;
         self.wnaf.truncate(0);
 
-        while !E::Fr::repr_is_zero(&c) {
+        while !c.is_zero() {
             let mut u;
-            if E::Fr::repr_is_odd(&c) {
-                u = (E::Fr::repr_least_significant_limb(&c) % (1 << (self.window+1))) as i64;
+            if c.is_odd() {
+                u = (c.as_ref()[0] % (1 << (self.window+1))) as i64;
 
                 if u > (1 << self.window) {
                     u -= 1 << (self.window+1);
                 }
 
                 if u > 0 {
-                    E::Fr::repr_sub_noborrow(&mut c, &E::Fr::repr_from_u64(u as u64));
+                    c.sub_noborrow(&<<E::Fr as PrimeField<E>>::Repr as PrimeFieldRepr>::from_u64(u as u64));
                 } else {
-                    E::Fr::repr_add_nocarry(&mut c, &E::Fr::repr_from_u64((-u) as u64));
+                    c.add_nocarry(&<<E::Fr as PrimeField<E>>::Repr as PrimeFieldRepr>::from_u64((-u) as u64));
                 }
             } else {
                 u = 0;
@@ -40,7 +40,7 @@ impl WNAFTable {
 
             self.wnaf.push(u);
 
-            E::Fr::repr_div2(&mut c);
+            c.div2();
         }
     }
 }

@@ -106,7 +106,7 @@ fn test_bilinearity<E: Engine>(e: &E) {
     
     let mut test4 = e.pairing(&a, &b);
     assert!(test4 != test1);
-    test4 = test4.pow(e, &s);
+    test4 = test4.pow(e, &s.into_repr(e));
     assert_eq!(test1, test4);
 }
 

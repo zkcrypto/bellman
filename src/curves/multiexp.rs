@@ -1,6 +1,6 @@
 //! This module provides an abstract implementation of the Bos-Coster multi-exponentiation algorithm.
 
-use super::{Engine, Curve, CurveAffine, Field, PrimeField};
+use super::{Engine, Curve, CurveAffine, Field, PrimeField, PrimeFieldRepr};
 use super::wnaf;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
@@ -109,8 +109,8 @@ fn justexp<E: Engine>(
 {
     use std::cmp::min;
 
-    let abits = E::Fr::repr_num_bits(largest);
-    let bbits = E::Fr::repr_num_bits(smallest);
+    let abits = largest.num_bits();
+    let bbits = smallest.num_bits();
     let limit = min(abits-bbits, 20);
 
     if bbits < (1<<limit) {
@@ -180,13 +180,13 @@ pub fn perform_multiexp<E: Engine, Source: ElementSource<E>>(
                             // Rewrite
                             let second_greatest = second_greatest.unwrap();
 
-                            E::Fr::repr_sub_noborrow(&mut greatest.scalar, &second_greatest.scalar);
+                            greatest.scalar.sub_noborrow(&second_greatest.scalar);
                             let mut tmp = elements[second_greatest.index];
                             elements[greatest.index].add_to_projective(e, &mut tmp);
                             elements[second_greatest.index] = tmp;
                         }
                     }
-                    if !E::Fr::repr_is_zero(&greatest.scalar) {
+                    if !greatest.scalar.is_zero() {
                         // Reinsert only nonzero scalars.
                         heap.push(greatest);
                     }
@@ -213,13 +213,7 @@ struct Exp<E: Engine> {
 
 impl<E: Engine> Ord for Exp<E> {
     fn cmp(&self, other: &Exp<E>) -> Ordering {
-        if E::Fr::repr_lt(&self.scalar, &other.scalar) {
-            Ordering::Less
-        } else if self.scalar == other.scalar {
-            Ordering::Equal
-        } else {
-            Ordering::Greater
-        }
+        self.scalar.cmp(&other.scalar)
     }
 }
 

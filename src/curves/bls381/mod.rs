@@ -1,6 +1,7 @@
 use rand;
 use std::fmt;
 
+use std::cmp::Ordering;
 use std::borrow::Borrow;
 use super::{
     Engine,
@@ -9,6 +10,7 @@ use super::{
     CurveAffine,
     CurveRepresentation,
     PrimeField,
+    PrimeFieldRepr,
     Field,
     SnarkField,
     SqrtField,
@@ -62,6 +64,7 @@ fp_impl!(
     engine = Bls381,
     params = fqparams: FqParams,
     arith = fq_arith,
+    repr = FqRepr,
     limbs = 6,
     // q = 4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787
     modulus = [ 0xb9feffffffffaaab, 0x1eabfffeb153ffff, 0x6730d2a0f6b0f624, 0x64774b84f38512bf, 0x4b1ba7b6434bacd7, 0x1a0111ea397fe69a ],
@@ -81,6 +84,7 @@ fp_impl!(
     engine = Bls381,
     params = frparams: FrParams,
     arith = fr_arith,
+    repr = FrRepr,
     limbs = 4,
     // r = 52435875175126190479447740508185965837690552500527637822603658699938581184513
     modulus = [ 0xffffffff00000001, 0x53bda402fffe5bfe, 0x3339d80809a1d805, 0x73eda753299d7d48 ],
@@ -375,8 +379,8 @@ impl CurveRepresentation<Bls381> for G1Uncompressed {
                 }
 
                 Ok(G1Affine {
-                    x: try!(Fq::from_repr(e, x)),
-                    y: try!(Fq::from_repr(e, y)),
+                    x: try!(Fq::from_repr(e, FqRepr(x))),
+                    y: try!(Fq::from_repr(e, FqRepr(y))),
                     infinity: false
                 })
             }
@@ -411,12 +415,12 @@ impl CurveRepresentation<Bls381> for G2Uncompressed {
                     if let (Some(y_c1), y_c0) = fq_arith::divrem(&y, &e.fqparams.modulus) {
                         return Ok(G2Affine {
                             x: Fq2 {
-                                c0: try!(Fq::from_repr(e, x_c0)),
-                                c1: try!(Fq::from_repr(e, x_c1))
+                                c0: try!(Fq::from_repr(e, FqRepr(x_c0))),
+                                c1: try!(Fq::from_repr(e, FqRepr(x_c1)))
                             },
                             y: Fq2 {
-                                c0: try!(Fq::from_repr(e, y_c0)),
-                                c1: try!(Fq::from_repr(e, y_c1))
+                                c0: try!(Fq::from_repr(e, FqRepr(y_c0))),
+                                c1: try!(Fq::from_repr(e, FqRepr(y_c1)))
                             },
                             infinity: false
                         });
@@ -440,14 +444,14 @@ impl G1Uncompressed {
 
             {
                 let mut tmp = &mut tmp[0..];
-                for &digit in p.x.into_repr(e).iter().rev() {
+                for &digit in p.x.into_repr(e).0.iter().rev() {
                     tmp.write_u64::<BigEndian>(digit).unwrap();
                 }
             }
 
             {
                 let mut tmp = &mut tmp[48..];
-                for &digit in p.y.into_repr(e).iter().rev() {
+                for &digit in p.y.into_repr(e).0.iter().rev() {
                     tmp.write_u64::<BigEndian>(digit).unwrap();
                 }
             }
@@ -469,8 +473,8 @@ impl G2Uncompressed {
             {
                 let mut tmp = &mut tmp[0..];
                 let mut x = [0; 12];
-                fq_arith::mac3(&mut x, &p.x.c1.into_repr(e), &e.fqparams.modulus);
-                fq_arith::add_carry(&mut x, &p.x.c0.into_repr(e));
+                fq_arith::mac3(&mut x, &p.x.c1.into_repr(e).0, &e.fqparams.modulus);
+                fq_arith::add_carry(&mut x, &p.x.c0.into_repr(e).0);
 
                 for &digit in x.iter().rev() {
                     tmp.write_u64::<BigEndian>(digit).unwrap();
@@ -480,8 +484,8 @@ impl G2Uncompressed {
             {
                 let mut tmp = &mut tmp[96..];
                 let mut y = [0; 12];
-                fq_arith::mac3(&mut y, &p.y.c1.into_repr(e), &e.fqparams.modulus);
-                fq_arith::add_carry(&mut y, &p.y.c0.into_repr(e));
+                fq_arith::mac3(&mut y, &p.y.c1.into_repr(e).0, &e.fqparams.modulus);
+                fq_arith::add_carry(&mut y, &p.y.c0.into_repr(e).0);
 
                 for &digit in y.iter().rev() {
                     tmp.write_u64::<BigEndian>(digit).unwrap();
@@ -690,7 +694,7 @@ impl G2Prepared {
         let mut r = q.to_jacobian(e);
 
         let mut found_one = false;
-        for i in BitIterator::from([BLS_X >> 1]) {
+        for i in BitIterator::new(&[BLS_X >> 1]) {
             if !found_one {
                 found_one = i;
                 continue;
@@ -1004,7 +1008,7 @@ impl Engine for Bls381 {
         let mut f = Fq12::one(self);
 
         let mut found_one = false;
-        for i in BitIterator::from([BLS_X >> 1]) {
+        for i in BitIterator::new(&[BLS_X >> 1]) {
             if !found_one {
                 found_one = i;
                 continue;

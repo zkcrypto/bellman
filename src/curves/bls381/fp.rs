@@ -183,6 +183,7 @@ macro_rules! fp_impl {
         engine = $engine:ident,
         params = $params_field:ident : $params_name:ident,
         arith = $arith_mod:ident,
+        repr = $repr:ident,
         limbs = $limbs:expr,
         $($params:tt)*
     ) => {
@@ -218,15 +219,72 @@ macro_rules! fp_impl {
         #[repr(C)]
         pub struct $name([u64; $limbs]);
 
+        #[derive(Copy, Clone, PartialEq, Eq)]
+        #[repr(C)]
+        pub struct $repr([u64; $limbs]);
+
+        impl PrimeFieldRepr for $repr {
+            fn from_u64(a: u64) -> Self {
+                let mut tmp: [u64; $limbs] = Default::default();
+                tmp[0] = a;
+                $repr(tmp)
+            }
+
+            fn sub_noborrow(&mut self, other: &Self) {
+                $arith_mod::sub_noborrow(&mut self.0, &other.0);
+            }
+
+            fn add_nocarry(&mut self, other: &Self) {
+                $arith_mod::add_nocarry(&mut self.0, &other.0);
+            }
+
+            fn num_bits(&self) -> usize {
+                $arith_mod::num_bits(&self.0)
+            }
+
+            fn is_zero(&self) -> bool {
+                self.0.iter().all(|&e| e==0)
+            }
+
+            fn is_odd(&self) -> bool {
+                $arith_mod::odd(&self.0)
+            }
+
+            fn div2(&mut self) {
+                $arith_mod::div2(&mut self.0);
+            }
+        }
+
+        impl AsRef<[u64]> for $repr {
+            fn as_ref(&self) -> &[u64] {
+                &self.0
+            }
+        }
+
+        impl Ord for $repr {
+            fn cmp(&self, other: &$repr) -> Ordering {
+                if $arith_mod::lt(&self.0, &other.0) {
+                    Ordering::Less
+                } else if self.0 == other.0 {
+                    Ordering::Equal
+                } else {
+                    Ordering::Greater
+                }
+            }
+        }
+
+        impl PartialOrd for $repr {
+            fn partial_cmp(&self, other: &$repr) -> Option<Ordering> {
+                Some(self.cmp(other))
+            }
+        }
+
         impl fmt::Debug for $name
         {
             fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
                 ENGINE.with(|e| {
-                    let mut repr = self.into_repr(&e);
-                    repr.reverse();
-
                     try!(write!(f, "Fp(0x"));
-                    for i in &repr {
+                    for i in self.into_repr(&e).0.iter().rev() {
                         try!(write!(f, "{:016x}", *i));
                     }
                     write!(f, ")")
@@ -260,21 +318,21 @@ macro_rules! fp_impl {
             }
         }
 
-        impl Convert<[u64], $engine> for $name
+        impl Convert<$repr, $engine> for $name
         {
-            type Target = [u64; $limbs];
+            type Target = $repr;
 
-            fn convert(&self, engine: &$engine) -> Cow<[u64; $limbs]> {
+            fn convert(&self, engine: &$engine) -> Cow<$repr> {
                 Cow::Owned(self.into_repr(engine))
             }
         }
 
         impl PrimeField<$engine> for $name
         {
-            type Repr = [u64; $limbs];
+            type Repr = $repr;
 
             fn from_repr(engine: &$engine, repr: Self::Repr) -> Result<Self, ()> {
-                let mut tmp = $name(repr);
+                let mut tmp = $name(repr.0);
                 if $arith_mod::lt(&tmp.0, &engine.$params_field.modulus) {
                     tmp.mul_assign(engine, &engine.$params_field.r2);
                     Ok(tmp)
@@ -283,55 +341,17 @@ macro_rules! fp_impl {
                 }
             }
 
-            fn repr_lt(a: &Self::Repr, b: &Self::Repr) -> bool {
-                $arith_mod::lt(a, b)
-            }
-
-            fn repr_sub_noborrow(a: &mut Self::Repr, b: &Self::Repr) {
-                $arith_mod::sub_noborrow(a, b);
-            }
-
-            fn repr_add_nocarry(a: &mut Self::Repr, b: &Self::Repr) {
-                $arith_mod::add_nocarry(a, b);
-            }
-
-            fn repr_num_bits(a: &Self::Repr) -> usize {
-                $arith_mod::num_bits(a)
-            }
-
-            fn repr_is_zero(a: &Self::Repr) -> bool {
-                a.iter().all(|&e| e==0)
-            }
-
-            fn repr_is_odd(a: &Self::Repr) -> bool {
-                $arith_mod::odd(a)
-            }
-
-            fn repr_least_significant_limb(a: &Self::Repr) -> u64 {
-                a[0]
-            }
-
-            fn repr_div2(a: &mut Self::Repr) {
-                $arith_mod::div2(a);
-            }
-
-            fn repr_from_u64(a: u64) -> Self::Repr {
-                let mut tmp = Self::Repr::default();
-                tmp[0] = a;
-                tmp
-            }
-
             fn into_repr(&self, engine: &$engine) -> Self::Repr {
                 let mut tmp = *self;
                 tmp.mul_assign(engine, &engine.$params_field.one);
-                tmp.0
+                $repr(tmp.0)
             }
 
             fn from_u64(engine: &$engine, n: u64) -> Self {
                 let mut r = [0; $limbs];
                 r[0] = n;
 
-                Self::from_repr(engine, r).unwrap()
+                Self::from_repr(engine, $repr(r)).unwrap()
             }
 
             fn from_str(engine: &$engine, s: &str) -> Result<Self, ()> {
@@ -351,12 +371,8 @@ macro_rules! fp_impl {
                 Ok(res)
             }
 
-            fn bits(&self, engine: &$engine) -> BitIterator<Self::Repr> {
-                self.into_repr(engine).into()
-            }
-
             fn char(engine: &$engine) -> Self::Repr {
-                engine.$params_field.modulus
+                $repr(engine.$params_field.modulus)
             }
 
             fn num_bits(engine: &$engine) -> usize {
@@ -495,19 +511,20 @@ macro_rules! fp_impl {
         }
 
         mod $arith_mod {
-            use super::BitIterator;
             // Arithmetic
             #[allow(dead_code)]
             pub fn num_bits(v: &[u64; $limbs]) -> usize
             {
-                // TODO: optimize
-                for (i, b) in BitIterator::from(&v[..]).enumerate() {
-                    if b {
-                        return ($limbs*64) - i;
+                let mut ret = 64 * $limbs;
+                for i in v.iter().rev() {
+                    let leading = i.leading_zeros() as usize;
+                    ret -= leading;
+                    if leading != 64 {
+                        break;
                     }
                 }
 
-                0
+                ret
             }
 
             #[inline]

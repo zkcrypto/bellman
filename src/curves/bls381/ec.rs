@@ -112,10 +112,10 @@ macro_rules! curve_impl {
                 self.infinity
             }
 
-            fn mul<S: Convert<[u64], $engine>>(&self, e: &$engine, other: &S) -> $name {
+            fn mul<S: Convert<<$scalarfield as PrimeField<$engine>>::Repr, $engine>>(&self, e: &$engine, other: &S) -> $name {
                 let mut res = $name::zero(e);
 
-                for i in BitIterator::from((*other.convert(e)).borrow())
+                for i in BitIterator::new((*other.convert(e)).borrow())
                 {
                     res.double(e);
 
@@ -314,10 +314,10 @@ macro_rules! curve_impl {
                 }
             }
 
-            fn mul_assign<S: Convert<[u64], $engine>>(&mut self, engine: &$engine, other: &S) {
+            fn mul_assign<S: Convert<<$scalarfield as PrimeField<$engine>>::Repr, $engine>>(&mut self, engine: &$engine, other: &S) {
                 let mut res = Self::zero(engine);
 
-                for i in BitIterator::from((*other.convert(engine)).borrow())
+                for i in BitIterator::new((*other.convert(engine)).borrow())
                 {
                     res.double(engine);
 

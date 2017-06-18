@@ -12,8 +12,8 @@ pub mod wnaf;
 
 pub trait Engine: Sized + Clone + Send + Sync
 {
-    type Fq: PrimeField<Self>;
-    type Fr: SnarkField<Self>;
+    type Fq: PrimeField<Self> + Convert<<Self::Fq as PrimeField<Self>>::Repr, Self>;
+    type Fr: SnarkField<Self> + Convert<<Self::Fr as PrimeField<Self>>::Repr, Self>;
     type Fqe: SqrtField<Self>;
     type Fqk: Field<Self>;
     type G1: Curve<Self> + Convert<<Self::G1 as Curve<Self>>::Affine, Self>;
@@ -85,7 +85,7 @@ pub trait Curve<E: Engine>: Sized +
     fn add_assign(&mut self, &E, other: &Self);
     fn sub_assign(&mut self, &E, other: &Self);
     fn add_assign_mixed(&mut self, &E, other: &Self::Affine);
-    fn mul_assign<S: Convert<[u64], E>>(&mut self, &E, other: &S);
+    fn mul_assign<S: Convert<<E::Fr as PrimeField<E>>::Repr, E>>(&mut self, &E, other: &S);
 
     fn optimal_window(&E, scalar_bits: usize) -> Option<usize>;
     fn optimal_window_batch(&self, &E, scalars: usize) -> wnaf::WindowTable<E, Self>;
@@ -99,7 +99,7 @@ pub trait Curve<E: Engine>: Sized +
         table: &mut wnaf::WindowTable<E, Self>,
         scratch: &mut wnaf::WNAFTable
     ) -> Self {
-        let bits = E::Fr::repr_num_bits(&scalar);
+        let bits = scalar.num_bits();
         match Self::optimal_window(e, bits) {
             Some(window) => {
                 table.set_base(e, *self, window);
@@ -131,7 +131,7 @@ pub trait CurveAffine<E: Engine>: Copy +
     fn to_jacobian(&self, &E) -> Self::Jacobian;
     fn prepare(self, &E) -> <Self::Jacobian as Curve<E>>::Prepared;
     fn is_zero(&self) -> bool;
-    fn mul<S: Convert<[u64], E>>(&self, &E, other: &S) -> Self::Jacobian;
+    fn mul<S: Convert<<E::Fr as PrimeField<E>>::Repr, E>>(&self, &E, other: &S) -> Self::Jacobian;
     fn negate(&mut self, &E);
 
     /// Returns true iff the point is on the curve and in the correct
@@ -187,11 +187,11 @@ pub trait Field<E: Engine>: Sized +
     fn mul_assign(&mut self, &E, other: &Self);
     fn inverse(&self, &E) -> Option<Self>;
     fn frobenius_map(&mut self, &E, power: usize);
-    fn pow<S: Convert<[u64], E>>(&self, engine: &E, exp: &S) -> Self
+    fn pow<S: AsRef<[u64]>>(&self, engine: &E, exp: S) -> Self
     {
         let mut res = Self::one(engine);
 
-        for i in BitIterator::from((*exp.convert(engine)).borrow()) {
+        for i in BitIterator::new(exp) {
             res.square(engine);
             if i {
                 res.mul_assign(engine, self);
@@ -209,44 +209,24 @@ pub trait SqrtField<E: Engine>: Field<E>
     fn sqrt(&self, engine: &E) -> Option<Self>;
 }
 
-pub trait PrimeField<E: Engine>: SqrtField<E> + Convert<[u64], E>
+pub trait PrimeFieldRepr: Clone + Eq + Ord + AsRef<[u64]> {
+    fn from_u64(a: u64) -> Self;
+    fn sub_noborrow(&mut self, other: &Self);
+    fn add_nocarry(&mut self, other: &Self);
+    fn num_bits(&self) -> usize;
+    fn is_zero(&self) -> bool;
+    fn is_odd(&self) -> bool;
+    fn div2(&mut self);
+}
+
+pub trait PrimeField<E: Engine>: SqrtField<E>
 {
-    /// Little endian representation of a field element.
-    type Repr: Convert<[u64], E> + Eq + Clone;
+    type Repr: PrimeFieldRepr;
+
     fn from_u64(&E, u64) -> Self;
     fn from_str(&E, s: &str) -> Result<Self, ()>;
     fn from_repr(&E, Self::Repr) -> Result<Self, ()>;
     fn into_repr(&self, &E) -> Self::Repr;
-
-    /// Determines if a is less than b
-    fn repr_lt(a: &Self::Repr, b: &Self::Repr) -> bool;
-
-    /// Subtracts b from a. Undefined behavior if b > a.
-    fn repr_sub_noborrow(a: &mut Self::Repr, b: &Self::Repr);
-
-    /// Adds b to a. Undefined behavior if overflow occurs.
-    fn repr_add_nocarry(a: &mut Self::Repr, b: &Self::Repr);
-
-    /// Calculates the number of bits.
-    fn repr_num_bits(a: &Self::Repr) -> usize;
-
-    /// Determines if the representation is of a zero.
-    fn repr_is_zero(a: &Self::Repr) -> bool;
-
-    /// Determines if the representation is odd.
-    fn repr_is_odd(a: &Self::Repr) -> bool;
-
-    /// Divides by two via rightshift.
-    fn repr_div2(a: &mut Self::Repr);
-
-    /// Returns the limb of least significance
-    fn repr_least_significant_limb(a: &Self::Repr) -> u64;
-
-    /// Creates a repr given a u64.
-    fn repr_from_u64(a: u64) -> Self::Repr;
-
-    /// Returns an interator over all bits, most significant bit first.
-    fn bits(&self, &E) -> BitIterator<Self::Repr>;
 
     /// Returns the field characteristic; the modulus.
     fn char(&E) -> Self::Repr;
@@ -272,6 +252,17 @@ pub struct BitIterator<T> {
     n: usize
 }
 
+impl<T: AsRef<[u64]>> BitIterator<T> {
+    fn new(t: T) -> Self {
+        let bits = 64 * t.as_ref().len();
+
+        BitIterator {
+            t: t,
+            n: bits
+        }
+    }
+}
+
 impl<T: AsRef<[u64]>> Iterator for BitIterator<T> {
     type Item = bool;
 
@@ -287,46 +278,6 @@ impl<T: AsRef<[u64]>> Iterator for BitIterator<T> {
         }
     }
 }
-
-impl<'a> From<&'a [u64]> for BitIterator<&'a [u64]>
-{
-    fn from(v: &'a [u64]) -> Self {
-        assert!(v.len() < 100);
-
-        BitIterator {
-            t: v,
-            n: v.len() * 64
-        }
-    }
-}
-
-macro_rules! bit_iter_impl(
-    ($n:expr) => {
-        impl From<[u64; $n]> for BitIterator<[u64; $n]> {
-            fn from(v: [u64; $n]) -> Self {
-                BitIterator {
-                    t: v,
-                    n: $n * 64
-                }
-            }
-        }
-
-        impl<E> Convert<[u64], E> for [u64; $n] {
-            type Target = [u64; $n];
-
-            fn convert(&self, _: &E) -> Cow<[u64; $n]> {
-                Cow::Borrowed(self)
-            }
-        }
-    };
-);
-
-bit_iter_impl!(1);
-bit_iter_impl!(2);
-bit_iter_impl!(3);
-bit_iter_impl!(4);
-bit_iter_impl!(5);
-bit_iter_impl!(6);
 
 #[cfg(test)]
 mod tests;
