@@ -206,7 +206,7 @@ pub trait Field<E: Engine>: Sized +
 
 pub trait SqrtField<E: Engine>: Field<E>
 {
-    /// Returns the square root of the field element, if it is
+    /// Returns a square root of the field element, if it is
     /// quadratic residue.
     fn sqrt(&self, engine: &E) -> Option<Self>;
 }
