@@ -1,4 +1,4 @@
-use curves::{Engine, Field, SnarkField, PrimeField, Group};
+use super::{Engine, Field, SnarkField, PrimeField, Group};
 use crossbeam;
 use num_cpus;
 

@@ -1,8 +1,6 @@
 use curves::*;
 use super::*;
 
-pub mod domain;
-
 pub struct ProvingKey<E: Engine> {
     a_inputs: Vec<<E::G1 as Curve<E>>::Affine>,
     b1_inputs: Vec<<E::G1 as Curve<E>>::Affine>,
@@ -307,55 +305,73 @@ pub fn prepare_verifying_key<E: Engine>(
     }
 }
 
-pub fn verify<E: Engine, C: Input<E>, F: FnOnce(&mut ConstraintSystem<E>) -> C>(
-    e: &E,
-    circuit: F,
-    proof: &Proof<E>,
-    pvk: &PreparedVerifyingKey<E>
-) -> bool
-{
-    struct VerifierInput<'a, E: Engine + 'a> {
-        e: &'a E,
-        acc: E::G1,
-        ic: &'a [<E::G1 as Curve<E>>::Affine],
-        insufficient_inputs: bool,
-        num_inputs: usize,
-        num_aux: usize
+pub struct VerifierInput<'a, E: Engine + 'a> {
+    e: &'a E,
+    acc: E::G1,
+    ic: &'a [<E::G1 as Curve<E>>::Affine],
+    insufficient_inputs: bool,
+    num_inputs: usize,
+    num_aux: usize
+}
+
+impl<'a, E: Engine> ConstraintSystem<E> for VerifierInput<'a, E> {
+    fn alloc(&mut self, _: E::Fr) -> Variable {
+        let index = self.num_aux;
+        self.num_aux += 1;
+
+        Variable(Index::Aux(index))
     }
 
-    impl<'a, E: Engine> PublicConstraintSystem<E> for VerifierInput<'a, E> {
+    fn enforce(
+        &mut self,
+        _: LinearCombination<E>,
+        _: LinearCombination<E>,
+        _: LinearCombination<E>
+    )
+    {
+        // Do nothing; we don't care about the constraint system
+        // in this context.
+    }
+}
+
+pub fn verify<'a, E: Engine, C: Input<E>, F: FnOnce(&mut VerifierInput<'a, E>) -> C>(
+    e: &'a E,
+    circuit: F,
+    proof: &Proof<E>,
+    pvk: &'a PreparedVerifyingKey<E>
+) -> bool
+{
+    struct InputAllocator<T>(T);
+
+    impl<'a, 'b, E: Engine> PublicConstraintSystem<E> for InputAllocator<&'b mut VerifierInput<'a, E>> {
         fn alloc_input(&mut self, value: E::Fr) -> Variable {
-            if self.ic.len() == 0 {
-                self.insufficient_inputs = true;
+            if self.0.ic.len() == 0 {
+                self.0.insufficient_inputs = true;
             } else {
-                self.acc.add_assign(self.e, &self.ic[0].mul(self.e, &value));
-                self.ic = &self.ic[1..];
+                self.0.acc.add_assign(self.0.e, &self.0.ic[0].mul(self.0.e, &value));
+                self.0.ic = &self.0.ic[1..];
             }
 
-            let index = self.num_inputs;
-            self.num_inputs += 1;
+            let index = self.0.num_inputs;
+            self.0.num_inputs += 1;
 
             Variable(Index::Input(index))
         }
     }
 
-    impl<'a, E: Engine> ConstraintSystem<E> for VerifierInput<'a, E> {
-        fn alloc(&mut self, _: E::Fr) -> Variable {
-            let index = self.num_aux;
-            self.num_aux += 1;
-
-            Variable(Index::Aux(index))
+    impl<'a, 'b, E: Engine> ConstraintSystem<E> for InputAllocator<&'b mut VerifierInput<'a, E>> {
+        fn alloc(&mut self, num: E::Fr) -> Variable {
+            self.0.alloc(num)
         }
 
         fn enforce(
             &mut self,
-            _: LinearCombination<E>,
-            _: LinearCombination<E>,
-            _: LinearCombination<E>
+            a: LinearCombination<E>,
+            b: LinearCombination<E>,
+            c: LinearCombination<E>
         )
         {
-            // Do nothing; we don't care about the constraint system
-            // in this context.
+            self.0.enforce(a, b, c);
         }
     }
 
@@ -368,7 +384,7 @@ pub fn verify<E: Engine, C: Input<E>, F: FnOnce(&mut ConstraintSystem<E>) -> C>(
         num_aux: 0
     };
 
-    circuit(&mut witness).synthesize(e, &mut witness);
+    circuit(&mut witness).synthesize(e, &mut InputAllocator(&mut witness));
 
     if witness.ic.len() != 0 || witness.insufficient_inputs {
         return false;

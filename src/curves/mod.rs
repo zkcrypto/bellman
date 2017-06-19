@@ -2,17 +2,20 @@ use rand;
 use std::fmt;
 
 use std::borrow::Borrow;
-use std::marker::PhantomData;
 use serde::{Serialize, Deserialize};
+use super::BitIterator;
 
 use super::{Cow, Convert};
 
 pub mod bls381;
+pub mod multiexp;
+pub mod wnaf;
+pub mod domain;
 
 pub trait Engine: Sized + Clone + Send + Sync
 {
-    type Fq: PrimeField<Self>;
-    type Fr: SnarkField<Self>;
+    type Fq: PrimeField<Self> + Convert<<Self::Fq as PrimeField<Self>>::Repr, Self>;
+    type Fr: SnarkField<Self> + Convert<<Self::Fr as PrimeField<Self>>::Repr, Self>;
     type Fqe: SqrtField<Self>;
     type Fqk: Field<Self>;
     type G1: Curve<Self> + Convert<<Self::G1 as Curve<Self>>::Affine, Self>;
@@ -43,7 +46,7 @@ pub trait Engine: Sized + Clone + Send + Sync
 
     /// Perform multi-exponentiation. g and s must have the same length.
     fn multiexp<G: Curve<Self>>(&self, g: &[G::Affine], s: &[Self::Fr]) -> Result<G, ()>;
-    fn batch_baseexp<G: Curve<Self>, S: AsRef<[Self::Fr]>>(&self, table: &WindowTable<Self, G, Vec<G>>, scalars: S) -> Vec<G::Affine>;
+    fn batch_baseexp<G: Curve<Self>, S: AsRef<[Self::Fr]>>(&self, table: &wnaf::WindowTable<Self, G>, scalars: S) -> Vec<G::Affine>;
 
     fn batchexp<G: Curve<Self>, S: AsRef<[Self::Fr]>>(&self, g: &mut [G::Affine], scalars: S, coeff: Option<&Self::Fr>);
 }
@@ -63,9 +66,10 @@ pub trait Curve<E: Engine>: Sized +
                             Sync +
                             fmt::Debug +
                             'static +
-                            Group<E>
+                            Group<E> +
+                            self::multiexp::Projective<E>
 {
-    type Affine: CurveAffine<E, Self>;
+    type Affine: CurveAffine<E, Jacobian=Self>;
     type Prepared: Clone + Send + Sync + 'static;
 
     fn zero(&E) -> Self;
@@ -83,28 +87,53 @@ pub trait Curve<E: Engine>: Sized +
     fn add_assign(&mut self, &E, other: &Self);
     fn sub_assign(&mut self, &E, other: &Self);
     fn add_assign_mixed(&mut self, &E, other: &Self::Affine);
-    fn mul_assign<S: Convert<[u64], E>>(&mut self, &E, other: &S);
+    fn mul_assign<S: Convert<<E::Fr as PrimeField<E>>::Repr, E>>(&mut self, &E, other: &S);
 
     fn optimal_window(&E, scalar_bits: usize) -> Option<usize>;
-    fn optimal_window_batch(&self, &E, scalars: usize) -> WindowTable<E, Self, Vec<Self>>;
+    fn optimal_window_batch(&self, &E, scalars: usize) -> wnaf::WindowTable<E, Self>;
+
+    /// Performs optimal exponentiation of this curve element given the scalar, using
+    /// wNAF when necessary.
+    fn optimal_exp(
+        &self,
+        e: &E,
+        scalar: <E::Fr as PrimeField<E>>::Repr,
+        table: &mut wnaf::WindowTable<E, Self>,
+        scratch: &mut wnaf::WNAFTable
+    ) -> Self {
+        let bits = scalar.num_bits();
+        match Self::optimal_window(e, bits) {
+            Some(window) => {
+                table.set_base(e, *self, window);
+                scratch.set_scalar(table, scalar);
+                table.exp(e, scratch)
+            },
+            None => {
+                let mut tmp = *self;
+                tmp.mul_assign(e, &scalar);
+                tmp
+            }
+        }
+    }
 }
 
-pub trait CurveAffine<E: Engine, G: Curve<E>>: Copy +
-                                               Clone +
-                                               Sized +
-                                               Send +
-                                               Sync +
-                                               fmt::Debug +
-                                               PartialEq +
-                                               Eq +
-                                               'static
+pub trait CurveAffine<E: Engine>: Copy +
+                                  Clone +
+                                  Sized +
+                                  Send +
+                                  Sync +
+                                  fmt::Debug +
+                                  PartialEq +
+                                  Eq +
+                                  'static
 {
-    type Uncompressed: CurveRepresentation<E, G>;
+    type Jacobian: Curve<E, Affine=Self>;
+    type Uncompressed: CurveRepresentation<E, Affine=Self>;
 
-    fn to_jacobian(&self, &E) -> G;
-    fn prepare(self, &E) -> G::Prepared;
+    fn to_jacobian(&self, &E) -> Self::Jacobian;
+    fn prepare(self, &E) -> <Self::Jacobian as Curve<E>>::Prepared;
     fn is_zero(&self) -> bool;
-    fn mul<S: Convert<[u64], E>>(&self, &E, other: &S) -> G;
+    fn mul<S: Convert<<E::Fr as PrimeField<E>>::Repr, E>>(&self, &E, other: &S) -> Self::Jacobian;
     fn negate(&mut self, &E);
 
     /// Returns true iff the point is on the curve and in the correct
@@ -117,11 +146,13 @@ pub trait CurveAffine<E: Engine, G: Curve<E>>: Copy +
     fn to_uncompressed(&self, &E) -> Self::Uncompressed;
 }
 
-pub trait CurveRepresentation<E: Engine, G: Curve<E>>: Serialize + for<'a> Deserialize<'a>
+pub trait CurveRepresentation<E: Engine>: Serialize + for<'a> Deserialize<'a>
 {
+    type Affine: CurveAffine<E>;
+
     /// If the point representation is valid (lies on the curve, correct
     /// subgroup) this function will return it.
-    fn to_affine(&self, e: &E) -> Result<G::Affine, ()> {
+    fn to_affine(&self, e: &E) -> Result<Self::Affine, ()> {
         let p = try!(self.to_affine_unchecked(e));
 
         if p.is_valid(e) {
@@ -133,7 +164,7 @@ pub trait CurveRepresentation<E: Engine, G: Curve<E>>: Serialize + for<'a> Deser
 
     /// Returns the point under the assumption that it is valid. Undefined
     /// behavior if `to_affine` would have rejected the point.
-    fn to_affine_unchecked(&self, &E) -> Result<G::Affine, ()>;
+    fn to_affine_unchecked(&self, &E) -> Result<Self::Affine, ()>;
 }
 
 pub trait Field<E: Engine>: Sized +
@@ -158,11 +189,11 @@ pub trait Field<E: Engine>: Sized +
     fn mul_assign(&mut self, &E, other: &Self);
     fn inverse(&self, &E) -> Option<Self>;
     fn frobenius_map(&mut self, &E, power: usize);
-    fn pow<S: Convert<[u64], E>>(&self, engine: &E, exp: &S) -> Self
+    fn pow<S: AsRef<[u64]>>(&self, engine: &E, exp: S) -> Self
     {
         let mut res = Self::one(engine);
 
-        for i in BitIterator::from((*exp.convert(engine)).borrow()) {
+        for i in BitIterator::new(exp) {
             res.square(engine);
             if i {
                 res.mul_assign(engine, self);
@@ -180,17 +211,24 @@ pub trait SqrtField<E: Engine>: Field<E>
     fn sqrt(&self, engine: &E) -> Option<Self>;
 }
 
-pub trait PrimeField<E: Engine>: SqrtField<E> + Convert<[u64], E>
+pub trait PrimeFieldRepr: Clone + Eq + Ord + AsRef<[u64]> {
+    fn from_u64(a: u64) -> Self;
+    fn sub_noborrow(&mut self, other: &Self);
+    fn add_nocarry(&mut self, other: &Self);
+    fn num_bits(&self) -> usize;
+    fn is_zero(&self) -> bool;
+    fn is_odd(&self) -> bool;
+    fn div2(&mut self);
+}
+
+pub trait PrimeField<E: Engine>: SqrtField<E>
 {
-    /// Little endian representation of a field element.
-    type Repr: Convert<[u64], E> + Eq + Clone;
+    type Repr: PrimeFieldRepr;
+
     fn from_u64(&E, u64) -> Self;
     fn from_str(&E, s: &str) -> Result<Self, ()>;
     fn from_repr(&E, Self::Repr) -> Result<Self, ()>;
     fn into_repr(&self, &E) -> Self::Repr;
-
-    /// Returns an interator over all bits, most significant bit first.
-    fn bits(&self, &E) -> BitIterator<Self::Repr>;
 
     /// Returns the field characteristic; the modulus.
     fn char(&E) -> Self::Repr;
@@ -210,111 +248,6 @@ pub trait SnarkField<E: Engine>: PrimeField<E> + Group<E>
     fn multiplicative_generator(&E) -> Self;
     fn root_of_unity(&E) -> Self;
 }
-
-pub struct WindowTable<E, G, Table: Borrow<[G]>> {
-    table: Table,
-    wnaf: Vec<i64>,
-    window: usize,
-    _marker: PhantomData<(E, G)>
-}
-
-impl<E: Engine, G: Curve<E>> WindowTable<E, G, Vec<G>> {
-    fn new() -> Self {
-        WindowTable {
-            table: vec![],
-            wnaf: vec![],
-            window: 0,
-            _marker: PhantomData
-        }
-    }
-
-    fn set_base(&mut self, e: &E, base: &G, window: usize) {
-        assert!(window > 1);
-
-        self.window = window;
-        self.table.truncate(0);
-        self.table.reserve(1 << (window-1));
-
-        let mut tmp = *base;
-        let mut dbl = tmp;
-        dbl.double(e);
-
-        for _ in 0..(1 << (window-1)) {
-            self.table.push(tmp);
-            tmp.add_assign(e, &dbl);
-        }
-    }
-
-    fn shared(&self) -> WindowTable<E, G, &[G]> {
-        WindowTable {
-            table: &self.table[..],
-            wnaf: vec![],
-            window: self.window,
-            _marker: PhantomData
-        }
-    }
-}
-
-pub struct BitIterator<T> {
-    t: T,
-    n: usize
-}
-
-impl<T: AsRef<[u64]>> Iterator for BitIterator<T> {
-    type Item = bool;
-
-    fn next(&mut self) -> Option<bool> {
-        if self.n == 0 {
-            None
-        } else {
-            self.n -= 1;
-            let part = self.n / 64;
-            let bit = self.n - (64 * part);
-
-            Some(self.t.as_ref()[part] & (1 << bit) > 0)
-        }
-    }
-}
-
-impl<'a> From<&'a [u64]> for BitIterator<&'a [u64]>
-{
-    fn from(v: &'a [u64]) -> Self {
-        assert!(v.len() < 100);
-
-        BitIterator {
-            t: v,
-            n: v.len() * 64
-        }
-    }
-}
-
-macro_rules! bit_iter_impl(
-    ($n:expr) => {
-        impl From<[u64; $n]> for BitIterator<[u64; $n]> {
-            fn from(v: [u64; $n]) -> Self {
-                BitIterator {
-                    t: v,
-                    n: $n * 64
-                }
-            }
-        }
-
-        impl<E> Convert<[u64], E> for [u64; $n] {
-            type Target = [u64; $n];
-
-            fn convert(&self, _: &E) -> Cow<[u64; $n]> {
-                Cow::Borrowed(self)
-            }
-        }
-    };
-);
-
-bit_iter_impl!(1);
-bit_iter_impl!(2);
-bit_iter_impl!(3);
-bit_iter_impl!(4);
-bit_iter_impl!(5);
-bit_iter_impl!(6);
 
 #[cfg(test)]
 mod tests;

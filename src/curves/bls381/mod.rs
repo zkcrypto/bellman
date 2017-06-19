@@ -1,21 +1,24 @@
 use rand;
 use std::fmt;
 
+use std::cmp::Ordering;
 use std::borrow::Borrow;
+use ::BitIterator;
 use super::{
-    WindowTable,
     Engine,
     Group,
     Curve,
     CurveAffine,
     CurveRepresentation,
     PrimeField,
+    PrimeFieldRepr,
     Field,
     SnarkField,
     SqrtField,
-    BitIterator,
     Convert,
-    Cow
+    Cow,
+    multiexp,
+    wnaf
 };
 
 use serde::ser::{Serialize, Serializer, SerializeTuple};
@@ -61,6 +64,7 @@ fp_impl!(
     engine = Bls381,
     params = fqparams: FqParams,
     arith = fq_arith,
+    repr = FqRepr,
     limbs = 6,
     // q = 4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787
     modulus = [ 0xb9feffffffffaaab, 0x1eabfffeb153ffff, 0x6730d2a0f6b0f624, 0x64774b84f38512bf, 0x4b1ba7b6434bacd7, 0x1a0111ea397fe69a ],
@@ -80,6 +84,7 @@ fp_impl!(
     engine = Bls381,
     params = frparams: FrParams,
     arith = fr_arith,
+    repr = FrRepr,
     limbs = 4,
     // r = 52435875175126190479447740508185965837690552500527637822603658699938581184513
     modulus = [ 0xffffffff00000001, 0x53bda402fffe5bfe, 0x3339d80809a1d805, 0x73eda753299d7d48 ],
@@ -350,7 +355,9 @@ impl<'a> Deserialize<'a> for G2Uncompressed {
     }
 }
 
-impl CurveRepresentation<Bls381, G1> for G1Uncompressed {
+impl CurveRepresentation<Bls381> for G1Uncompressed {
+    type Affine = G1Affine;
+
     fn to_affine_unchecked(&self, e: &Bls381) -> Result<G1Affine, ()> {
         match self {
             &G1Uncompressed::Infinity => {
@@ -372,8 +379,8 @@ impl CurveRepresentation<Bls381, G1> for G1Uncompressed {
                 }
 
                 Ok(G1Affine {
-                    x: try!(Fq::from_repr(e, x)),
-                    y: try!(Fq::from_repr(e, y)),
+                    x: try!(Fq::from_repr(e, FqRepr(x))),
+                    y: try!(Fq::from_repr(e, FqRepr(y))),
                     infinity: false
                 })
             }
@@ -381,7 +388,9 @@ impl CurveRepresentation<Bls381, G1> for G1Uncompressed {
     }
 }
 
-impl CurveRepresentation<Bls381, G2> for G2Uncompressed {
+impl CurveRepresentation<Bls381> for G2Uncompressed {
+    type Affine = G2Affine;
+
     fn to_affine_unchecked(&self, e: &Bls381) -> Result<G2Affine, ()> {
         match self {
             &G2Uncompressed::Infinity => {
@@ -406,12 +415,12 @@ impl CurveRepresentation<Bls381, G2> for G2Uncompressed {
                     if let (Some(y_c1), y_c0) = fq_arith::divrem(&y, &e.fqparams.modulus) {
                         return Ok(G2Affine {
                             x: Fq2 {
-                                c0: try!(Fq::from_repr(e, x_c0)),
-                                c1: try!(Fq::from_repr(e, x_c1))
+                                c0: try!(Fq::from_repr(e, FqRepr(x_c0))),
+                                c1: try!(Fq::from_repr(e, FqRepr(x_c1)))
                             },
                             y: Fq2 {
-                                c0: try!(Fq::from_repr(e, y_c0)),
-                                c1: try!(Fq::from_repr(e, y_c1))
+                                c0: try!(Fq::from_repr(e, FqRepr(y_c0))),
+                                c1: try!(Fq::from_repr(e, FqRepr(y_c1)))
                             },
                             infinity: false
                         });
@@ -435,14 +444,14 @@ impl G1Uncompressed {
 
             {
                 let mut tmp = &mut tmp[0..];
-                for &digit in p.x.into_repr(e).iter().rev() {
+                for &digit in p.x.into_repr(e).0.iter().rev() {
                     tmp.write_u64::<BigEndian>(digit).unwrap();
                 }
             }
 
             {
                 let mut tmp = &mut tmp[48..];
-                for &digit in p.y.into_repr(e).iter().rev() {
+                for &digit in p.y.into_repr(e).0.iter().rev() {
                     tmp.write_u64::<BigEndian>(digit).unwrap();
                 }
             }
@@ -464,8 +473,8 @@ impl G2Uncompressed {
             {
                 let mut tmp = &mut tmp[0..];
                 let mut x = [0; 12];
-                fq_arith::mac3(&mut x, &p.x.c1.into_repr(e), &e.fqparams.modulus);
-                fq_arith::add_carry(&mut x, &p.x.c0.into_repr(e));
+                fq_arith::mac3(&mut x, &p.x.c1.into_repr(e).0, &e.fqparams.modulus);
+                fq_arith::add_carry(&mut x, &p.x.c0.into_repr(e).0);
 
                 for &digit in x.iter().rev() {
                     tmp.write_u64::<BigEndian>(digit).unwrap();
@@ -475,8 +484,8 @@ impl G2Uncompressed {
             {
                 let mut tmp = &mut tmp[96..];
                 let mut y = [0; 12];
-                fq_arith::mac3(&mut y, &p.y.c1.into_repr(e), &e.fqparams.modulus);
-                fq_arith::add_carry(&mut y, &p.y.c0.into_repr(e));
+                fq_arith::mac3(&mut y, &p.y.c1.into_repr(e).0, &e.fqparams.modulus);
+                fq_arith::add_carry(&mut y, &p.y.c0.into_repr(e).0);
 
                 for &digit in y.iter().rev() {
                     tmp.write_u64::<BigEndian>(digit).unwrap();
@@ -685,7 +694,7 @@ impl G2Prepared {
         let mut r = q.to_jacobian(e);
 
         let mut found_one = false;
-        for i in BitIterator::from([BLS_X >> 1]) {
+        for i in BitIterator::new(&[BLS_X >> 1]) {
             if !found_one {
                 found_one = i;
                 continue;
@@ -999,7 +1008,7 @@ impl Engine for Bls381 {
         let mut f = Fq12::one(self);
 
         let mut found_one = false;
-        for i in BitIterator::from([BLS_X >> 1]) {
+        for i in BitIterator::new(&[BLS_X >> 1]) {
             if !found_one {
                 found_one = i;
                 continue;
@@ -1037,7 +1046,8 @@ impl Engine for Bls381 {
         crossbeam::scope(|scope| {
             for (g, s) in g.chunks_mut(chunk).zip(scalars.as_ref().chunks(chunk)) {
                 scope.spawn(move || {
-                    let mut table = WindowTable::new();
+                    let mut table = wnaf::WindowTable::new(self, G::zero(self), 2);
+                    let mut scratch = wnaf::WNAFTable::new();
 
                     for (g, s) in g.iter_mut().zip(s.iter()) {
                         let mut s = *s;
@@ -1047,16 +1057,16 @@ impl Engine for Bls381 {
                             },
                             _ => {}
                         };
-                        let mut newg = g.to_jacobian(self);
-                        opt_exp(self, &mut newg, s.into_repr(self), &mut table);
-                        *g = newg.to_affine(self);
+                        *g = g.to_jacobian(self)
+                              .optimal_exp(self, s.into_repr(self), &mut table, &mut scratch)
+                              .to_affine(self);
                     }
                 });
             }
         });
     }
 
-    fn batch_baseexp<G: Curve<Self>, S: AsRef<[Self::Fr]>>(&self, table: &WindowTable<Self, G, Vec<G>>, s: S) -> Vec<G::Affine>
+    fn batch_baseexp<G: Curve<Self>, S: AsRef<[Self::Fr]>>(&self, table: &wnaf::WindowTable<Self, G>, s: S) -> Vec<G::Affine>
     {
         use crossbeam;
         use num_cpus;
@@ -1068,13 +1078,12 @@ impl Engine for Bls381 {
             let chunk = (s.len() / num_cpus::get()) + 1;
 
             for (s, b) in s.chunks(chunk).zip(ret.chunks_mut(chunk)) {
-                let mut table = table.shared();
-
                 scope.spawn(move || {
+                    let mut scratch = wnaf::WNAFTable::new();
+
                     for (s, b) in s.iter().zip(b.iter_mut()) {
-                        let mut tmp = G::zero(self);
-                        table.exp(self, &mut tmp, s.into_repr(self));
-                        *b = tmp.to_affine(self);
+                        scratch.set_scalar(table, s.into_repr(self));
+                        *b = table.exp(self, &scratch).to_affine(self);
                     }
                 });
             }
@@ -1084,232 +1093,7 @@ impl Engine for Bls381 {
     }
 
     fn multiexp<G: Curve<Self>>(&self, g: &[G::Affine], s: &[Fr]) -> Result<G, ()> {
-        if g.len() != s.len() {
-            return Err(());
-        }
-
-        use crossbeam;
-        use num_cpus;
-
-        return crossbeam::scope(|scope| {
-            let mut threads = vec![];
-
-            let chunk = (s.len() / num_cpus::get()) + 1;
-
-            for (g, s) in g.chunks(chunk).zip(s.chunks(chunk)) {
-                threads.push(scope.spawn(move || {
-                    multiexp_inner(self, g, s)
-                }));
-            }
-
-            let mut acc = G::zero(self);
-            for t in threads {
-                acc.add_assign(self, &t.join());
-            }
-
-            Ok(acc)
-        });
-
-        fn multiexp_inner<G: Curve<Bls381>>(engine: &Bls381, g: &[G::Affine], s: &[Fr]) -> G
-        {
-            // This performs a multi-exponentiation calculation, i.e., multiplies
-            // each group element by the corresponding scalar and adds all of the
-            // terms together. We use the Bos-Coster algorithm to do this: sort
-            // the exponents using a max heap, and rewrite the first two terms
-            // a x + b y = (a-b) x + b(y+x). Reinsert the first element into the
-            // heap after performing cheap scalar subtraction, and perform the
-            // point addition. This continues until the heap is emptied as
-            // elements are multiplied when a certain efficiency threshold is met
-            // or discarded when their exponents become zero. The result of all
-            // the multiplications are accumulated and returned when the heap
-            // is empty.
-
-            assert!(g.len() == s.len());
-
-            use std::cmp::Ordering;
-            use std::collections::BinaryHeap;
-
-            struct Exp {
-                index: usize,
-                value: <Fr as PrimeField<Bls381>>::Repr
-            }
-
-            impl Exp {
-                fn bits(&self) -> usize {
-                    fr_arith::num_bits(&self.value)
-                }
-
-                fn justexp(&self, sub: &Exp) -> bool {
-                    use std::cmp::min;
-
-                    let bbits = sub.bits();
-                    let abits = self.bits();
-                    let limit = min(abits-bbits, 20);
-
-                    if bbits < (1<<limit) {
-                        true
-                    } else {
-                        false
-                    }
-                }
-
-                fn is_zero(&self) -> bool {
-                    self.value.iter().all(|&e| e == 0)
-                }
-            }
-
-            impl Ord for Exp {
-                fn cmp(&self, other: &Exp) -> Ordering {
-                    if fr_arith::lt(&self.value, &other.value) {
-                        Ordering::Less
-                    } else if self.value == other.value {
-                        Ordering::Equal
-                    } else {
-                        Ordering::Greater
-                    }
-                }
-            }
-
-            impl PartialOrd for Exp {
-                fn partial_cmp(&self, other: &Exp) -> Option<Ordering> {
-                    Some(self.cmp(other))
-                }
-            }
-
-            impl PartialEq for Exp {
-                fn eq(&self, other: &Exp) -> bool {
-                    self.value == other.value
-                }
-            }
-
-            impl Eq for Exp { }
-
-            let mut result = G::zero(engine);
-            let one = Fr::one(engine);
-
-            let mut elements = Vec::with_capacity(g.len());
-            let mut heap = BinaryHeap::with_capacity(g.len());
-
-            for (g, s) in g.iter().zip(s.iter()) {
-                if s.is_zero() || g.is_zero() {
-                    // Skip.
-                    continue;
-                }
-
-                if s == &one {
-                    // Just add.
-                    result.add_assign_mixed(engine, &g);
-                    continue;
-                }
-
-                let index = elements.len();
-                elements.push(g.to_jacobian(engine));
-
-                heap.push(Exp {
-                    index: index,
-                    value: s.into_repr(engine)
-                });
-            }
-
-            let mut table = WindowTable::new();
-
-            while let Some(mut greatest) = heap.pop() {
-                {
-                    let second_greatest = heap.peek();
-                    if second_greatest.is_none() || greatest.justexp(second_greatest.unwrap()) {
-                        // Either this is the last value or multiplying is considered more efficient than
-                        // rewriting and reinsertion into the heap.
-                        opt_exp(engine, &mut elements[greatest.index], greatest.value, &mut table);
-                        result.add_assign(engine, &elements[greatest.index]);
-                        continue;
-                    } else {
-                        // Rewrite
-                        let second_greatest = second_greatest.unwrap();
-
-                        fr_arith::sub_noborrow(&mut greatest.value, &second_greatest.value);
-                        let mut tmp = elements[second_greatest.index];
-                        tmp.add_assign(engine, &elements[greatest.index]);
-                        elements[second_greatest.index] = tmp;
-                    }
-                }
-                if !greatest.is_zero() {
-                    // Reinsert only nonzero scalars.
-                    heap.push(greatest);
-                }
-            }
-
-            result
-        }
-    }
-}
-
-impl<G: Curve<Bls381>, B: Borrow<[G]>> WindowTable<Bls381, G, B> {
-    fn exp(&mut self, e: &Bls381, into: &mut G, mut c: <Fr as PrimeField<Bls381>>::Repr) {
-        assert!(self.window > 1);
-
-        self.wnaf.truncate(0);
-        self.wnaf.reserve(Fr::num_bits(e) + 1);
-
-        // Convert the scalar `c` into wNAF form.
-        {
-            use std::default::Default;
-            let mut tmp = <Fr as PrimeField<Bls381>>::Repr::default();
-
-            while !c.iter().all(|&e| e==0) {
-                let mut u;
-                if fr_arith::odd(&c) {
-                    u = (c[0] % (1 << (self.window+1))) as i64;
-
-                    if u > (1 << self.window) {
-                        u -= 1 << (self.window+1);
-                    }
-
-                    if u > 0 {
-                        tmp[0] = u as u64;
-                        fr_arith::sub_noborrow(&mut c, &tmp);
-                    } else {
-                        tmp[0] = (-u) as u64;
-                        fr_arith::add_nocarry(&mut c, &tmp);
-                    }
-                } else {
-                    u = 0;
-                }
-
-                self.wnaf.push(u);
-
-                fr_arith::div2(&mut c);
-            }
-        }
-
-        // Perform wNAF exponentiation.
-        *into = G::zero(e);
-
-        for n in self.wnaf.iter().rev() {
-            into.double(e);
-
-            if *n != 0 {
-                if *n > 0 {
-                    into.add_assign(e, &self.table.borrow()[(n/2) as usize]);
-                } else {
-                    into.sub_assign(e, &self.table.borrow()[((-n)/2) as usize]);
-                }
-            }
-        }
-    }
-}
-
-// Performs optimal exponentiation
-fn opt_exp<G: Curve<Bls381>>(e: &Bls381, base: &mut G, scalar: <Fr as PrimeField<Bls381>>::Repr, table: &mut WindowTable<Bls381, G, Vec<G>>)
-{
-    let bits = fr_arith::num_bits(&scalar);
-    match G::optimal_window(e, bits) {
-        Some(window) => {
-            table.set_base(e, base, window);
-            table.exp(e, base, scalar);
-        },
-        None => {
-            base.mul_assign(e, &scalar);
-        }
+        super::multiexp::perform_multiexp(self, g, s)
     }
 }
 
