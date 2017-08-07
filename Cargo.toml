@@ -9,11 +9,11 @@ repository = "https://github.com/ebfull/bellman"
 version = "0.0.3"
 
 [dependencies]
-rand = "0.3.*"
-byteorder = "1.*"
-serde = "1.0"
-crossbeam = "0.2"
-num_cpus = "1.0"
+#rand = "0.3.*"
+#byteorder = "1.*"
+#serde = "1.0"
+#crossbeam = "0.2"
+#num_cpus = "1.0"
 
 [dev-dependencies]
-bincode = "0.8.0"
+#bincode = "0.8.0"
