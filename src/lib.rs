@@ -43,6 +43,10 @@ enum Index {
     Aux(usize)
 }
 
+pub trait TypedVariable {
+    fn var(&self) -> Variable;
+}
+
 pub struct LinearCombination<E: Engine>(Vec<(Index, E::Fr)>);
 
 impl<E: Engine> Clone for LinearCombination<E> {
@@ -141,6 +145,38 @@ impl<E: Engine> Sub<(E::Fr, Variable)> for LinearCombination<E> {
         coeff.negate();
 
         self + (coeff, var)
+    }
+}
+
+impl<'a, E: Engine, T: TypedVariable> Add<&'a T> for LinearCombination<E> {
+    type Output = LinearCombination<E>;
+
+    fn add(self, t: &'a T) -> LinearCombination<E> {
+        self + t.var()
+    }
+}
+
+impl<'a, E: Engine, T: TypedVariable> Sub<&'a T> for LinearCombination<E> {
+    type Output = LinearCombination<E>;
+
+    fn sub(self, t: &'a T) -> LinearCombination<E> {
+        self - t.var()
+    }
+}
+
+impl<'a, E: Engine, T: TypedVariable> Add<(E::Fr, &'a T)> for LinearCombination<E> {
+    type Output = LinearCombination<E>;
+
+    fn add(self, (coeff, t): (E::Fr, &'a T)) -> LinearCombination<E> {
+        self + (coeff, t.var())
+    }
+}
+
+impl<'a, E: Engine, T: TypedVariable> Sub<(E::Fr, &'a T)> for LinearCombination<E> {
+    type Output = LinearCombination<E>;
+
+    fn sub(self, (coeff, t): (E::Fr, &'a T)) -> LinearCombination<E> {
+        self - (coeff, t.var())
     }
 }
 
