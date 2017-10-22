@@ -204,7 +204,7 @@ fn multiexp_inner<Q, D, G, S>(
 
     skip += c;
 
-    if skip >= <G::Engine as Engine>::Fr::num_bits() {
+    if skip >= <G::Engine as Engine>::Fr::NUM_BITS {
         // There isn't another region.
         this.boxed()
     } else {

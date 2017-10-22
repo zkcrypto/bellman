@@ -42,13 +42,13 @@ impl<E: Engine, G: Group<E>> EvaluationDomain<E, G> {
             m *= 2;
             exp += 1;
 
-            if exp >= E::Fr::s() {
+            if exp >= E::Fr::S {
                 return Err(Error::PolynomialDegreeTooLarge)
             }
         }
 
         let mut omega = E::Fr::root_of_unity();
-        for _ in exp..E::Fr::s() {
+        for _ in exp..E::Fr::S {
             omega.square();
         }
 

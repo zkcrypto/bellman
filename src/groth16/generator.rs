@@ -1,5 +1,4 @@
 use pairing::*;
-use pairing::wnaf::*;
 use ::{
     Input,
     Error,
@@ -170,8 +169,8 @@ pub fn generate_parameters<E, C>(
     let mut powers_of_tau = EvaluationDomain::from_coeffs(powers_of_tau)?;
 
     // Compute G1 window table
-    let mut g1_table = vec![];
-    let g1_table_size = E::G1::recommended_wnaf_for_num_scalars(
+    let mut g1_wnaf = Wnaf::new();
+    let g1_wnaf = g1_wnaf.base(g1, {
         // H query
         (powers_of_tau.as_ref().len() - 1)
         // IC/L queries
@@ -180,16 +179,14 @@ pub fn generate_parameters<E, C>(
         + assembly.num_inputs + assembly.num_aux
         // B query
         + assembly.num_inputs + assembly.num_aux
-    );
-    wnaf_table(&mut g1_table, g1, g1_table_size);
+    });
 
     // Compute G2 window table
-    let mut g2_table = vec![];
-    let g2_table_size = E::G2::recommended_wnaf_for_num_scalars(
+    let mut g2_wnaf = Wnaf::new();
+    let g2_wnaf = g2_wnaf.base(g2, {
         // B query
         assembly.num_inputs + assembly.num_aux
-    );
-    wnaf_table(&mut g2_table, g2, g2_table_size);
+    });
 
     let gamma_inverse = gamma.inverse().ok_or(Error::UnexpectedIdentity)?;
     let delta_inverse = delta.inverse().ok_or(Error::UnexpectedIdentity)?;
@@ -223,12 +220,9 @@ pub fn generate_parameters<E, C>(
         multicore::scope(h.len(), |scope, chunk| {
             for (h, p) in h.chunks_mut(chunk).zip(powers_of_tau.as_ref().chunks(chunk))
             {
-                let g1_table = &g1_table;
+                let mut g1_wnaf = g1_wnaf.shared();
 
                 scope.spawn(move || {
-                    // Create wNAF form storage location for this thread
-                    let mut wnaf = vec![];
-
                     // Set values of the H query to g1^{(tau^i * t(tau)) / delta}
                     for (h, p) in h.iter_mut().zip(p.iter())
                     {
@@ -236,11 +230,8 @@ pub fn generate_parameters<E, C>(
                         let mut exp = p.0;
                         exp.mul_assign(&coeff);
 
-                        // Compute wNAF form of exponent
-                        wnaf_form(&mut wnaf, exp.into_repr(), g1_table_size);
-
                         // Exponentiate
-                        *h = wnaf_exp(g1_table, &wnaf);
+                        *h = g1_wnaf.scalar(exp.into_repr());
                     }
 
                     // Batch normalize
@@ -262,10 +253,8 @@ pub fn generate_parameters<E, C>(
 
     fn eval<E: Engine>(
         // wNAF window tables
-        g1_table: &[E::G1],
-        g1_table_size: usize,
-        g2_table: &[E::G2],
-        g2_table_size: usize,
+        g1_wnaf: &Wnaf<usize, &[E::G1], &mut Vec<i64>>,
+        g2_wnaf: &Wnaf<usize, &[E::G2], &mut Vec<i64>>,
 
         // Lagrange coefficients for tau
         powers_of_tau: &[Scalar<E>],
@@ -307,10 +296,10 @@ pub fn generate_parameters<E, C>(
                                                                .zip(bt.chunks(chunk))
                                                                .zip(ct.chunks(chunk))
             {
-                scope.spawn(move || {
-                    // Create wNAF form storage location for this thread
-                    let mut wnaf = vec![];
+                let mut g1_wnaf = g1_wnaf.shared();
+                let mut g2_wnaf = g2_wnaf.shared();
 
+                scope.spawn(move || {
                     for ((((((a, b_g1), b_g2), ext), at), bt), ct) in a.iter_mut()
                                                                        .zip(b_g1.iter_mut())
                                                                        .zip(b_g2.iter_mut())
@@ -342,24 +331,14 @@ pub fn generate_parameters<E, C>(
 
                         // Compute A query (in G1)
                         if !at.is_zero() {
-                            wnaf_form(&mut wnaf, at.into_repr(), g1_table_size);
-                            *a = wnaf_exp(&g1_table, &wnaf);
+                            *a = g1_wnaf.scalar(at.into_repr());
                         }
 
                         // Compute B query (in G1/G2)
                         if !bt.is_zero() {
-                            // Normalize the field element once
                             let bt_repr = bt.into_repr();
-                            wnaf_form(&mut wnaf, bt_repr, g1_table_size);
-                            *b_g1 = wnaf_exp(&g1_table, &wnaf);
-
-                            // G1 window table might use the same window size
-                            // as the G2 window table, so we wouldn't need to
-                            // recompute the wNAF form of the exponent.
-                            if g1_table_size != g2_table_size {
-                                wnaf_form(&mut wnaf, bt_repr, g2_table_size);
-                            }
-                            *b_g2 = wnaf_exp(&g2_table, &wnaf);
+                            *b_g1 = g1_wnaf.scalar(bt_repr);
+                            *b_g2 = g2_wnaf.scalar(bt_repr);
                         }
 
                         at.mul_assign(&beta);
@@ -370,8 +349,7 @@ pub fn generate_parameters<E, C>(
                         e.add_assign(&ct);
                         e.mul_assign(inv);
 
-                        wnaf_form(&mut wnaf, e.into_repr(), g1_table_size);
-                        *ext = wnaf_exp(&g1_table, &wnaf);
+                        *ext = g1_wnaf.scalar(e.into_repr());
                     }
 
                     // Batch normalize
@@ -386,10 +364,8 @@ pub fn generate_parameters<E, C>(
 
     // Evaluate for inputs.
     eval(
-        &g1_table,
-        g1_table_size,
-        &g2_table,
-        g2_table_size,
+        &g1_wnaf,
+        &g2_wnaf,
         &powers_of_tau,
         &assembly.at_inputs,
         &assembly.bt_inputs,
@@ -405,10 +381,8 @@ pub fn generate_parameters<E, C>(
 
     // Evaluate for auxillary variables.
     eval(
-        &g1_table,
-        g1_table_size,
-        &g2_table,
-        g2_table_size,
+        &g1_wnaf,
+        &g2_wnaf,
         &powers_of_tau,
         &assembly.at_aux,
         &assembly.bt_aux,
