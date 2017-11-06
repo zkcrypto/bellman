@@ -18,5 +18,5 @@ crossbeam = "0.3"
 pairing = "0.13"
 
 [features]
-default = ["u128-support"]
+default = []
 u128-support = ["pairing/u128-support"]
