@@ -25,7 +25,8 @@ pub enum Error {
     AssignmentMissing,
     UnexpectedIdentity,
     UnconstrainedVariable(Variable),
-    IoError(io::Error)
+    IoError(io::Error),
+    NameConflict(&'static str, String)
 }
 
 impl From<io::Error> for Error {
@@ -185,7 +186,12 @@ pub trait Input<E: Engine> {
 pub trait PublicConstraintSystem<E: Engine>: ConstraintSystem<E> {
     /// Allocate a public input that the verifier knows. The provided function is used to
     /// determine the assignment of the variable.
-    fn alloc_input<F: FnOnce() -> Result<E::Fr, Error>>(&mut self, f: F) -> Result<Variable, Error>;
+    fn alloc_input<NR, N, F>(
+        &mut self,
+        name_fn: N,
+        f: F
+    ) -> Result<Variable, Error>
+        where NR: Into<String>, N: FnOnce() -> NR, F: FnOnce() -> Result<E::Fr, Error>;
 }
 
 pub trait ConstraintSystem<E: Engine> {
@@ -196,13 +202,30 @@ pub trait ConstraintSystem<E: Engine> {
 
     /// Allocate a private variable in the constraint system. The provided function is used to
     /// determine the assignment of the variable.
-    fn alloc<F: FnOnce() -> Result<E::Fr, Error>>(&mut self, f: F) -> Result<Variable, Error>;
+    fn alloc<NR, N, F>(
+        &mut self,
+        name_fn: N,
+        f: F
+    ) -> Result<Variable, Error>
+        where NR: Into<String>, N: FnOnce() -> NR, F: FnOnce() -> Result<E::Fr, Error>;
 
     /// Enforce that `A` * `B` = `C`.
-    fn enforce(
+    fn enforce<NR: Into<String>, N: FnOnce() -> NR>(
         &mut self,
+        name_fn: N,
         a: LinearCombination<E>,
         b: LinearCombination<E>,
         c: LinearCombination<E>
     );
+
+    /// Begin a namespace for the constraint system
+    fn namespace<NR, N, R, F>(
+        &mut self,
+        _: N,
+        space_fn: F
+    ) -> Result<R, Error>
+        where NR: Into<String>, N: FnOnce() -> NR, F: FnOnce(&mut Self) -> Result<R, Error>
+    {
+        space_fn(self)
+    }
 }

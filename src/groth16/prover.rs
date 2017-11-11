@@ -55,8 +55,14 @@ pub fn create_proof<E, C, P: ParameterSource<E>>(
     }
 
     impl<E: Engine> PublicConstraintSystem<E> for ProvingAssignment<E> {
-        fn alloc_input<F: FnOnce() -> Result<E::Fr, Error>>(&mut self, value: F) -> Result<Variable, Error> {
-            self.input_assignment.push(value()?);
+        fn alloc_input<NR, N, F>(
+            &mut self,
+            _: N,
+            f: F
+        ) -> Result<Variable, Error>
+            where NR: Into<String>, N: FnOnce() -> NR, F: FnOnce() -> Result<E::Fr, Error>
+        {
+            self.input_assignment.push(f()?);
             self.b_input_density.add_element();
 
             Ok(Variable(Index::Input(self.input_assignment.len() - 1)))
@@ -64,16 +70,23 @@ pub fn create_proof<E, C, P: ParameterSource<E>>(
     }
 
     impl<E: Engine> ConstraintSystem<E> for ProvingAssignment<E> {
-        fn alloc<F: FnOnce() -> Result<E::Fr, Error>>(&mut self, value: F) -> Result<Variable, Error> {
-            self.aux_assignment.push(value()?);
+        fn alloc<NR, N, F>(
+            &mut self,
+            _: N,
+            f: F
+        ) -> Result<Variable, Error>
+            where NR: Into<String>, N: FnOnce() -> NR, F: FnOnce() -> Result<E::Fr, Error>
+        {
+            self.aux_assignment.push(f()?);
             self.a_aux_density.add_element();
             self.b_aux_density.add_element();
 
             Ok(Variable(Index::Aux(self.aux_assignment.len() - 1)))
         }
 
-        fn enforce(
+        fn enforce<NR: Into<String>, N: FnOnce() -> NR>(
             &mut self,
+            _: N,
             a: LinearCombination<E>,
             b: LinearCombination<E>,
             c: LinearCombination<E>
@@ -96,13 +109,14 @@ pub fn create_proof<E, C, P: ParameterSource<E>>(
         aux_assignment: vec![]
     };
 
-    prover.alloc_input(|| Ok(E::Fr::one()))?;
+    prover.alloc_input(|| "", || Ok(E::Fr::one()))?;
 
     circuit.synthesize(&mut prover)?.synthesize(&mut prover)?;
 
     // Input consistency constraints: x * 0 = 0
     for i in 0..prover.input_assignment.len() {
-        prover.enforce(LinearCombination::zero() + Variable(Index::Input(i)),
+        prover.enforce(|| "",
+                       LinearCombination::zero() + Variable(Index::Input(i)),
                        LinearCombination::zero(),
                        LinearCombination::zero());
     }

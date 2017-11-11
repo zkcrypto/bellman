@@ -69,7 +69,13 @@ pub fn generate_parameters<E, C>(
     }
 
     impl<E: Engine> PublicConstraintSystem<E> for KeypairAssembly<E> {
-        fn alloc_input<F: FnOnce() -> Result<E::Fr, Error>>(&mut self, f: F) -> Result<Variable, Error> {
+        fn alloc_input<NR, N, F>(
+            &mut self,
+            _: N,
+            f: F
+        ) -> Result<Variable, Error>
+            where NR: Into<String>, N: FnOnce() -> NR, F: FnOnce() -> Result<E::Fr, Error>
+        {
             // In this context, we don't have an assignment.
             let _ = f();
 
@@ -85,7 +91,13 @@ pub fn generate_parameters<E, C>(
     }
 
     impl<E: Engine> ConstraintSystem<E> for KeypairAssembly<E> {
-        fn alloc<F: FnOnce() -> Result<E::Fr, Error>>(&mut self, f: F) -> Result<Variable, Error> {
+        fn alloc<NR, N, F>(
+            &mut self,
+            _: N,
+            f: F
+        ) -> Result<Variable, Error>
+            where NR: Into<String>, N: FnOnce() -> NR, F: FnOnce() -> Result<E::Fr, Error>
+        {
             // In this context, we don't have an assignment.
             let _ = f();
 
@@ -99,8 +111,9 @@ pub fn generate_parameters<E, C>(
             Ok(Variable(Index::Aux(index)))
         }
 
-        fn enforce(
+        fn enforce<NR: Into<String>, N: FnOnce() -> NR>(
             &mut self,
+            _: N,
             a: LinearCombination<E>,
             b: LinearCombination<E>,
             c: LinearCombination<E>
@@ -142,14 +155,15 @@ pub fn generate_parameters<E, C>(
     };
 
     // Allocate the "one" input variable
-    assembly.alloc_input(|| Ok(E::Fr::one()))?;
+    assembly.alloc_input(|| "", || Ok(E::Fr::one()))?;
 
     // Synthesize the circuit.
     circuit.synthesize(&mut assembly)?.synthesize(&mut assembly)?;
 
     // Input consistency constraints: x * 0 = 0
     for i in 0..assembly.num_inputs {
-        assembly.enforce(LinearCombination::zero() + Variable(Index::Input(i)),
+        assembly.enforce(|| "",
+                         LinearCombination::zero() + Variable(Index::Input(i)),
                          LinearCombination::zero(),
                          LinearCombination::zero());
     }

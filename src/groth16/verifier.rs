@@ -22,7 +22,13 @@ pub struct VerifierInput<'a, E: Engine> {
 }
 
 impl<'a, E: Engine> ConstraintSystem<E> for VerifierInput<'a, E> {
-    fn alloc<F: FnOnce() -> Result<E::Fr, Error>>(&mut self, f: F) -> Result<Variable, Error> {
+    fn alloc<NR, N, F>(
+        &mut self,
+        _: N,
+        f: F
+    ) -> Result<Variable, Error>
+        where NR: Into<String>, N: FnOnce() -> NR, F: FnOnce() -> Result<E::Fr, Error>
+    {
         // Run the function for calculating the allocation but ignore the output,
         // since we don't care about the assignment of auxillary variables during
         // verification.
@@ -34,8 +40,9 @@ impl<'a, E: Engine> ConstraintSystem<E> for VerifierInput<'a, E> {
         Ok(Variable(Index::Aux(index)))
     }
 
-    fn enforce(
+    fn enforce<NR: Into<String>, N: FnOnce() -> NR>(
         &mut self,
+        _: N,
         _: LinearCombination<E>,
         _: LinearCombination<E>,
         _: LinearCombination<E>
@@ -51,12 +58,19 @@ impl<'a, E: Engine> ConstraintSystem<E> for VerifierInput<'a, E> {
 struct InputAllocator<T>(T);
 
 impl<'a, 'b, E: Engine> ConstraintSystem<E> for InputAllocator<&'a mut VerifierInput<'b, E>> {
-    fn alloc<F: FnOnce() -> Result<E::Fr, Error>>(&mut self, value: F) -> Result<Variable, Error> {
-        self.0.alloc(value)
+    fn alloc<NR, N, F>(
+        &mut self,
+        name_fn: N,
+        f: F
+    ) -> Result<Variable, Error>
+        where NR: Into<String>, N: FnOnce() -> NR, F: FnOnce() -> Result<E::Fr, Error>
+    {
+        self.0.alloc(name_fn, f)
     }
 
-    fn enforce(
+    fn enforce<NR: Into<String>, N: FnOnce() -> NR>(
         &mut self,
+        _: N,
         _: LinearCombination<E>,
         _: LinearCombination<E>,
         _: LinearCombination<E>
@@ -68,11 +82,17 @@ impl<'a, 'b, E: Engine> ConstraintSystem<E> for InputAllocator<&'a mut VerifierI
 }
 
 impl<'a, 'b, E: Engine> PublicConstraintSystem<E> for InputAllocator<&'a mut VerifierInput<'b, E>> {
-    fn alloc_input<F: FnOnce() -> Result<E::Fr, Error>>(&mut self, value: F) -> Result<Variable, Error> {
+    fn alloc_input<NR, N, F>(
+        &mut self,
+        _: N,
+        f: F
+    ) -> Result<Variable, Error>
+        where NR: Into<String>, N: FnOnce() -> NR, F: FnOnce() -> Result<E::Fr, Error>
+    {
         if self.0.ic.len() == 0 {
             self.0.insufficient_inputs = true;
         } else {
-            self.0.acc.add_assign(&self.0.ic[0].mul(value()?));
+            self.0.acc.add_assign(&self.0.ic[0].mul(f()?));
             self.0.ic = &self.0.ic[1..];
         }
 
