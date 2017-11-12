@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::io;
 use bit_vec::{self, BitVec};
 use std::iter;
-use futures::{BoxFuture, Future};
+use futures::{Future};
 use futures_cpupool::CpuPool;
 
 use super::Error;
@@ -138,7 +138,7 @@ fn multiexp_inner<Q, D, G, S>(
     mut skip: u32,
     c: u32,
     handle_trivial: bool
-) -> BoxFuture<<G as CurveAffine>::Projective, Error>
+) -> Box<Future<Item=<G as CurveAffine>::Projective, Error=Error>>
     where for<'a> &'a Q: QueryDensity,
           D: Send + Sync + 'static + Clone + AsRef<Q>,
           G: CurveAffine,
@@ -206,21 +206,22 @@ fn multiexp_inner<Q, D, G, S>(
 
     if skip >= <G::Engine as Engine>::Fr::NUM_BITS {
         // There isn't another region.
-        this.boxed()
+        Box::new(this)
     } else {
         // There's another region more significant. Calculate and join it with
         // this region recursively.
-        this.join(multiexp_inner(pool, bases, density_map, exponents, skip, c, false))
-            .map(move |(this, mut higher)| {
-                for _ in 0..c {
-                    higher.double();
-                }
+        Box::new(
+            this.join(multiexp_inner(pool, bases, density_map, exponents, skip, c, false))
+                .map(move |(this, mut higher)| {
+                    for _ in 0..c {
+                        higher.double();
+                    }
 
-                higher.add_assign(&this);
+                    higher.add_assign(&this);
 
-                higher
-            })
-            .boxed()
+                    higher
+                })
+        )
     }
 }
 
@@ -233,7 +234,7 @@ pub fn multiexp<Q, D, G, S>(
     exponents: Arc<Vec<<<G::Engine as Engine>::Fr as PrimeField>::Repr>>,
 // TODO
 //    c: u32
-) -> BoxFuture<<G as CurveAffine>::Projective, Error>
+) -> Box<Future<Item=<G as CurveAffine>::Projective, Error=Error>>
     where for<'a> &'a Q: QueryDensity,
           D: Send + Sync + 'static + Clone + AsRef<Q>,
           G: CurveAffine,

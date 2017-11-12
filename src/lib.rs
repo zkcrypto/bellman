@@ -57,7 +57,7 @@ impl<E: Engine> LinearCombination<E> {
     }
 
     pub fn eval(
-        self,
+        &self,
         mut input_density: Option<&mut DensityTracker>,
         mut aux_density: Option<&mut DensityTracker>,
         input_assignment: &[E::Fr],
@@ -66,7 +66,7 @@ impl<E: Engine> LinearCombination<E> {
     {
         let mut acc = E::Fr::zero();
 
-        for (index, coeff) in self.0.into_iter() {
+        for &(index, coeff) in self.0.iter() {
             let mut tmp;
 
             match index {
@@ -262,11 +262,9 @@ impl<E: Engine> TestConstraintSystem<E> {
     pub fn is_satisfied(&self) -> bool
     {
         for &(ref a, ref b, ref c) in &self.constraints {
-            // TODO: make eval not take self by value
-
-            let mut a = a.clone().eval(None, None, &self.inputs, &self.aux);
-            let b = b.clone().eval(None, None, &self.inputs, &self.aux);
-            let c = c.clone().eval(None, None, &self.inputs, &self.aux);
+            let mut a = a.eval(None, None, &self.inputs, &self.aux);
+            let b = b.eval(None, None, &self.inputs, &self.aux);
+            let c = c.eval(None, None, &self.inputs, &self.aux);
 
             a.mul_assign(&b);
 
