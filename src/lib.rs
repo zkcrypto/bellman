@@ -13,10 +13,7 @@ use std::io;
 pub mod multicore;
 pub mod domain;
 pub mod groth16;
-
 pub mod multiexp;
-// TODO: remove this from public API?
-pub use self::multiexp::{DensityTracker, FullDensity, multiexp};
 
 #[derive(Debug)]
 pub enum Error {
@@ -58,8 +55,8 @@ impl<E: Engine> LinearCombination<E> {
 
     pub fn eval(
         &self,
-        mut input_density: Option<&mut DensityTracker>,
-        mut aux_density: Option<&mut DensityTracker>,
+        mut input_density: Option<&mut multiexp::DensityTracker>,
+        mut aux_density: Option<&mut multiexp::DensityTracker>,
         input_assignment: &[E::Fr],
         aux_assignment: &[E::Fr]
     ) -> E::Fr
