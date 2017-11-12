@@ -231,15 +231,19 @@ pub fn multiexp<Q, D, G, S>(
     pool: &CpuPool,
     bases: S,
     density_map: D,
-    exponents: Arc<Vec<<<G::Engine as Engine>::Fr as PrimeField>::Repr>>,
-// TODO
-//    c: u32
+    exponents: Arc<Vec<<<G::Engine as Engine>::Fr as PrimeField>::Repr>>
 ) -> Box<Future<Item=<G as CurveAffine>::Projective, Error=Error>>
     where for<'a> &'a Q: QueryDensity,
           D: Send + Sync + 'static + Clone + AsRef<Q>,
           G: CurveAffine,
           S: SourceBuilder<G>
 {
+    let c = if exponents.len() < 32 {
+        3u32
+    } else {
+        (f64::from(exponents.len() as u32)).ln().ceil() as u32
+    };
+
     if let Some(query_size) = density_map.as_ref().get_query_size() {
         // If the density map has a known query size, it should not be
         // inconsistent with the number of exponents.
@@ -247,7 +251,7 @@ pub fn multiexp<Q, D, G, S>(
         assert!(query_size == exponents.len());
     }
 
-    multiexp_inner(pool, bases, density_map, exponents, 0, 12, true)
+    multiexp_inner(pool, bases, density_map, exponents, 0, c, true)
 }
 
 #[test]
@@ -285,9 +289,7 @@ fn test_with_bls12() {
         &pool,
         (g, 0),
         FullDensity,
-        v,
-        // TODO
-        //7
+        v
     ).wait().unwrap();
 
     assert_eq!(naive, fast);
