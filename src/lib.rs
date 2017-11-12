@@ -25,8 +25,7 @@ pub enum Error {
     AssignmentMissing,
     UnexpectedIdentity,
     UnconstrainedVariable(Variable),
-    IoError(io::Error),
-    NameConflict(&'static str, String)
+    IoError(io::Error)
 }
 
 impl From<io::Error> for Error {
@@ -227,5 +226,180 @@ pub trait ConstraintSystem<E: Engine> {
         where NR: Into<String>, N: FnOnce() -> NR, F: FnOnce(&mut Self) -> Result<R, Error>
     {
         space_fn(self)
+    }
+}
+
+use std::collections::HashMap;
+
+#[derive(Debug)]
+enum NamedObject {
+    Constraint(usize),
+    Input(usize),
+    Aux(usize),
+    Namespace
+}
+
+/// Constraint system for testing purposes.
+pub struct TestConstraintSystem<E: Engine> {
+    named_objects: HashMap<String, NamedObject>,
+    current_namespace: Vec<String>,
+    constraints: Vec<(LinearCombination<E>, LinearCombination<E>, LinearCombination<E>)>,
+    inputs: Vec<E::Fr>,
+    aux: Vec<E::Fr>
+}
+
+impl<E: Engine> TestConstraintSystem<E> {
+    pub fn new() -> TestConstraintSystem<E> {
+        TestConstraintSystem {
+            named_objects: HashMap::new(),
+            current_namespace: vec![],
+            constraints: vec![],
+            inputs: vec![E::Fr::one()],
+            aux: vec![]
+        }
+    }
+
+    pub fn is_satisfied(&self) -> bool
+    {
+        for &(ref a, ref b, ref c) in &self.constraints {
+            // TODO: make eval not take self by value
+
+            let mut a = a.clone().eval(None, None, &self.inputs, &self.aux);
+            let b = b.clone().eval(None, None, &self.inputs, &self.aux);
+            let c = c.clone().eval(None, None, &self.inputs, &self.aux);
+
+            a.mul_assign(&b);
+
+            if a != c {
+                return false
+            }
+        }
+
+        true
+    }
+
+    pub fn assign(&mut self, path: &str, to: E::Fr)
+    {
+        match self.named_objects.get(path) {
+            Some(&NamedObject::Input(index)) => self.inputs[index] = to,
+            Some(&NamedObject::Aux(index)) => self.aux[index] = to,
+            Some(e) => panic!("tried to assign `{:?}` a value at path: {}", e, path),
+            _ => panic!("no variable exists at path: {}", path)
+        }
+    }
+
+    pub fn get(&mut self, path: &str) -> E::Fr
+    {
+        match self.named_objects.get(path) {
+            Some(&NamedObject::Input(index)) => self.inputs[index],
+            Some(&NamedObject::Aux(index)) => self.aux[index],
+            Some(e) => panic!("tried to get value of `{:?}` at path: {}", e, path),
+            _ => panic!("no variable exists at path: {}", path)
+        }
+    }
+
+    fn set_named_obj(&mut self, path: String, to: NamedObject) {
+        if self.named_objects.contains_key(&path) {
+            panic!("tried to create object at existing path: {}", path);
+        }
+
+        self.named_objects.insert(path, to);
+    }
+}
+
+fn compute_path(ns: &[String], this: String) -> String {
+    if this.chars().any(|a| a == '/') {
+        panic!("'/' is not allowed in names");
+    }
+
+    let mut name = String::new();
+
+    let mut needs_separation = false;
+    for ns in ns.iter().chain(Some(&this).into_iter())
+    {
+        if needs_separation {
+            name += "/";
+        }
+
+        name += ns;
+        needs_separation = true;
+    }
+
+    name
+}
+
+impl<E: Engine> PublicConstraintSystem<E> for TestConstraintSystem<E> {
+    fn alloc_input<NR, N, F>(
+        &mut self,
+        name_fn: N,
+        f: F
+    ) -> Result<Variable, Error>
+        where NR: Into<String>, N: FnOnce() -> NR, F: FnOnce() -> Result<E::Fr, Error>
+    {
+        let this_path = compute_path(&self.current_namespace, name_fn().into());
+        let this_obj = NamedObject::Input(self.inputs.len());
+        self.set_named_obj(this_path, this_obj);
+
+        let var = Variable(Index::Input(self.inputs.len()));
+
+        self.inputs.push(f()?);
+
+        Ok(var)
+    }
+}
+
+impl<E: Engine> ConstraintSystem<E> for TestConstraintSystem<E> {
+    fn alloc<NR, N, F>(
+        &mut self,
+        name_fn: N,
+        f: F
+    ) -> Result<Variable, Error>
+        where NR: Into<String>, N: FnOnce() -> NR, F: FnOnce() -> Result<E::Fr, Error>
+    {
+        let this_path = compute_path(&self.current_namespace, name_fn().into());
+        let this_obj = NamedObject::Aux(self.aux.len());
+        self.set_named_obj(this_path, this_obj);
+
+        let var = Variable(Index::Aux(self.aux.len()));
+
+        self.aux.push(f()?);
+
+        Ok(var)
+    }
+
+    fn enforce<NR: Into<String>, N: FnOnce() -> NR>(
+        &mut self,
+        name_fn: N,
+        a: LinearCombination<E>,
+        b: LinearCombination<E>,
+        c: LinearCombination<E>
+    )
+    {
+        let this_path = compute_path(&self.current_namespace, name_fn().into());
+        let this_obj = NamedObject::Constraint(self.constraints.len());
+        self.set_named_obj(this_path, this_obj);
+
+        self.constraints.push((a, b, c));
+    }
+
+    fn namespace<NR, N, R, F>(
+        &mut self,
+        name_fn: N,
+        space_fn: F
+    ) -> Result<R, Error>
+        where NR: Into<String>, N: FnOnce() -> NR, F: FnOnce(&mut Self) -> Result<R, Error>
+    {
+        let name = name_fn().into();
+
+        let this_path = compute_path(&self.current_namespace, name.clone());
+        self.set_named_obj(this_path, NamedObject::Namespace);
+
+        self.current_namespace.push(name);
+
+        let r = space_fn(self)?;
+
+        self.current_namespace.pop();
+
+        Ok(r)
     }
 }
