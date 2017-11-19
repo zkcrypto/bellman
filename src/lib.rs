@@ -240,7 +240,7 @@ enum NamedObject {
 pub struct TestConstraintSystem<E: Engine> {
     named_objects: HashMap<String, NamedObject>,
     current_namespace: Vec<String>,
-    constraints: Vec<(LinearCombination<E>, LinearCombination<E>, LinearCombination<E>)>,
+    constraints: Vec<(LinearCombination<E>, LinearCombination<E>, LinearCombination<E>, String)>,
     inputs: Vec<E::Fr>,
     aux: Vec<E::Fr>
 }
@@ -256,9 +256,8 @@ impl<E: Engine> TestConstraintSystem<E> {
         }
     }
 
-    pub fn is_satisfied(&self) -> bool
-    {
-        for &(ref a, ref b, ref c) in &self.constraints {
+    pub fn which_is_unsatisfied(&self) -> Option<&str> {
+        for &(ref a, ref b, ref c, ref path) in &self.constraints {
             let mut a = a.eval(None, None, &self.inputs, &self.aux);
             let b = b.eval(None, None, &self.inputs, &self.aux);
             let c = c.eval(None, None, &self.inputs, &self.aux);
@@ -266,11 +265,21 @@ impl<E: Engine> TestConstraintSystem<E> {
             a.mul_assign(&b);
 
             if a != c {
-                return false
+                return Some(&*path)
             }
         }
 
-        true
+        None
+    }
+
+    pub fn is_satisfied(&self) -> bool
+    {
+        self.which_is_unsatisfied().is_none()
+    }
+
+    pub fn num_constraints(&self) -> usize
+    {
+        self.constraints.len()
     }
 
     pub fn assign(&mut self, path: &str, to: E::Fr)
@@ -372,9 +381,9 @@ impl<E: Engine> ConstraintSystem<E> for TestConstraintSystem<E> {
     {
         let this_path = compute_path(&self.current_namespace, name_fn().into());
         let this_obj = NamedObject::Constraint(self.constraints.len());
-        self.set_named_obj(this_path, this_obj);
+        self.set_named_obj(this_path.clone(), this_obj);
 
-        self.constraints.push((a, b, c));
+        self.constraints.push((a, b, c, this_path));
     }
 
     fn namespace<NR, N, R, F>(
