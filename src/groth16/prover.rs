@@ -8,8 +8,10 @@ use ::{
     Index,
     Error,
     Variable,
-    LinearCombination
+    LinearCombination,
+    Namespace
 };
+use std::marker::PhantomData;
 use multiexp::*;
 use super::{ParameterSource, Proof};
 use rand::Rng;
@@ -70,6 +72,8 @@ pub fn create_proof<E, C, P: ParameterSource<E>>(
     }
 
     impl<E: Engine> ConstraintSystem<E> for ProvingAssignment<E> {
+        type Root = Self;
+
         fn alloc<NR, N, F>(
             &mut self,
             _: N,
@@ -95,6 +99,16 @@ pub fn create_proof<E, C, P: ParameterSource<E>>(
             self.a.push(Scalar(a.eval(None, Some(&mut self.a_aux_density), &self.input_assignment, &self.aux_assignment)));
             self.b.push(Scalar(b.eval(Some(&mut self.b_input_density), Some(&mut self.b_aux_density), &self.input_assignment, &self.aux_assignment)));
             self.c.push(Scalar(c.eval(None, None, &self.input_assignment, &self.aux_assignment)));
+        }
+
+        /// Begin a namespace for the constraint system
+        fn namespace<'a, NR, N>(
+            &'a mut self,
+            _: N
+        ) -> Namespace<'a, E, Self::Root>
+            where NR: Into<String>, N: FnOnce() -> NR
+        {
+            Namespace(self, PhantomData)
         }
     }
 

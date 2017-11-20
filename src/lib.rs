@@ -190,7 +190,9 @@ pub trait PublicConstraintSystem<E: Engine>: ConstraintSystem<E> {
         where NR: Into<String>, N: FnOnce() -> NR, F: FnOnce() -> Result<E::Fr, Error>;
 }
 
-pub trait ConstraintSystem<E: Engine> {
+pub trait ConstraintSystem<E: Engine>: Sized {
+    type Root: ConstraintSystem<E>;
+
     /// Return the "one" input variable
     fn one() -> Variable {
         Variable(Index::Input(0))
@@ -214,15 +216,129 @@ pub trait ConstraintSystem<E: Engine> {
         c: LinearCombination<E>
     );
 
-    /// Begin a namespace for the constraint system
-    fn namespace<NR, N, R, F>(
-        &mut self,
-        _: N,
-        space_fn: F
-    ) -> Result<R, Error>
-        where NR: Into<String>, N: FnOnce() -> NR, F: FnOnce(&mut Self) -> Result<R, Error>
+    fn push_namespace<NR, N>(&mut self, _: N)
+        where NR: Into<String>, N: FnOnce() -> NR
     {
-        space_fn(self)
+        // Default is to do nothing.
+    }
+
+    fn pop_namespace(&mut self)
+    {
+        // Default is to do nothing.
+    }
+
+    /// Begin a namespace for the constraint system
+    fn namespace<'a, NR, N>(
+        &'a mut self,
+        name_fn: N
+    ) -> Namespace<'a, E, Self::Root>
+        where NR: Into<String>, N: FnOnce() -> NR;
+}
+
+impl<'cs, E: Engine, CS: ConstraintSystem<E>> ConstraintSystem<E> for &'cs mut CS {
+    type Root = CS::Root;
+
+    /// Allocate a private variable in the constraint system. The provided function is used to
+    /// determine the assignment of the variable.
+    fn alloc<NR, N, F>(
+        &mut self,
+        name_fn: N,
+        f: F
+    ) -> Result<Variable, Error>
+        where NR: Into<String>, N: FnOnce() -> NR, F: FnOnce() -> Result<E::Fr, Error>
+    {
+        (*self).alloc(name_fn, f)
+    }
+
+    /// Enforce that `A` * `B` = `C`.
+    fn enforce<NR: Into<String>, N: FnOnce() -> NR>(
+        &mut self,
+        name_fn: N,
+        a: LinearCombination<E>,
+        b: LinearCombination<E>,
+        c: LinearCombination<E>
+    )
+    {
+        (*self).enforce(name_fn, a, b, c)
+    }
+
+    fn push_namespace<NR, N>(&mut self, name_fn: N)
+        where NR: Into<String>, N: FnOnce() -> NR
+    {
+        (*self).push_namespace(name_fn)
+    }
+
+    fn pop_namespace(&mut self)
+    {
+        (*self).pop_namespace()
+    }
+
+    /// Begin a namespace for the constraint system
+    fn namespace<'a, NR, N>(
+        &'a mut self,
+        name_fn: N
+    ) -> Namespace<'a, E, Self::Root>
+        where NR: Into<String>, N: FnOnce() -> NR
+    {
+        (*self).namespace(name_fn)
+    }
+}
+
+use std::marker::PhantomData;
+
+pub struct Namespace<'a, E: Engine, CS: ConstraintSystem<E> + 'a>(&'a mut CS, PhantomData<E>);
+
+impl<'cs, E: Engine, CS: ConstraintSystem<E>> ConstraintSystem<E> for Namespace<'cs, E, CS> {
+    type Root = CS;
+
+    fn alloc<NR, N, F>(
+        &mut self,
+        name_fn: N,
+        f: F
+    ) -> Result<Variable, Error>
+        where NR: Into<String>, N: FnOnce() -> NR, F: FnOnce() -> Result<E::Fr, Error>
+    {
+        self.0.alloc(name_fn, f)
+    }
+
+    fn enforce<NR: Into<String>, N: FnOnce() -> NR>(
+        &mut self,
+        name_fn: N,
+        a: LinearCombination<E>,
+        b: LinearCombination<E>,
+        c: LinearCombination<E>
+    )
+    {
+        self.0.enforce(name_fn, a, b, c)
+    }
+
+    fn push_namespace<NR, N>(&mut self, name_fn: N)
+        where NR: Into<String>, N: FnOnce() -> NR
+    {
+        self.0.push_namespace(name_fn);
+    }
+
+    fn pop_namespace(&mut self)
+    {
+        self.0.pop_namespace();
+    }
+
+    /// Begin a namespace for the constraint system
+    fn namespace<'a, NR, N>(
+        &'a mut self,
+        name_fn: N
+    ) -> Namespace<'a, E, Self::Root>
+        where NR: Into<String>, N: FnOnce() -> NR
+    {
+        self.0.push_namespace(name_fn);
+
+        Namespace(self.0, PhantomData)
+    }
+}
+
+impl<'a, E: Engine, CS: ConstraintSystem<E>> Drop for Namespace<'a, E, CS> {
+    fn drop(&mut self) {
+        self.0.pop_namespace()
     }
 }
 
@@ -353,6 +469,8 @@ impl<E: Engine> PublicConstraintSystem<E> for TestConstraintSystem<E> {
 }
 
 impl<E: Engine> ConstraintSystem<E> for TestConstraintSystem<E> {
+    type Root = Self;
+
     fn alloc<NR, N, F>(
         &mut self,
         name_fn: N,
@@ -386,24 +504,31 @@ impl<E: Engine> ConstraintSystem<E> for TestConstraintSystem<E> {
         self.constraints.push((a, b, c, this_path));
     }
 
-    fn namespace<NR, N, R, F>(
-        &mut self,
-        name_fn: N,
-        space_fn: F
-    ) -> Result<R, Error>
-        where NR: Into<String>, N: FnOnce() -> NR, F: FnOnce(&mut Self) -> Result<R, Error>
+    fn push_namespace<NR, N>(&mut self, name_fn: N)
+        where NR: Into<String>, N: FnOnce() -> NR
     {
         let name = name_fn().into();
-
         let this_path = compute_path(&self.current_namespace, name.clone());
+
         self.set_named_obj(this_path, NamedObject::Namespace);
 
         self.current_namespace.push(name);
+    }
 
-        let r = space_fn(self)?;
-
+    fn pop_namespace(&mut self)
+    {
         self.current_namespace.pop();
+    }
 
-        Ok(r)
+    /// Begin a namespace for the constraint system
+    fn namespace<'a, NR, N>(
+        &'a mut self,
+        name_fn: N
+    ) -> Namespace<'a, E, Self::Root>
+        where NR: Into<String>, N: FnOnce() -> NR
+    {
+        self.push_namespace(name_fn);
+
+        Namespace(self, PhantomData)
     }
 }

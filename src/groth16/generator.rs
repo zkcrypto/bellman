@@ -7,8 +7,10 @@ use ::{
     Circuit,
     Variable,
     ConstraintSystem,
-    PublicConstraintSystem
+    PublicConstraintSystem,
+    Namespace
 };
+use std::marker::PhantomData;
 use super::{VerifyingKey, Parameters};
 use domain::{Scalar, EvaluationDomain};
 use rand::Rng;
@@ -91,6 +93,8 @@ pub fn generate_parameters<E, C>(
     }
 
     impl<E: Engine> ConstraintSystem<E> for KeypairAssembly<E> {
+        type Root = Self;
+
         fn alloc<NR, N, F>(
             &mut self,
             _: N,
@@ -139,6 +143,16 @@ pub fn generate_parameters<E, C>(
             qap_eval(c, &mut self.ct_inputs, &mut self.ct_aux, self.num_constraints);
 
             self.num_constraints += 1;
+        }
+
+        /// Begin a namespace for the constraint system
+        fn namespace<'a, NR, N>(
+            &'a mut self,
+            _: N
+        ) -> Namespace<'a, E, Self::Root>
+            where NR: Into<String>, N: FnOnce() -> NR
+        {
+            Namespace(self, PhantomData)
         }
     }
 

@@ -6,9 +6,11 @@ use ::{
     Index,
     Variable,
     ConstraintSystem,
-    PublicConstraintSystem
+    PublicConstraintSystem,
+    Namespace
 };
 use super::{Proof, VerifyingKey, PreparedVerifyingKey};
+use std::marker::PhantomData;
 
 /// This is the constraint system synthesizer that is made available to
 /// callers of the verification function when they wish to perform
@@ -21,7 +23,9 @@ pub struct VerifierInput<'a, E: Engine> {
     num_aux: usize
 }
 
-impl<'a, E: Engine> ConstraintSystem<E> for VerifierInput<'a, E> {
+impl<'cs, E: Engine> ConstraintSystem<E> for VerifierInput<'cs, E> {
+    type Root = Self;
+
     fn alloc<NR, N, F>(
         &mut self,
         _: N,
@@ -51,13 +55,25 @@ impl<'a, E: Engine> ConstraintSystem<E> for VerifierInput<'a, E> {
         // Do nothing; we don't care about the constraint system
         // in this context.
     }
+
+    /// Begin a namespace for the constraint system
+    fn namespace<'a, NR, N>(
+        &'a mut self,
+        _: N
+    ) -> Namespace<'a, E, Self::Root>
+        where NR: Into<String>, N: FnOnce() -> NR
+    {
+        Namespace(self, PhantomData)
+    }
 }
 
 /// This is intended to be a wrapper around VerifierInput that is kept
 /// private and used for input allocation.
 struct InputAllocator<T>(T);
 
-impl<'a, 'b, E: Engine> ConstraintSystem<E> for InputAllocator<&'a mut VerifierInput<'b, E>> {
+impl<'cs, 'b, E: Engine> ConstraintSystem<E> for InputAllocator<&'cs mut VerifierInput<'b, E>> {
+    type Root = Self;
+
     fn alloc<NR, N, F>(
         &mut self,
         name_fn: N,
@@ -78,6 +94,16 @@ impl<'a, 'b, E: Engine> ConstraintSystem<E> for InputAllocator<&'a mut VerifierI
     {
         // Do nothing; we don't care about the constraint system
         // in this context.
+    }
+
+    /// Begin a namespace for the constraint system
+    fn namespace<'a, NR, N>(
+        &'a mut self,
+        _: N
+    ) -> Namespace<'a, E, Self::Root>
+        where NR: Into<String>, N: FnOnce() -> NR
+    {
+        Namespace(self, PhantomData)
     }
 }
 
