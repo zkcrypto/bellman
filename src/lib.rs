@@ -142,7 +142,12 @@ pub trait ConstraintSystem<E: Engine>: Sized {
     }
 }
 
-pub trait PublicConstraintSystem<E: Engine>: ConstraintSystem<E> {
+pub trait PublicConstraintSystem<E: Engine>: ConstraintSystem<E>
+{
+    /// Represents the type of the "root" of this constraint system
+    /// so that nested namespaces can minimize indirection.
+    type PublicRoot: PublicConstraintSystem<E>;
+
     /// Allocate a public variable in the constraint system. The provided function is used to
     /// determine the assignment of the variable.
     fn alloc_input<F, A, AR>(
@@ -151,6 +156,22 @@ pub trait PublicConstraintSystem<E: Engine>: ConstraintSystem<E> {
         f: F
     ) -> Result<Self::Variable, SynthesisError>
         where F: FnOnce() -> Result<E::Fr, SynthesisError>, A: FnOnce() -> AR, AR: Into<String>;
+
+    /// Gets the "root" constraint system, bypassing the namespacing.
+    /// Not intended for downstream use; use `namespace` instead.
+    fn get_public_root(&mut self) -> &mut Self::PublicRoot;
+
+    /// Begin a namespace for this constraint system.
+    fn public_namespace<'a, NR, N>(
+        &'a mut self,
+        name_fn: N
+    ) -> Namespace<'a, E, Self::PublicRoot>
+        where NR: Into<String>, N: FnOnce() -> NR
+    {
+        self.get_root().push_namespace(name_fn);
+
+        Namespace(self.get_public_root(), PhantomData)
+    }
 }
 
 use std::marker::PhantomData;
@@ -160,6 +181,8 @@ use std::marker::PhantomData;
 pub struct Namespace<'a, E: Engine, CS: ConstraintSystem<E> + 'a>(&'a mut CS, PhantomData<E>);
 
 impl<'cs, E: Engine, CS: PublicConstraintSystem<E>> PublicConstraintSystem<E> for Namespace<'cs, E, CS> {
+    type PublicRoot = CS::PublicRoot;
+
     fn alloc_input<F, A, AR>(
         &mut self,
         annotation: A,
@@ -168,6 +191,11 @@ impl<'cs, E: Engine, CS: PublicConstraintSystem<E>> PublicConstraintSystem<E> fo
         where F: FnOnce() -> Result<E::Fr, SynthesisError>, A: FnOnce() -> AR, AR: Into<String>
     {
         self.0.alloc_input(annotation, f)
+    }
+
+    fn get_public_root(&mut self) -> &mut Self::PublicRoot
+    {
+        self.0.get_public_root()
     }
 }
 
@@ -201,15 +229,19 @@ impl<'cs, E: Engine, CS: ConstraintSystem<E>> ConstraintSystem<E> for Namespace<
         self.0.enforce(annotation, a, b, c)
     }
 
-    fn push_namespace<NR, N>(&mut self, name_fn: N)
+    // Downstream users who use `namespace` will never interact with these
+    // functions and they will never be invoked because the namespace is
+    // never a root constraint system.
+
+    fn push_namespace<NR, N>(&mut self, _: N)
         where NR: Into<String>, N: FnOnce() -> NR
     {
-        self.0.push_namespace(name_fn)
+        panic!("only the root's push_namespace should be called");
     }
 
     fn pop_namespace(&mut self)
     {
-        self.0.pop_namespace()
+        panic!("only the root's pop_namespace should be called");
     }
 
     fn get_root(&mut self) -> &mut Self::Root
@@ -227,6 +259,8 @@ impl<'a, E: Engine, CS: ConstraintSystem<E>> Drop for Namespace<'a, E, CS> {
 /// Convenience implementation of PublicConstraintSystem<E> for mutable references to
 /// public constraint systems.
 impl<'cs, E: Engine, CS: PublicConstraintSystem<E>> PublicConstraintSystem<E> for &'cs mut CS {
+    type PublicRoot = CS::PublicRoot;
+
     fn alloc_input<F, A, AR>(
         &mut self,
         annotation: A,
@@ -235,6 +269,11 @@ impl<'cs, E: Engine, CS: PublicConstraintSystem<E>> PublicConstraintSystem<E> fo
         where F: FnOnce() -> Result<E::Fr, SynthesisError>, A: FnOnce() -> AR, AR: Into<String>
     {
         (**self).alloc_input(annotation, f)
+    }
+
+    fn get_public_root(&mut self) -> &mut Self::PublicRoot
+    {
+        (**self).get_public_root()
     }
 }
 
@@ -322,6 +361,8 @@ fn test_cs() {
     }
 
     impl<E: Engine> PublicConstraintSystem<E> for MySillyConstraintSystem<E> {
+        type PublicRoot = Self;
+
         fn alloc_input<F, A, AR>(
             &mut self,
             annotation: A,
@@ -334,6 +375,11 @@ fn test_cs() {
             self.inputs.push((f()?, path));
 
             Ok(Var::Input(index))
+        }
+
+        fn get_public_root(&mut self) -> &mut Self::PublicRoot
+        {
+            self
         }
     }
 
@@ -390,6 +436,15 @@ fn test_cs() {
         }
     }
 
+    fn do_stuff_with_pcs<E: Engine, CS: PublicConstraintSystem<E>>(mut cs: CS, one_more: bool)
+    {
+        cs.alloc_input(|| "something", || Ok(E::Fr::zero())).unwrap();
+
+        if one_more {
+            do_stuff_with_pcs(cs.public_namespace(|| "cool namespace"), false);
+        }
+    }
+
     let mut cs = MySillyConstraintSystem::<Bls12> {
         inputs: vec![(Fr::one(), "ONE".into())],
         aux: vec![],
@@ -438,4 +493,13 @@ fn test_cs() {
     assert!((cs.constraints[0].1).0 == vec![(Var::Input(0), Fr::one())]);
     assert!((cs.constraints[0].2).0 == vec![(Var::Input(1), Fr::one())]);
     assert!(cs.constraints[0].3 == "woohoo/hehe/great constraint");
+
+    do_stuff_with_pcs(cs.namespace(|| "namey"), true);
+
+    assert_eq!(cs.inputs, vec![
+        (Fr::one(), "ONE".into()),
+        (Fr::zero(), "woohoo/hehe/works lol".into()),
+        (Fr::zero(), "namey/something".into()),
+        (Fr::zero(), "namey/cool namespace/something".into()),
+    ]);
 }
