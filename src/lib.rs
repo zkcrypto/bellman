@@ -162,7 +162,7 @@ pub trait PublicConstraintSystem<E: Engine>: ConstraintSystem<E>
     fn get_public_root(&mut self) -> &mut Self::PublicRoot;
 
     /// Begin a namespace for this constraint system.
-    fn public_namespace<'a, NR, N>(
+    fn namespace_public<'a, NR, N>(
         &'a mut self,
         name_fn: N
     ) -> Namespace<'a, E, Self::PublicRoot>
@@ -441,7 +441,7 @@ fn test_cs() {
         cs.alloc_input(|| "something", || Ok(E::Fr::zero())).unwrap();
 
         if one_more {
-            do_stuff_with_pcs(cs.public_namespace(|| "cool namespace"), false);
+            do_stuff_with_pcs(cs.namespace_public(|| "cool namespace"), false);
         }
     }
 
