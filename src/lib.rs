@@ -91,7 +91,7 @@ impl fmt::Display for SynthesisError {
 }
 
 pub trait ConstraintSystem<E: Engine>: Sized {
-    type Variable;
+    type Variable: Sized + Copy + Clone;
 
     /// Represents the type of the "root" of this constraint system
     /// so that nested namespaces can minimize indirection.
@@ -336,7 +336,7 @@ impl<'cs, E: Engine, CS: ConstraintSystem<E>> ConstraintSystem<E> for &'cs mut C
 fn test_cs() {
     use pairing::bls12_381::{Bls12, Fr};
 
-    #[derive(PartialEq)]
+    #[derive(PartialEq, Copy, Clone)]
     enum Var {
         Input(usize),
         Aux(usize)
