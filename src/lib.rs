@@ -9,6 +9,12 @@ use std::error::Error;
 /// in the scalar field of a pairing-friendly elliptic curve group.
 pub struct LinearCombination<T, E: Engine>(Vec<(T, E::Fr)>);
 
+impl<T, E: Engine> AsRef<[(T, E::Fr)]> for LinearCombination<T, E> {
+    fn as_ref(&self) -> &[(T, E::Fr)] {
+        &self.0
+    }
+}
+
 impl<T, E: Engine> LinearCombination<T, E> {
     pub fn zero() -> LinearCombination<T, E> {
         LinearCombination(vec![])
