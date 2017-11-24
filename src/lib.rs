@@ -95,7 +95,7 @@ pub trait ConstraintSystem<E: Engine>: Sized {
 
     /// Represents the type of the "root" of this constraint system
     /// so that nested namespaces can minimize indirection.
-    type Root: ConstraintSystem<E>;
+    type Root: ConstraintSystem<E, Variable=Self::Variable>;
 
     /// Return the "one" input variable
     fn one(&self) -> Self::Variable;
