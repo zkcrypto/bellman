@@ -152,7 +152,7 @@ pub trait PublicConstraintSystem<E: Engine>: ConstraintSystem<E>
 {
     /// Represents the type of the "root" of this constraint system
     /// so that nested namespaces can minimize indirection.
-    type PublicRoot: PublicConstraintSystem<E>;
+    type PublicRoot: PublicConstraintSystem<E, Variable=Self::Variable>;
 
     /// Allocate a public variable in the constraint system. The provided function is used to
     /// determine the assignment of the variable.
