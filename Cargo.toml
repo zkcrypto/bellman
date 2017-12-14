@@ -6,7 +6,7 @@ homepage = "https://github.com/ebfull/bellman"
 license = "MIT/Apache-2.0"
 name = "bellman"
 repository = "https://github.com/ebfull/bellman"
-version = "0.0.6"
+version = "0.0.7"
 
 [dependencies]
 rand = "0.3"

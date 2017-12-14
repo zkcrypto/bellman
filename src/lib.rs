@@ -57,6 +57,30 @@ impl<T, E: Engine> Sub<T> for LinearCombination<T, E> {
     }
 }
 
+impl<'a, T: Copy, E: Engine> Add<&'a LinearCombination<T, E>> for LinearCombination<T, E> {
+    type Output = LinearCombination<T, E>;
+
+    fn add(mut self, other: &'a LinearCombination<T, E>) -> LinearCombination<T, E> {
+        for s in &other.0 {
+            self = self + (s.1, s.0);
+        }
+
+        self
+    }
+}
+
+impl<'a, T: Copy, E: Engine> Sub<&'a LinearCombination<T, E>> for LinearCombination<T, E> {
+    type Output = LinearCombination<T, E>;
+
+    fn sub(mut self, other: &'a LinearCombination<T, E>) -> LinearCombination<T, E> {
+        for s in &other.0 {
+            self = self - (s.1, s.0);
+        }
+
+        self
+    }
+}
+
 #[test]
 fn test_lc() {
     use pairing::bls12_381::{Bls12, Fr};
@@ -67,6 +91,19 @@ fn test_lc() {
     negone.negate();
 
     assert_eq!(a.0, vec![(0usize, Fr::one()), (1usize, Fr::one()), (2usize, Fr::one()), (3usize, negone)]);
+
+    let x = LinearCombination::<usize, Bls12>::zero() + (Fr::one(), 0usize) - (Fr::one(), 1usize);
+    let y = LinearCombination::<usize, Bls12>::zero() + (Fr::one(), 2usize) - (Fr::one(), 3usize);
+    let z = x + &y - &y;
+
+    assert_eq!(z.0, vec![
+        (0usize, Fr::one()),
+        (1usize, negone),
+        (2usize, Fr::one()),
+        (3usize, negone),
+        (2usize, negone),
+        (3usize, Fr::one())
+    ]);
 }
 
 /// This is an error that could occur during circuit synthesis contexts,
