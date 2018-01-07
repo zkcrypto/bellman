@@ -7,21 +7,22 @@ use std::error::Error;
 
 /// This represents a linear combination of some variables, with coefficients
 /// in the scalar field of a pairing-friendly elliptic curve group.
-pub struct LinearCombination<T, E: Engine>(Vec<(T, E::Fr)>);
+#[derive(Clone)]
+pub struct LinearCombination<T: Copy, E: Engine>(Vec<(T, E::Fr)>);
 
-impl<T, E: Engine> AsRef<[(T, E::Fr)]> for LinearCombination<T, E> {
+impl<T: Copy, E: Engine> AsRef<[(T, E::Fr)]> for LinearCombination<T, E> {
     fn as_ref(&self) -> &[(T, E::Fr)] {
         &self.0
     }
 }
 
-impl<T, E: Engine> LinearCombination<T, E> {
+impl<T: Copy, E: Engine> LinearCombination<T, E> {
     pub fn zero() -> LinearCombination<T, E> {
         LinearCombination(vec![])
     }
 }
 
-impl<T, E: Engine> Add<(E::Fr, T)> for LinearCombination<T, E> {
+impl<T: Copy, E: Engine> Add<(E::Fr, T)> for LinearCombination<T, E> {
     type Output = LinearCombination<T, E>;
 
     fn add(mut self, (coeff, var): (E::Fr, T)) -> LinearCombination<T, E> {
@@ -31,7 +32,7 @@ impl<T, E: Engine> Add<(E::Fr, T)> for LinearCombination<T, E> {
     }
 }
 
-impl<T, E: Engine> Sub<(E::Fr, T)> for LinearCombination<T, E> {
+impl<T: Copy, E: Engine> Sub<(E::Fr, T)> for LinearCombination<T, E> {
     type Output = LinearCombination<T, E>;
 
     fn sub(self, (mut coeff, var): (E::Fr, T)) -> LinearCombination<T, E> {
@@ -41,7 +42,7 @@ impl<T, E: Engine> Sub<(E::Fr, T)> for LinearCombination<T, E> {
     }
 }
 
-impl<T, E: Engine> Add<T> for LinearCombination<T, E> {
+impl<T: Copy, E: Engine> Add<T> for LinearCombination<T, E> {
     type Output = LinearCombination<T, E>;
 
     fn add(self, other: T) -> LinearCombination<T, E> {
@@ -49,7 +50,7 @@ impl<T, E: Engine> Add<T> for LinearCombination<T, E> {
     }
 }
 
-impl<T, E: Engine> Sub<T> for LinearCombination<T, E> {
+impl<T: Copy, E: Engine> Sub<T> for LinearCombination<T, E> {
     type Output = LinearCombination<T, E>;
 
     fn sub(self, other: T) -> LinearCombination<T, E> {
@@ -81,9 +82,38 @@ impl<'a, T: Copy, E: Engine> Sub<&'a LinearCombination<T, E>> for LinearCombinat
     }
 }
 
+impl<'a, T: Copy, E: Engine> Add<(E::Fr, &'a LinearCombination<T, E>)> for LinearCombination<T, E> {
+    type Output = LinearCombination<T, E>;
+
+    fn add(mut self, (coeff, other): (E::Fr, &'a LinearCombination<T, E>)) -> LinearCombination<T, E> {
+        for s in &other.0 {
+            let mut tmp = s.1;
+            tmp.mul_assign(&coeff);
+            self = self + (tmp, s.0);
+        }
+
+        self
+    }
+}
+
+impl<'a, T: Copy, E: Engine> Sub<(E::Fr, &'a LinearCombination<T, E>)> for LinearCombination<T, E> {
+    type Output = LinearCombination<T, E>;
+
+    fn sub(mut self, (coeff, other): (E::Fr, &'a LinearCombination<T, E>)) -> LinearCombination<T, E> {
+        for s in &other.0 {
+            let mut tmp = s.1;
+            tmp.mul_assign(&coeff);
+            self = self - (tmp, s.0);
+        }
+
+        self
+    }
+}
+
 #[test]
 fn test_lc() {
     use pairing::bls12_381::{Bls12, Fr};
+    use pairing::PrimeField;
 
     let a = LinearCombination::<usize, Bls12>::zero() + 0usize + 1usize + 2usize - 3usize;
 
@@ -94,7 +124,7 @@ fn test_lc() {
 
     let x = LinearCombination::<usize, Bls12>::zero() + (Fr::one(), 0usize) - (Fr::one(), 1usize);
     let y = LinearCombination::<usize, Bls12>::zero() + (Fr::one(), 2usize) - (Fr::one(), 3usize);
-    let z = x + &y - &y;
+    let z = x.clone() + &y - &y;
 
     assert_eq!(z.0, vec![
         (0usize, Fr::one()),
@@ -103,6 +133,20 @@ fn test_lc() {
         (3usize, negone),
         (2usize, negone),
         (3usize, Fr::one())
+    ]);
+
+    let coeff = Fr::from_str("3").unwrap();
+    let mut neg_coeff = coeff;
+    neg_coeff.negate();
+    let z = x + (coeff, &y) - (coeff, &y);
+
+    assert_eq!(z.0, vec![
+        (0usize, Fr::one()),
+        (1usize, negone),
+        (2usize, Fr::from_str("3").unwrap()),
+        (3usize, neg_coeff),
+        (2usize, neg_coeff),
+        (3usize, Fr::from_str("3").unwrap())
     ]);
 }
 
