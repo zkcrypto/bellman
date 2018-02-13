@@ -9,7 +9,7 @@ repository = "https://github.com/ebfull/bellman"
 version = "0.0.7"
 
 [dependencies]
-rand = "0.3"
+rand = "0.4"
 bit-vec = "0.4.4"
 futures = "0.1"
 futures-cpupool = "0.1"
