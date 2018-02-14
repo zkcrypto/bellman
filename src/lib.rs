@@ -1,67 +1,119 @@
 extern crate pairing;
+extern crate rand;
+extern crate num_cpus;
+extern crate futures;
+extern crate futures_cpupool;
+extern crate bit_vec;
+extern crate crossbeam;
+
+pub mod multicore;
+pub mod multiexp;
+pub mod domain;
+pub mod groth16;
 
 use pairing::{Engine, Field};
+
 use std::ops::{Add, Sub};
 use std::fmt;
 use std::error::Error;
+use std::io;
+use std::marker::PhantomData;
+
+/// Computations are expressed in terms of arithmetic circuits, in particular
+/// rank-1 quadratic constraint systems. The `Circuit` trait represents a
+/// circuit that can be synthesized. The `synthesize` method is called during
+/// CRS generation and during proving.
+pub trait Circuit<E: Engine> {
+    /// Synthesize the circuit into a rank-1 quadratic constraint system
+    fn synthesize<CS: ConstraintSystem<E>>(
+        self,
+        cs: &mut CS
+    ) -> Result<(), SynthesisError>;
+}
+
+/// Represents a variable in our constraint system.
+#[derive(Copy, Clone, Debug)]
+pub struct Variable(Index);
+
+impl Variable {
+    /// This constructs a variable with an arbitrary index.
+    /// Circuit implementations are not recommended to use this.
+    pub fn new_unchecked(idx: Index) -> Variable {
+        Variable(idx)
+    }
+
+    /// This returns the index underlying the variable.
+    /// Circuit implementations are not recommended to use this.
+    pub fn get_unchecked(&self) -> Index {
+        self.0
+    }
+}
+
+/// Represents the index of either an input variable or
+/// auxillary variable.
+#[derive(Copy, Clone, PartialEq, Debug)]
+pub enum Index {
+    Input(usize),
+    Aux(usize)
+}
 
 /// This represents a linear combination of some variables, with coefficients
 /// in the scalar field of a pairing-friendly elliptic curve group.
 #[derive(Clone)]
-pub struct LinearCombination<T: Copy, E: Engine>(Vec<(T, E::Fr)>);
+pub struct LinearCombination<E: Engine>(Vec<(Variable, E::Fr)>);
 
-impl<T: Copy, E: Engine> AsRef<[(T, E::Fr)]> for LinearCombination<T, E> {
-    fn as_ref(&self) -> &[(T, E::Fr)] {
+impl<E: Engine> AsRef<[(Variable, E::Fr)]> for LinearCombination<E> {
+    fn as_ref(&self) -> &[(Variable, E::Fr)] {
         &self.0
     }
 }
 
-impl<T: Copy, E: Engine> LinearCombination<T, E> {
-    pub fn zero() -> LinearCombination<T, E> {
+impl<E: Engine> LinearCombination<E> {
+    pub fn zero() -> LinearCombination<E> {
         LinearCombination(vec![])
     }
 }
 
-impl<T: Copy, E: Engine> Add<(E::Fr, T)> for LinearCombination<T, E> {
-    type Output = LinearCombination<T, E>;
+impl<E: Engine> Add<(E::Fr, Variable)> for LinearCombination<E> {
+    type Output = LinearCombination<E>;
 
-    fn add(mut self, (coeff, var): (E::Fr, T)) -> LinearCombination<T, E> {
+    fn add(mut self, (coeff, var): (E::Fr, Variable)) -> LinearCombination<E> {
         self.0.push((var, coeff));
 
         self
     }
 }
 
-impl<T: Copy, E: Engine> Sub<(E::Fr, T)> for LinearCombination<T, E> {
-    type Output = LinearCombination<T, E>;
+impl<E: Engine> Sub<(E::Fr, Variable)> for LinearCombination<E> {
+    type Output = LinearCombination<E>;
 
-    fn sub(self, (mut coeff, var): (E::Fr, T)) -> LinearCombination<T, E> {
+    fn sub(self, (mut coeff, var): (E::Fr, Variable)) -> LinearCombination<E> {
         coeff.negate();
 
         self + (coeff, var)
     }
 }
 
-impl<T: Copy, E: Engine> Add<T> for LinearCombination<T, E> {
-    type Output = LinearCombination<T, E>;
+impl<E: Engine> Add<Variable> for LinearCombination<E> {
+    type Output = LinearCombination<E>;
 
-    fn add(self, other: T) -> LinearCombination<T, E> {
+    fn add(self, other: Variable) -> LinearCombination<E> {
         self + (E::Fr::one(), other)
     }
 }
 
-impl<T: Copy, E: Engine> Sub<T> for LinearCombination<T, E> {
-    type Output = LinearCombination<T, E>;
+impl<E: Engine> Sub<Variable> for LinearCombination<E> {
+    type Output = LinearCombination<E>;
 
-    fn sub(self, other: T) -> LinearCombination<T, E> {
+    fn sub(self, other: Variable) -> LinearCombination<E> {
         self - (E::Fr::one(), other)
     }
 }
 
-impl<'a, T: Copy, E: Engine> Add<&'a LinearCombination<T, E>> for LinearCombination<T, E> {
-    type Output = LinearCombination<T, E>;
+impl<'a, E: Engine> Add<&'a LinearCombination<E>> for LinearCombination<E> {
+    type Output = LinearCombination<E>;
 
-    fn add(mut self, other: &'a LinearCombination<T, E>) -> LinearCombination<T, E> {
+    fn add(mut self, other: &'a LinearCombination<E>) -> LinearCombination<E> {
         for s in &other.0 {
             self = self + (s.1, s.0);
         }
@@ -70,10 +122,10 @@ impl<'a, T: Copy, E: Engine> Add<&'a LinearCombination<T, E>> for LinearCombinat
     }
 }
 
-impl<'a, T: Copy, E: Engine> Sub<&'a LinearCombination<T, E>> for LinearCombination<T, E> {
-    type Output = LinearCombination<T, E>;
+impl<'a, E: Engine> Sub<&'a LinearCombination<E>> for LinearCombination<E> {
+    type Output = LinearCombination<E>;
 
-    fn sub(mut self, other: &'a LinearCombination<T, E>) -> LinearCombination<T, E> {
+    fn sub(mut self, other: &'a LinearCombination<E>) -> LinearCombination<E> {
         for s in &other.0 {
             self = self - (s.1, s.0);
         }
@@ -82,10 +134,10 @@ impl<'a, T: Copy, E: Engine> Sub<&'a LinearCombination<T, E>> for LinearCombinat
     }
 }
 
-impl<'a, T: Copy, E: Engine> Add<(E::Fr, &'a LinearCombination<T, E>)> for LinearCombination<T, E> {
-    type Output = LinearCombination<T, E>;
+impl<'a, E: Engine> Add<(E::Fr, &'a LinearCombination<E>)> for LinearCombination<E> {
+    type Output = LinearCombination<E>;
 
-    fn add(mut self, (coeff, other): (E::Fr, &'a LinearCombination<T, E>)) -> LinearCombination<T, E> {
+    fn add(mut self, (coeff, other): (E::Fr, &'a LinearCombination<E>)) -> LinearCombination<E> {
         for s in &other.0 {
             let mut tmp = s.1;
             tmp.mul_assign(&coeff);
@@ -96,10 +148,10 @@ impl<'a, T: Copy, E: Engine> Add<(E::Fr, &'a LinearCombination<T, E>)> for Linea
     }
 }
 
-impl<'a, T: Copy, E: Engine> Sub<(E::Fr, &'a LinearCombination<T, E>)> for LinearCombination<T, E> {
-    type Output = LinearCombination<T, E>;
+impl<'a, E: Engine> Sub<(E::Fr, &'a LinearCombination<E>)> for LinearCombination<E> {
+    type Output = LinearCombination<E>;
 
-    fn sub(mut self, (coeff, other): (E::Fr, &'a LinearCombination<T, E>)) -> LinearCombination<T, E> {
+    fn sub(mut self, (coeff, other): (E::Fr, &'a LinearCombination<E>)) -> LinearCombination<E> {
         for s in &other.0 {
             let mut tmp = s.1;
             tmp.mul_assign(&coeff);
@@ -110,76 +162,71 @@ impl<'a, T: Copy, E: Engine> Sub<(E::Fr, &'a LinearCombination<T, E>)> for Linea
     }
 }
 
-#[test]
-fn test_lc() {
-    use pairing::bls12_381::{Bls12, Fr};
-    use pairing::PrimeField;
-
-    let a = LinearCombination::<usize, Bls12>::zero() + 0usize + 1usize + 2usize - 3usize;
-
-    let mut negone = Fr::one();
-    negone.negate();
-
-    assert_eq!(a.0, vec![(0usize, Fr::one()), (1usize, Fr::one()), (2usize, Fr::one()), (3usize, negone)]);
-
-    let x = LinearCombination::<usize, Bls12>::zero() + (Fr::one(), 0usize) - (Fr::one(), 1usize);
-    let y = LinearCombination::<usize, Bls12>::zero() + (Fr::one(), 2usize) - (Fr::one(), 3usize);
-    let z = x.clone() + &y - &y;
-
-    assert_eq!(z.0, vec![
-        (0usize, Fr::one()),
-        (1usize, negone),
-        (2usize, Fr::one()),
-        (3usize, negone),
-        (2usize, negone),
-        (3usize, Fr::one())
-    ]);
-
-    let coeff = Fr::from_str("3").unwrap();
-    let mut neg_coeff = coeff;
-    neg_coeff.negate();
-    let z = x + (coeff, &y) - (coeff, &y);
-
-    assert_eq!(z.0, vec![
-        (0usize, Fr::one()),
-        (1usize, negone),
-        (2usize, Fr::from_str("3").unwrap()),
-        (3usize, neg_coeff),
-        (2usize, neg_coeff),
-        (3usize, Fr::from_str("3").unwrap())
-    ]);
-}
-
 /// This is an error that could occur during circuit synthesis contexts,
 /// such as CRS generation, proving or verification.
 #[derive(Debug)]
 pub enum SynthesisError {
-    AssignmentMissing
+    /// During synthesis, we lacked knowledge of a variable assignment.
+    AssignmentMissing,
+    /// During synthesis, we divided by zero.
+    DivisionByZero,
+    /// During synthesis, we constructed an unsatisfiable constraint system.
+    Unsatisfiable,
+    /// During synthesis, our polynomials ended up being too high of degree
+    PolynomialDegreeTooLarge,
+    /// During proof generation, we encountered an identity in the CRS
+    UnexpectedIdentity,
+    /// During proof generation, we encountered an I/O error with the CRS
+    IoError(io::Error),
+    /// During verification, our verifying key was malformed.
+    MalformedVerifyingKey,
+    /// During CRS generation, we observed an unconstrained auxillary variable
+    UnconstrainedVariable
+}
+
+impl From<io::Error> for SynthesisError {
+    fn from(e: io::Error) -> SynthesisError {
+        SynthesisError::IoError(e)
+    }
 }
 
 impl Error for SynthesisError {
     fn description(&self) -> &str {
         match *self {
-            SynthesisError::AssignmentMissing => "an assignment for a variable could not be computed"
+            SynthesisError::AssignmentMissing => "an assignment for a variable could not be computed",
+            SynthesisError::DivisionByZero => "division by zero",
+            SynthesisError::Unsatisfiable => "unsatisfiable constraint system",
+            SynthesisError::PolynomialDegreeTooLarge => "polynomial degree is too large",
+            SynthesisError::UnexpectedIdentity => "encountered an identity element in the CRS",
+            SynthesisError::IoError(_) => "encountered an I/O error",
+            SynthesisError::MalformedVerifyingKey => "malformed verifying key",
+            SynthesisError::UnconstrainedVariable => "auxillary variable was unconstrained"
         }
     }
 }
 
 impl fmt::Display for SynthesisError {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "{}", self.description())
+        if let &SynthesisError::IoError(ref e) = self {
+            write!(f, "I/O error: ")?;
+            e.fmt(f)
+        } else {
+            write!(f, "{}", self.description())
+        }
     }
 }
 
+/// Represents a constraint system which can have new variables
+/// allocated and constrains between them formed.
 pub trait ConstraintSystem<E: Engine>: Sized {
-    type Variable: Sized + Copy + Clone;
-
     /// Represents the type of the "root" of this constraint system
     /// so that nested namespaces can minimize indirection.
-    type Root: ConstraintSystem<E, Variable=Self::Variable>;
+    type Root: ConstraintSystem<E>;
 
     /// Return the "one" input variable
-    fn one(&self) -> Self::Variable;
+    fn one() -> Variable {
+        Variable::new_unchecked(Index::Input(0))
+    }
 
     /// Allocate a private variable in the constraint system. The provided function is used to
     /// determine the assignment of the variable. The given `annotation` function is invoked
@@ -189,19 +236,31 @@ pub trait ConstraintSystem<E: Engine>: Sized {
         &mut self,
         annotation: A,
         f: F
-    ) -> Result<Self::Variable, SynthesisError>
+    ) -> Result<Variable, SynthesisError>
+        where F: FnOnce() -> Result<E::Fr, SynthesisError>, A: FnOnce() -> AR, AR: Into<String>;
+
+    /// Allocate a public variable in the constraint system. The provided function is used to
+    /// determine the assignment of the variable.
+    fn alloc_input<F, A, AR>(
+        &mut self,
+        annotation: A,
+        f: F
+    ) -> Result<Variable, SynthesisError>
         where F: FnOnce() -> Result<E::Fr, SynthesisError>, A: FnOnce() -> AR, AR: Into<String>;
 
     /// Enforce that `A` * `B` = `C`. The `annotation` function is invoked in testing contexts
     /// in order to derive a unique name for the constraint in the current namespace.
-    fn enforce<A, AR>(
+    fn enforce<A, AR, LA, LB, LC>(
         &mut self,
         annotation: A,
-        a: LinearCombination<Self::Variable, E>,
-        b: LinearCombination<Self::Variable, E>,
-        c: LinearCombination<Self::Variable, E>
+        a: LA,
+        b: LB,
+        c: LC
     )
-        where A: FnOnce() -> AR, AR: Into<String>;
+        where A: FnOnce() -> AR, AR: Into<String>,
+              LA: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
+              LB: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
+              LC: FnOnce(LinearCombination<E>) -> LinearCombination<E>;
 
     /// Create a new (sub)namespace and enter into it. Not intended
     /// for downstream use; use `namespace` instead.
@@ -229,89 +288,48 @@ pub trait ConstraintSystem<E: Engine>: Sized {
     }
 }
 
-pub trait PublicConstraintSystem<E: Engine>: ConstraintSystem<E>
-{
-    /// Represents the type of the "root" of this constraint system
-    /// so that nested namespaces can minimize indirection.
-    type PublicRoot: PublicConstraintSystem<E, Variable=Self::Variable>;
-
-    /// Allocate a public variable in the constraint system. The provided function is used to
-    /// determine the assignment of the variable.
-    fn alloc_input<F, A, AR>(
-        &mut self,
-        annotation: A,
-        f: F
-    ) -> Result<Self::Variable, SynthesisError>
-        where F: FnOnce() -> Result<E::Fr, SynthesisError>, A: FnOnce() -> AR, AR: Into<String>;
-
-    /// Gets the "root" constraint system, bypassing the namespacing.
-    /// Not intended for downstream use; use `namespace` instead.
-    fn get_public_root(&mut self) -> &mut Self::PublicRoot;
-
-    /// Begin a namespace for this constraint system.
-    fn namespace_public<'a, NR, N>(
-        &'a mut self,
-        name_fn: N
-    ) -> Namespace<'a, E, Self::PublicRoot>
-        where NR: Into<String>, N: FnOnce() -> NR
-    {
-        self.get_root().push_namespace(name_fn);
-
-        Namespace(self.get_public_root(), PhantomData)
-    }
-}
-
-use std::marker::PhantomData;
-
 /// This is a "namespaced" constraint system which borrows a constraint system (pushing
 /// a namespace context) and, when dropped, pops out of the namespace context.
 pub struct Namespace<'a, E: Engine, CS: ConstraintSystem<E> + 'a>(&'a mut CS, PhantomData<E>);
 
-impl<'cs, E: Engine, CS: PublicConstraintSystem<E>> PublicConstraintSystem<E> for Namespace<'cs, E, CS> {
-    type PublicRoot = CS::PublicRoot;
-
-    fn alloc_input<F, A, AR>(
-        &mut self,
-        annotation: A,
-        f: F
-    ) -> Result<Self::Variable, SynthesisError>
-        where F: FnOnce() -> Result<E::Fr, SynthesisError>, A: FnOnce() -> AR, AR: Into<String>
-    {
-        self.0.alloc_input(annotation, f)
-    }
-
-    fn get_public_root(&mut self) -> &mut Self::PublicRoot
-    {
-        self.0.get_public_root()
-    }
-}
-
 impl<'cs, E: Engine, CS: ConstraintSystem<E>> ConstraintSystem<E> for Namespace<'cs, E, CS> {
-    type Variable = CS::Variable;
     type Root = CS::Root;
 
-    fn one(&self) -> Self::Variable {
-        self.0.one()
+    fn one() -> Variable {
+        CS::one()
     }
 
     fn alloc<F, A, AR>(
         &mut self,
         annotation: A,
         f: F
-    ) -> Result<Self::Variable, SynthesisError>
+    ) -> Result<Variable, SynthesisError>
         where F: FnOnce() -> Result<E::Fr, SynthesisError>, A: FnOnce() -> AR, AR: Into<String>
     {
         self.0.alloc(annotation, f)
     }
 
-    fn enforce<A, AR>(
+    fn alloc_input<F, A, AR>(
         &mut self,
         annotation: A,
-        a: LinearCombination<Self::Variable, E>,
-        b: LinearCombination<Self::Variable, E>,
-        c: LinearCombination<Self::Variable, E>
+        f: F
+    ) -> Result<Variable, SynthesisError>
+        where F: FnOnce() -> Result<E::Fr, SynthesisError>, A: FnOnce() -> AR, AR: Into<String>
+    {
+        self.0.alloc_input(annotation, f)
+    }
+
+    fn enforce<A, AR, LA, LB, LC>(
+        &mut self,
+        annotation: A,
+        a: LA,
+        b: LB,
+        c: LC
     )
-        where A: FnOnce() -> AR, AR: Into<String>
+        where A: FnOnce() -> AR, AR: Into<String>,
+              LA: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
+              LB: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
+              LC: FnOnce(LinearCombination<E>) -> LinearCombination<E>
     {
         self.0.enforce(annotation, a, b, c)
     }
@@ -343,55 +361,46 @@ impl<'a, E: Engine, CS: ConstraintSystem<E>> Drop for Namespace<'a, E, CS> {
     }
 }
 
-/// Convenience implementation of PublicConstraintSystem<E> for mutable references to
-/// public constraint systems.
-impl<'cs, E: Engine, CS: PublicConstraintSystem<E>> PublicConstraintSystem<E> for &'cs mut CS {
-    type PublicRoot = CS::PublicRoot;
-
-    fn alloc_input<F, A, AR>(
-        &mut self,
-        annotation: A,
-        f: F
-    ) -> Result<Self::Variable, SynthesisError>
-        where F: FnOnce() -> Result<E::Fr, SynthesisError>, A: FnOnce() -> AR, AR: Into<String>
-    {
-        (**self).alloc_input(annotation, f)
-    }
-
-    fn get_public_root(&mut self) -> &mut Self::PublicRoot
-    {
-        (**self).get_public_root()
-    }
-}
-
 /// Convenience implementation of ConstraintSystem<E> for mutable references to
 /// constraint systems.
 impl<'cs, E: Engine, CS: ConstraintSystem<E>> ConstraintSystem<E> for &'cs mut CS {
-    type Variable = CS::Variable;
     type Root = CS::Root;
 
-    fn one(&self) -> Self::Variable {
-        (**self).one()
+    fn one() -> Variable {
+        CS::one()
     }
 
     fn alloc<F, A, AR>(
         &mut self,
         annotation: A,
         f: F
-    ) -> Result<Self::Variable, SynthesisError>
+    ) -> Result<Variable, SynthesisError>
         where F: FnOnce() -> Result<E::Fr, SynthesisError>, A: FnOnce() -> AR, AR: Into<String>
     {
         (**self).alloc(annotation, f)
     }
 
-    fn enforce<A, AR>(
+    fn alloc_input<F, A, AR>(
         &mut self,
         annotation: A,
-        a: LinearCombination<Self::Variable, E>,
-        b: LinearCombination<Self::Variable, E>,
-        c: LinearCombination<Self::Variable, E>
+        f: F
+    ) -> Result<Variable, SynthesisError>
+        where F: FnOnce() -> Result<E::Fr, SynthesisError>, A: FnOnce() -> AR, AR: Into<String>
+    {
+        (**self).alloc_input(annotation, f)
+    }
+
+    fn enforce<A, AR, LA, LB, LC>(
+        &mut self,
+        annotation: A,
+        a: LA,
+        b: LB,
+        c: LC
     )
-        where A: FnOnce() -> AR, AR: Into<String>
+        where A: FnOnce() -> AR, AR: Into<String>,
+              LA: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
+              LB: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
+              LC: FnOnce(LinearCombination<E>) -> LinearCombination<E>
     {
         (**self).enforce(annotation, a, b, c)
     }
@@ -413,180 +422,221 @@ impl<'cs, E: Engine, CS: ConstraintSystem<E>> ConstraintSystem<E> for &'cs mut C
     }
 }
 
-#[test]
-fn test_cs() {
-    use pairing::bls12_381::{Bls12, Fr};
+// #[test]
+// fn test_cs() {
+//     use pairing::bls12_381::{Bls12, Fr};
 
-    #[derive(PartialEq, Copy, Clone)]
-    enum Var {
-        Input(usize),
-        Aux(usize)
-    }
+//     struct MySillyConstraintSystem<E: Engine> {
+//         inputs: Vec<(E::Fr, String)>,
+//         aux: Vec<(E::Fr, String)>,
+//         constraints: Vec<(LinearCombination<E>, LinearCombination<E>, LinearCombination<E>, String)>,
+//         current_namespace: Vec<String>
+//     }
 
-    struct MySillyConstraintSystem<E: Engine> {
-        inputs: Vec<(E::Fr, String)>,
-        aux: Vec<(E::Fr, String)>,
-        constraints: Vec<(LinearCombination<Var, E>, LinearCombination<Var, E>, LinearCombination<Var, E>, String)>,
-        current_namespace: Vec<String>
-    }
+//     fn compute_path(ns: &[String], this: String) -> String {
+//         let mut name = String::new();
 
-    fn compute_path(ns: &[String], this: String) -> String {
-        let mut name = String::new();
+//         let mut needs_separation = false;
+//         for ns in ns.iter().chain(Some(&this).into_iter())
+//         {
+//             if needs_separation {
+//                 name += "/";
+//             }
 
-        let mut needs_separation = false;
-        for ns in ns.iter().chain(Some(&this).into_iter())
-        {
-            if needs_separation {
-                name += "/";
-            }
+//             name += ns;
+//             needs_separation = true;
+//         }
 
-            name += ns;
-            needs_separation = true;
-        }
+//         name
+//     }
 
-        name
-    }
+//     impl<E: Engine> PublicConstraintSystem<E> for MySillyConstraintSystem<E> {
+//         type PublicRoot = Self;
 
-    impl<E: Engine> PublicConstraintSystem<E> for MySillyConstraintSystem<E> {
-        type PublicRoot = Self;
+//         fn alloc_input<F, A, AR>(
+//             &mut self,
+//             annotation: A,
+//             f: F
+//         ) -> Result<Variable, SynthesisError>
+//             where F: FnOnce() -> Result<E::Fr, SynthesisError>, A: FnOnce() -> AR, AR: Into<String>
+//         {
+//             let index = self.inputs.len();
+//             let path = compute_path(&self.current_namespace, annotation().into());
+//             self.inputs.push((f()?, path));
 
-        fn alloc_input<F, A, AR>(
-            &mut self,
-            annotation: A,
-            f: F
-        ) -> Result<Self::Variable, SynthesisError>
-            where F: FnOnce() -> Result<E::Fr, SynthesisError>, A: FnOnce() -> AR, AR: Into<String>
-        {
-            let index = self.inputs.len();
-            let path = compute_path(&self.current_namespace, annotation().into());
-            self.inputs.push((f()?, path));
+//             Ok(Var::Input(index))
+//         }
 
-            Ok(Var::Input(index))
-        }
+//         fn get_public_root(&mut self) -> &mut Self::PublicRoot
+//         {
+//             self
+//         }
+//     }
 
-        fn get_public_root(&mut self) -> &mut Self::PublicRoot
-        {
-            self
-        }
-    }
+//     impl<E: Engine> ConstraintSystem<E> for MySillyConstraintSystem<E> {
+//         type Variable = Var;
+//         type Root = Self;
 
-    impl<E: Engine> ConstraintSystem<E> for MySillyConstraintSystem<E> {
-        type Variable = Var;
-        type Root = Self;
+//         fn one(&self) -> Variable {
+//             Var::Input(0)
+//         }
 
-        fn one(&self) -> Self::Variable {
-            Var::Input(0)
-        }
+//         fn alloc<F, A, AR>(
+//             &mut self,
+//             annotation: A,
+//             f: F
+//         ) -> Result<Variable, SynthesisError>
+//             where F: FnOnce() -> Result<E::Fr, SynthesisError>, A: FnOnce() -> AR, AR: Into<String>
+//         {
+//             let index = self.aux.len();
+//             let path = compute_path(&self.current_namespace, annotation().into());
+//             self.aux.push((f()?, path));
 
-        fn alloc<F, A, AR>(
-            &mut self,
-            annotation: A,
-            f: F
-        ) -> Result<Self::Variable, SynthesisError>
-            where F: FnOnce() -> Result<E::Fr, SynthesisError>, A: FnOnce() -> AR, AR: Into<String>
-        {
-            let index = self.aux.len();
-            let path = compute_path(&self.current_namespace, annotation().into());
-            self.aux.push((f()?, path));
+//             Ok(Var::Aux(index))
+//         }
 
-            Ok(Var::Aux(index))
-        }
+//         fn enforce<A, AR, LA, LB, LC>(
+//             &mut self,
+//             annotation: A,
+//             a: LA,
+//             b: LB,
+//             c: LC
+//         )
+//             where A: FnOnce() -> AR, AR: Into<String>,
+//                   LA: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
+//                   LB: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
+//                   LC: FnOnce(LinearCombination<E>) -> LinearCombination<E>
+//         {
+//             let path = compute_path(&self.current_namespace, annotation().into());
 
-        fn enforce<A, AR>(
-            &mut self,
-            annotation: A,
-            a: LinearCombination<Self::Variable, E>,
-            b: LinearCombination<Self::Variable, E>,
-            c: LinearCombination<Self::Variable, E>
-        )
-            where A: FnOnce() -> AR, AR: Into<String>
-        {
-            let path = compute_path(&self.current_namespace, annotation().into());
+//             let a = a(LinearCombination::zero());
+//             let b = b(LinearCombination::zero());
+//             let c = c(LinearCombination::zero());
 
-            self.constraints.push((a, b, c, path));
-        }
+//             self.constraints.push((a, b, c, path));
+//         }
 
-        fn push_namespace<NR, N>(&mut self, name_fn: N)
-        where NR: Into<String>, N: FnOnce() -> NR
-        {
-            self.current_namespace.push(name_fn().into());
-        }
+//         fn push_namespace<NR, N>(&mut self, name_fn: N)
+//         where NR: Into<String>, N: FnOnce() -> NR
+//         {
+//             self.current_namespace.push(name_fn().into());
+//         }
 
-        fn pop_namespace(&mut self)
-        {
-            self.current_namespace.pop();
-        }
+//         fn pop_namespace(&mut self)
+//         {
+//             self.current_namespace.pop();
+//         }
 
-        fn get_root(&mut self) -> &mut Self::Root
-        {
-            self
-        }
-    }
+//         fn get_root(&mut self) -> &mut Self::Root
+//         {
+//             self
+//         }
+//     }
 
-    fn do_stuff_with_pcs<E: Engine, CS: PublicConstraintSystem<E>>(mut cs: CS, one_more: bool)
-    {
-        cs.alloc_input(|| "something", || Ok(E::Fr::zero())).unwrap();
+//     fn do_stuff_with_pcs<E: Engine, CS: PublicConstraintSystem<E>>(mut cs: CS, one_more: bool)
+//     {
+//         cs.alloc_input(|| "something", || Ok(E::Fr::zero())).unwrap();
 
-        if one_more {
-            do_stuff_with_pcs(cs.namespace_public(|| "cool namespace"), false);
-        }
-    }
+//         if one_more {
+//             do_stuff_with_pcs(cs.namespace_public(|| "cool namespace"), false);
+//         }
+//     }
 
-    let mut cs = MySillyConstraintSystem::<Bls12> {
-        inputs: vec![(Fr::one(), "ONE".into())],
-        aux: vec![],
-        constraints: vec![],
-        current_namespace: vec![]
-    };
-    cs.alloc(|| "something", || Ok(Fr::zero())).unwrap();
-    assert_eq!(cs.inputs, vec![(Fr::one(), "ONE".into())]);
-    assert_eq!(cs.aux, vec![(Fr::zero(), "something".into())]);
-    {
-        let mut cs = cs.namespace(|| "woohoo");
+//     let mut cs = MySillyConstraintSystem::<Bls12> {
+//         inputs: vec![(Fr::one(), "ONE".into())],
+//         aux: vec![],
+//         constraints: vec![],
+//         current_namespace: vec![]
+//     };
+//     cs.alloc(|| "something", || Ok(Fr::zero())).unwrap();
+//     assert_eq!(cs.inputs, vec![(Fr::one(), "ONE".into())]);
+//     assert_eq!(cs.aux, vec![(Fr::zero(), "something".into())]);
+//     {
+//         let mut cs = cs.namespace(|| "woohoo");
 
-        cs.alloc(|| "whatever", || Ok(Fr::one())).unwrap();
-        cs.alloc(|| "you", || Ok(Fr::zero())).unwrap();
-        cs.alloc(|| "say", || Ok(Fr::one())).unwrap();
+//         cs.alloc(|| "whatever", || Ok(Fr::one())).unwrap();
+//         cs.alloc(|| "you", || Ok(Fr::zero())).unwrap();
+//         cs.alloc(|| "say", || Ok(Fr::one())).unwrap();
 
-        {
-            let mut cs = cs.namespace(|| "hehe");
+//         {
+//             let mut cs = cs.namespace(|| "hehe");
 
-            let v1 = cs.alloc(|| "hehe, indeed", || Ok(Fr::one())).unwrap();
-            let v2 = cs.alloc_input(|| "works lol", || Ok(Fr::zero())).unwrap();
+//             let v1 = cs.alloc(|| "hehe, indeed", || Ok(Fr::one())).unwrap();
+//             let v2 = cs.alloc_input(|| "works lol", || Ok(Fr::zero())).unwrap();
 
-            let one = cs.one();
+//             let one = cs.one();
 
-            cs.enforce(
-                || "great constraint",
-                LinearCombination::zero() + v1,
-                LinearCombination::zero() + one,
-                LinearCombination::zero() + v2
-            );
-        }
-    }
-    assert_eq!(cs.aux, vec![
-        (Fr::zero(), "something".into()),
-        (Fr::one(), "woohoo/whatever".into()),
-        (Fr::zero(), "woohoo/you".into()),
-        (Fr::one(), "woohoo/say".into()),
-        (Fr::one(), "woohoo/hehe/hehe, indeed".into()),
-    ]);
-    assert_eq!(cs.inputs, vec![
-        (Fr::one(), "ONE".into()),
-        (Fr::zero(), "woohoo/hehe/works lol".into()),
-    ]);
-    assert!(cs.constraints.len() == 1);
-    assert!((cs.constraints[0].0).0 == vec![(Var::Aux(4), Fr::one())]);
-    assert!((cs.constraints[0].1).0 == vec![(Var::Input(0), Fr::one())]);
-    assert!((cs.constraints[0].2).0 == vec![(Var::Input(1), Fr::one())]);
-    assert!(cs.constraints[0].3 == "woohoo/hehe/great constraint");
+//             cs.enforce(
+//                 || "great constraint",
+//                 |lc| lc + v1,
+//                 |lc| lc + one,
+//                 |lc| lc + v2
+//             );
+//         }
+//     }
+//     assert_eq!(cs.aux, vec![
+//         (Fr::zero(), "something".into()),
+//         (Fr::one(), "woohoo/whatever".into()),
+//         (Fr::zero(), "woohoo/you".into()),
+//         (Fr::one(), "woohoo/say".into()),
+//         (Fr::one(), "woohoo/hehe/hehe, indeed".into()),
+//     ]);
+//     assert_eq!(cs.inputs, vec![
+//         (Fr::one(), "ONE".into()),
+//         (Fr::zero(), "woohoo/hehe/works lol".into()),
+//     ]);
+//     assert!(cs.constraints.len() == 1);
+//     assert!((cs.constraints[0].0).0 == vec![(Var::Aux(4), Fr::one())]);
+//     assert!((cs.constraints[0].1).0 == vec![(Var::Input(0), Fr::one())]);
+//     assert!((cs.constraints[0].2).0 == vec![(Var::Input(1), Fr::one())]);
+//     assert!(cs.constraints[0].3 == "woohoo/hehe/great constraint");
 
-    do_stuff_with_pcs(cs.namespace(|| "namey"), true);
+//     do_stuff_with_pcs(cs.namespace(|| "namey"), true);
 
-    assert_eq!(cs.inputs, vec![
-        (Fr::one(), "ONE".into()),
-        (Fr::zero(), "woohoo/hehe/works lol".into()),
-        (Fr::zero(), "namey/something".into()),
-        (Fr::zero(), "namey/cool namespace/something".into()),
-    ]);
-}
+//     assert_eq!(cs.inputs, vec![
+//         (Fr::one(), "ONE".into()),
+//         (Fr::zero(), "woohoo/hehe/works lol".into()),
+//         (Fr::zero(), "namey/something".into()),
+//         (Fr::zero(), "namey/cool namespace/something".into()),
+//     ]);
+// }
+
+// #[test]
+// fn test_lc() {
+//     use pairing::bls12_381::{Bls12, Fr};
+//     use pairing::PrimeField;
+
+//     let a = LinearCombination::<Bls12>::zero() + 0usize + 1usize + 2usize - 3usize;
+
+//     let mut negone = Fr::one();
+//     negone.negate();
+
+//     assert_eq!(a.0, vec![(0usize, Fr::one()), (1usize, Fr::one()), (2usize, Fr::one()), (3usize, negone)]);
+
+//     let x = LinearCombination::<Bls12>::zero() + (Fr::one(), 0usize) - (Fr::one(), 1usize);
+//     let y = LinearCombination::<Bls12>::zero() + (Fr::one(), 2usize) - (Fr::one(), 3usize);
+//     let z = x.clone() + &y - &y;
+
+//     assert_eq!(z.0, vec![
+//         (0usize, Fr::one()),
+//         (1usize, negone),
+//         (2usize, Fr::one()),
+//         (3usize, negone),
+//         (2usize, negone),
+//         (3usize, Fr::one())
+//     ]);
+
+//     let coeff = Fr::from_str("3").unwrap();
+//     let mut neg_coeff = coeff;
+//     neg_coeff.negate();
+//     let z = x + (coeff, &y) - (coeff, &y);
+
+//     assert_eq!(z.0, vec![
+//         (0usize, Fr::one()),
+//         (1usize, negone),
+//         (2usize, Fr::from_str("3").unwrap()),
+//         (3usize, neg_coeff),
+//         (2usize, neg_coeff),
+//         (3usize, Fr::from_str("3").unwrap())
+//     ]);
+// }

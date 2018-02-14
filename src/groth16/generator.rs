@@ -1,26 +1,45 @@
-use pairing::*;
-use ::{
-    Input,
-    Error,
-    LinearCombination,
-    Index,
-    Circuit,
-    Variable,
-    ConstraintSystem,
-    PublicConstraintSystem,
-    Namespace
-};
-use std::marker::PhantomData;
-use super::{VerifyingKey, Parameters};
-use domain::{Scalar, EvaluationDomain};
 use rand::Rng;
-use multicore;
+
 use std::sync::Arc;
 
+use pairing::{
+    Engine,
+    PrimeField,
+    Field,
+    Wnaf,
+    CurveProjective,
+    CurveAffine
+};
+
+use super::{
+    Parameters,
+    VerifyingKey
+};
+
+use ::{
+    SynthesisError,
+    Circuit,
+    ConstraintSystem,
+    LinearCombination,
+    Variable,
+    Index
+};
+
+use ::domain::{
+    EvaluationDomain,
+    Scalar
+};
+
+use ::multicore::{
+    Worker
+};
+
+/// Generates a random common reference string for
+/// a circuit.
 pub fn generate_random_parameters<E, C, R>(
     circuit: C,
     rng: &mut R
-) -> Result<Parameters<E>, Error>
+) -> Result<Parameters<E>, SynthesisError>
     where E: Engine, C: Circuit<E>, R: Rng
 {
     let g1 = rng.gen();
@@ -43,7 +62,114 @@ pub fn generate_random_parameters<E, C, R>(
     )
 }
 
-/// Create parameters for a circuit, given some trapdoors.
+/// This is our assembly structure that we'll use to synthesize the
+/// circuit into a QAP.
+struct KeypairAssembly<E: Engine> {
+    num_inputs: usize,
+    num_aux: usize,
+    num_constraints: usize,
+    at_inputs: Vec<Vec<(E::Fr, usize)>>,
+    bt_inputs: Vec<Vec<(E::Fr, usize)>>,
+    ct_inputs: Vec<Vec<(E::Fr, usize)>>,
+    at_aux: Vec<Vec<(E::Fr, usize)>>,
+    bt_aux: Vec<Vec<(E::Fr, usize)>>,
+    ct_aux: Vec<Vec<(E::Fr, usize)>>
+}
+
+impl<E: Engine> ConstraintSystem<E> for KeypairAssembly<E> {
+    type Root = Self;
+
+    fn alloc<F, A, AR>(
+        &mut self,
+        _: A,
+        _: F
+    ) -> Result<Variable, SynthesisError>
+        where F: FnOnce() -> Result<E::Fr, SynthesisError>, A: FnOnce() -> AR, AR: Into<String>
+    {
+        // There is no assignment, so we don't even invoke the
+        // function for obtaining one.
+
+        let index = self.num_aux;
+        self.num_aux += 1;
+
+        self.at_aux.push(vec![]);
+        self.bt_aux.push(vec![]);
+        self.ct_aux.push(vec![]);
+
+        Ok(Variable(Index::Aux(index)))
+    }
+
+    fn alloc_input<F, A, AR>(
+        &mut self,
+        _: A,
+        _: F
+    ) -> Result<Variable, SynthesisError>
+        where F: FnOnce() -> Result<E::Fr, SynthesisError>, A: FnOnce() -> AR, AR: Into<String>
+    {
+        // There is no assignment, so we don't even invoke the
+        // function for obtaining one.
+
+        let index = self.num_inputs;
+        self.num_inputs += 1;
+
+        self.at_inputs.push(vec![]);
+        self.bt_inputs.push(vec![]);
+        self.ct_inputs.push(vec![]);
+
+        Ok(Variable(Index::Input(index)))
+    }
+
+    fn enforce<A, AR, LA, LB, LC>(
+        &mut self,
+        _: A,
+        a: LA,
+        b: LB,
+        c: LC
+    )
+        where A: FnOnce() -> AR, AR: Into<String>,
+              LA: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
+              LB: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
+              LC: FnOnce(LinearCombination<E>) -> LinearCombination<E>
+    {
+        fn eval<E: Engine>(
+            l: LinearCombination<E>,
+            inputs: &mut [Vec<(E::Fr, usize)>],
+            aux: &mut [Vec<(E::Fr, usize)>],
+            this_constraint: usize
+        )
+        {
+            for (index, coeff) in l.0 {
+                match index {
+                    Variable(Index::Input(id)) => inputs[id].push((coeff, this_constraint)),
+                    Variable(Index::Aux(id)) => aux[id].push((coeff, this_constraint))
+                }
+            }
+        }
+
+        eval(a(LinearCombination::zero()), &mut self.at_inputs, &mut self.at_aux, self.num_constraints);
+        eval(b(LinearCombination::zero()), &mut self.bt_inputs, &mut self.bt_aux, self.num_constraints);
+        eval(c(LinearCombination::zero()), &mut self.ct_inputs, &mut self.ct_aux, self.num_constraints);
+
+        self.num_constraints += 1;
+    }
+
+    fn push_namespace<NR, N>(&mut self, _: N)
+        where NR: Into<String>, N: FnOnce() -> NR
+    {
+        // Do nothing; we don't care about namespaces in this context.
+    }
+
+    fn pop_namespace(&mut self)
+    {
+        // Do nothing; we don't care about namespaces in this context.
+    }
+
+    fn get_root(&mut self) -> &mut Self::Root {
+        self
+    }
+}
+
+/// Create parameters for a circuit, given some toxic waste.
 pub fn generate_parameters<E, C>(
     circuit: C,
     g1: E::G1,
@@ -53,109 +179,9 @@ pub fn generate_parameters<E, C>(
     gamma: E::Fr,
     delta: E::Fr,
     tau: E::Fr
-) -> Result<Parameters<E>, Error>
+) -> Result<Parameters<E>, SynthesisError>
     where E: Engine, C: Circuit<E>
 {
-    // This is our assembly structure that we'll use to synthesize the
-    // circuit into a QAP.
-    struct KeypairAssembly<E: Engine> {
-        num_inputs: usize,
-        num_aux: usize,
-        num_constraints: usize,
-        at_inputs: Vec<Vec<(E::Fr, usize)>>,
-        bt_inputs: Vec<Vec<(E::Fr, usize)>>,
-        ct_inputs: Vec<Vec<(E::Fr, usize)>>,
-        at_aux: Vec<Vec<(E::Fr, usize)>>,
-        bt_aux: Vec<Vec<(E::Fr, usize)>>,
-        ct_aux: Vec<Vec<(E::Fr, usize)>>
-    }
-
-    impl<E: Engine> PublicConstraintSystem<E> for KeypairAssembly<E> {
-        fn alloc_input<NR, N, F>(
-            &mut self,
-            _: N,
-            f: F
-        ) -> Result<Variable, Error>
-            where NR: Into<String>, N: FnOnce() -> NR, F: FnOnce() -> Result<E::Fr, Error>
-        {
-            // In this context, we don't have an assignment.
-            let _ = f();
-
-            let index = self.num_inputs;
-            self.num_inputs += 1;
-
-            self.at_inputs.push(vec![]);
-            self.bt_inputs.push(vec![]);
-            self.ct_inputs.push(vec![]);
-
-            Ok(Variable(Index::Input(index)))
-        }
-    }
-
-    impl<E: Engine> ConstraintSystem<E> for KeypairAssembly<E> {
-        type Root = Self;
-
-        fn alloc<NR, N, F>(
-            &mut self,
-            _: N,
-            f: F
-        ) -> Result<Variable, Error>
-            where NR: Into<String>, N: FnOnce() -> NR, F: FnOnce() -> Result<E::Fr, Error>
-        {
-            // In this context, we don't have an assignment.
-            let _ = f();
-
-            let index = self.num_aux;
-            self.num_aux += 1;
-
-            self.at_aux.push(vec![]);
-            self.bt_aux.push(vec![]);
-            self.ct_aux.push(vec![]);
-
-            Ok(Variable(Index::Aux(index)))
-        }
-
-        fn enforce<NR: Into<String>, N: FnOnce() -> NR>(
-            &mut self,
-            _: N,
-            a: LinearCombination<E>,
-            b: LinearCombination<E>,
-            c: LinearCombination<E>
-        )
-        {
-            fn qap_eval<E: Engine>(
-                l: LinearCombination<E>,
-                inputs: &mut [Vec<(E::Fr, usize)>],
-                aux: &mut [Vec<(E::Fr, usize)>],
-                this_constraint: usize
-            )
-            {
-                for (index, coeff) in l.0 {
-                    match index {
-                        Index::Input(id) => inputs[id].push((coeff, this_constraint)),
-                        Index::Aux(id) => aux[id].push((coeff, this_constraint))
-                    }
-                }
-            }
-
-            qap_eval(a, &mut self.at_inputs, &mut self.at_aux, self.num_constraints);
-            qap_eval(b, &mut self.bt_inputs, &mut self.bt_aux, self.num_constraints);
-            qap_eval(c, &mut self.ct_inputs, &mut self.ct_aux, self.num_constraints);
-
-            self.num_constraints += 1;
-        }
-
-        /// Begin a namespace for the constraint system
-        fn namespace<'a, NR, N>(
-            &'a mut self,
-            _: N
-        ) -> Namespace<'a, E, Self::Root>
-            where NR: Into<String>, N: FnOnce() -> NR
-        {
-            Namespace(self, PhantomData)
-        }
-    }
-
     let mut assembly = KeypairAssembly {
         num_inputs: 0,
         num_aux: 0,
@@ -172,27 +198,18 @@ pub fn generate_parameters<E, C>(
     assembly.alloc_input(|| "", || Ok(E::Fr::one()))?;
 
     // Synthesize the circuit.
-    circuit.synthesize(&mut assembly)?.synthesize(&mut assembly)?;
+    circuit.synthesize(&mut assembly)?;
 
     // Input consistency constraints: x * 0 = 0
     for i in 0..assembly.num_inputs {
         assembly.enforce(|| "",
-                         LinearCombination::zero() + Variable(Index::Input(i)),
-                         LinearCombination::zero(),
-                         LinearCombination::zero());
+            |lc| lc + Variable(Index::Input(i)),
+            |lc| lc,
+            |lc| lc,
+        );
     }
 
-    // Ensure that all auxillary variables are constrained
-    for i in 0..assembly.num_aux {
-        if assembly.at_aux[i].len() == 0 &&
-           assembly.bt_aux[i].len() == 0 &&
-           assembly.ct_aux[i].len() == 0
-        {
-            return Err(Error::UnconstrainedVariable(Variable(Index::Aux(i))));
-        }
-    }
-
-    // Create evaluation domain for the QAP
+    // Create bases for blind evaluation of polynomials at tau
     let powers_of_tau = vec![Scalar::<E>(E::Fr::zero()); assembly.num_constraints];
     let mut powers_of_tau = EvaluationDomain::from_coeffs(powers_of_tau)?;
 
@@ -216,16 +233,17 @@ pub fn generate_parameters<E, C>(
         assembly.num_inputs + assembly.num_aux
     });
 
-    let gamma_inverse = gamma.inverse().ok_or(Error::UnexpectedIdentity)?;
-    let delta_inverse = delta.inverse().ok_or(Error::UnexpectedIdentity)?;
+    let gamma_inverse = gamma.inverse().ok_or(SynthesisError::UnexpectedIdentity)?;
+    let delta_inverse = delta.inverse().ok_or(SynthesisError::UnexpectedIdentity)?;
 
-    // Compute the H query
+    let worker = Worker::new();
+
     let mut h = vec![E::G1::zero(); powers_of_tau.as_ref().len() - 1];
     {
-        // Compute the powers of tau
+        // Compute powers of tau
         {
             let powers_of_tau = powers_of_tau.as_mut();
-            multicore::scope(powers_of_tau.len(), |scope, chunk| {
+            worker.scope(powers_of_tau.len(), |scope, chunk| {
                 for (i, powers_of_tau) in powers_of_tau.chunks_mut(chunk).enumerate()
                 {
                     scope.spawn(move || {
@@ -245,7 +263,7 @@ pub fn generate_parameters<E, C>(
         coeff.mul_assign(&delta_inverse);
 
         // Compute the H query with multiple threads
-        multicore::scope(h.len(), |scope, chunk| {
+        worker.scope(h.len(), |scope, chunk| {
             for (h, p) in h.chunks_mut(chunk).zip(powers_of_tau.as_ref().chunks(chunk))
             {
                 let mut g1_wnaf = g1_wnaf.shared();
@@ -270,7 +288,7 @@ pub fn generate_parameters<E, C>(
     }
 
     // Use inverse FFT to convert powers of tau to Lagrange coefficients
-    powers_of_tau.ifft();
+    powers_of_tau.ifft(&worker);
     let powers_of_tau = powers_of_tau.into_coeffs();
 
     let mut a = vec![E::G1::zero(); assembly.num_inputs + assembly.num_aux];
@@ -303,7 +321,10 @@ pub fn generate_parameters<E, C>(
 
         // Trapdoors
         alpha: &E::Fr,
-        beta: &E::Fr
+        beta: &E::Fr,
+
+        // Worker
+        worker: &Worker
     )
     {
         // Sanity check
@@ -315,7 +336,7 @@ pub fn generate_parameters<E, C>(
         assert_eq!(a.len(), ext.len());
 
         // Evaluate polynomials in multiple threads
-        multicore::scope(a.len(), |scope, chunk| {
+        worker.scope(a.len(), |scope, chunk| {
             for ((((((a, b_g1), b_g2), ext), at), bt), ct) in a.chunks_mut(chunk)
                                                                .zip(b_g1.chunks_mut(chunk))
                                                                .zip(b_g2.chunks_mut(chunk))
@@ -404,7 +425,8 @@ pub fn generate_parameters<E, C>(
         &mut ic,
         &gamma_inverse,
         &alpha,
-        &beta
+        &beta,
+        &worker
     );
 
     // Evaluate for auxillary variables.
@@ -421,8 +443,17 @@ pub fn generate_parameters<E, C>(
         &mut l,
         &delta_inverse,
         &alpha,
-        &beta
+        &beta,
+        &worker
     );
+
+    // Don't allow any elements be unconstrained, so that
+    // the L query is always fully dense.
+    for e in l.iter() {
+        if e.is_zero() {
+            return Err(SynthesisError::UnconstrainedVariable);
+        }
+    }
 
     let g1 = g1.into_affine();
     let g2 = g2.into_affine();

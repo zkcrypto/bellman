@@ -1,12 +1,19 @@
-use pairing::*;
+use pairing::{
+    CurveAffine,
+    CurveProjective,
+    Engine,
+    PrimeField,
+    Field,
+    PrimeFieldRepr
+};
 use std::sync::Arc;
 use std::io;
 use bit_vec::{self, BitVec};
 use std::iter;
 use futures::{Future};
-use futures_cpupool::CpuPool;
+use super::multicore::Worker;
 
-use super::Error;
+use super::SynthesisError;
 
 /// An object that builds a source of bases.
 pub trait SourceBuilder<G: CurveAffine>: Send + Sync + 'static + Clone {
@@ -18,10 +25,10 @@ pub trait SourceBuilder<G: CurveAffine>: Send + Sync + 'static + Clone {
 /// A source of bases, like an iterator.
 pub trait Source<G: CurveAffine> {
     /// Parses the element from the source. Fails if the point is at infinity.
-    fn add_assign_mixed(&mut self, to: &mut <G as CurveAffine>::Projective) -> Result<(), Error>;
+    fn add_assign_mixed(&mut self, to: &mut <G as CurveAffine>::Projective) -> Result<(), SynthesisError>;
 
     /// Skips `amt` elements from the source, avoiding deserialization.
-    fn skip(&mut self, amt: usize) -> Result<(), Error>;
+    fn skip(&mut self, amt: usize) -> Result<(), SynthesisError>;
 }
 
 impl<G: CurveAffine> SourceBuilder<G> for (Arc<Vec<G>>, usize) {
@@ -33,13 +40,13 @@ impl<G: CurveAffine> SourceBuilder<G> for (Arc<Vec<G>>, usize) {
 }
 
 impl<G: CurveAffine> Source<G> for (Arc<Vec<G>>, usize) {
-    fn add_assign_mixed(&mut self, to: &mut <G as CurveAffine>::Projective) -> Result<(), Error> {
+    fn add_assign_mixed(&mut self, to: &mut <G as CurveAffine>::Projective) -> Result<(), SynthesisError> {
         if self.0.len() <= self.1 {
             return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "expected more bases from source").into());
         }
 
         if self.0[self.1].is_zero() {
-            return Err(Error::UnexpectedIdentity)
+            return Err(SynthesisError::UnexpectedIdentity)
         }
 
         to.add_assign_mixed(&self.0[self.1]);
@@ -49,7 +56,7 @@ impl<G: CurveAffine> Source<G> for (Arc<Vec<G>>, usize) {
         Ok(())
     }
 
-    fn skip(&mut self, amt: usize) -> Result<(), Error> {
+    fn skip(&mut self, amt: usize) -> Result<(), SynthesisError> {
         if self.0.len() <= self.1 {
             return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "expected more bases from source").into());
         }
@@ -131,14 +138,14 @@ impl DensityTracker {
 }
 
 fn multiexp_inner<Q, D, G, S>(
-    pool: &CpuPool,
+    pool: &Worker,
     bases: S,
     density_map: D,
     exponents: Arc<Vec<<<G::Engine as Engine>::Fr as PrimeField>::Repr>>,
     mut skip: u32,
     c: u32,
     handle_trivial: bool
-) -> Box<Future<Item=<G as CurveAffine>::Projective, Error=Error>>
+) -> Box<Future<Item=<G as CurveAffine>::Projective, Error=SynthesisError>>
     where for<'a> &'a Q: QueryDensity,
           D: Send + Sync + 'static + Clone + AsRef<Q>,
           G: CurveAffine,
@@ -150,7 +157,7 @@ fn multiexp_inner<Q, D, G, S>(
         let exponents = exponents.clone();
         let density_map = density_map.clone();
 
-        pool.spawn_fn(move || {
+        pool.compute(move || {
             // Accumulate the result
             let mut acc = G::Projective::zero();
 
@@ -228,11 +235,11 @@ fn multiexp_inner<Q, D, G, S>(
 /// Perform multi-exponentiation. The caller is responsible for ensuring the
 /// query size is the same as the number of exponents.
 pub fn multiexp<Q, D, G, S>(
-    pool: &CpuPool,
+    pool: &Worker,
     bases: S,
     density_map: D,
     exponents: Arc<Vec<<<G::Engine as Engine>::Fr as PrimeField>::Repr>>
-) -> Box<Future<Item=<G as CurveAffine>::Projective, Error=Error>>
+) -> Box<Future<Item=<G as CurveAffine>::Projective, Error=SynthesisError>>
     where for<'a> &'a Q: QueryDensity,
           D: Send + Sync + 'static + Clone + AsRef<Q>,
           G: CurveAffine,
@@ -275,7 +282,7 @@ fn test_with_bls12() {
     use rand::{self, Rand};
     use pairing::bls12_381::Bls12;
 
-    const SAMPLES: usize = 1 << 17;
+    const SAMPLES: usize = 1 << 14;
 
     let rng = &mut rand::thread_rng();
     let v = Arc::new((0..SAMPLES).map(|_| <Bls12 as Engine>::Fr::rand(rng).into_repr()).collect::<Vec<_>>());
@@ -283,7 +290,7 @@ fn test_with_bls12() {
 
     let naive = naive_multiexp(g.clone(), v.clone());
 
-    let pool = CpuPool::new_num_cpus();
+    let pool = Worker::new();
 
     let fast = multiexp(
         &pool,
