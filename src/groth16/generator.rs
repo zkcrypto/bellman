@@ -200,7 +200,8 @@ pub fn generate_parameters<E, C>(
     // Synthesize the circuit.
     circuit.synthesize(&mut assembly)?;
 
-    // Input consistency constraints: x * 0 = 0
+    // Input constraints to ensure full density of IC query
+    // x * 0 = 0
     for i in 0..assembly.num_inputs {
         assembly.enforce(|| "",
             |lc| lc + Variable(Index::Input(i)),

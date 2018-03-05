@@ -119,9 +119,9 @@ pub struct VerifyingKey<E: Engine> {
     delta_g2: E::G2Affine,
 
     // Elements of the form (beta * u_i(tau) + alpha v_i(tau) + w_i(tau)) / gamma
-    // for all public inputs. Because all public inputs have a "soundness
-    // of input consistency" constraint, this is the same size as the
-    // number of inputs, and never contains points at infinity.
+    // for all public inputs. Because all public inputs have a dummy constraint,
+    // this is the same size as the number of inputs, and never contains points
+    // at infinity.
     ic: Vec<E::G1Affine>
 }
 
