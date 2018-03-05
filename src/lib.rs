@@ -5,6 +5,7 @@ extern crate futures;
 extern crate futures_cpupool;
 extern crate bit_vec;
 extern crate crossbeam;
+extern crate byteorder;
 
 pub mod multicore;
 pub mod multiexp;
