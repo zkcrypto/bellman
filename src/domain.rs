@@ -1,7 +1,20 @@
+//! This module contains an `EvaluationDomain` abstraction for
+//! performing various kinds of polynomial arithmetic on top of
+//! the scalar field.
+//!
+//! In pairing-based SNARKs like Groth16, we need to calculate
+//! a quotient polynomial over a target polynomial with roots
+//! at distinct points associated with each constraint of the
+//! constraint system. In order to be efficient, we choose these
+//! roots to be the powers of a 2^n root of unity in the field.
+//! This allows us to perform polynomial operations in O(n)
+//! by performing an O(n log n) FFT over such a domain.
+
 use pairing::{
     Engine,
     Field,
-    PrimeField
+    PrimeField,
+    CurveProjective
 };
 
 use super::{
@@ -9,8 +22,6 @@ use super::{
 };
 
 use super::multicore::Worker;
-
-const LARGEST_POLYNOMIAL_DEGREE: usize = 1 << 28;
 
 pub struct EvaluationDomain<E: Engine, G: Group<E>> {
     coeffs: Vec<G>,
@@ -36,12 +47,6 @@ impl<E: Engine, G: Group<E>> EvaluationDomain<E, G> {
 
     pub fn from_coeffs(mut coeffs: Vec<G>) -> Result<EvaluationDomain<E, G>, SynthesisError>
     {
-        // For platform compatibility, we expect not to
-        // deal with these kinds of large polynomials.
-        if coeffs.len() > LARGEST_POLYNOMIAL_DEGREE {
-            return Err(SynthesisError::PolynomialDegreeTooLarge)
-        }
-
         // Compute the size of our evaluation domain
         let mut m = 1;
         let mut exp = 0;
@@ -126,6 +131,8 @@ impl<E: Engine, G: Group<E>> EvaluationDomain<E, G> {
         self.distribute_powers(worker, geninv);
     }
 
+    /// This evaluates t(tau) for this domain, which is
+    /// tau^m - 1 for these radix-2 domains.
     pub fn z(&self, tau: &E::Fr) -> E::Fr {
         let mut tmp = tau.pow(&[self.coeffs.len() as u64]);
         tmp.sub_assign(&E::Fr::one());
@@ -133,6 +140,9 @@ impl<E: Engine, G: Group<E>> EvaluationDomain<E, G> {
         tmp
     }
 
+    /// The target polynomial is the zero polynomial in our
+    /// evaluation domain, so we must perform division over
+    /// a coset.
     pub fn divide_by_z_on_coset(&mut self, worker: &Worker)
     {
         let i = self.z(&E::Fr::multiplicative_generator()).inverse().unwrap();
@@ -148,6 +158,7 @@ impl<E: Engine, G: Group<E>> EvaluationDomain<E, G> {
         });
     }
 
+    /// Perform O(n) multiplication of two polynomials in the domain.
     pub fn mul_assign(&mut self, worker: &Worker, other: &EvaluationDomain<E, Scalar<E>>) {
         assert_eq!(self.coeffs.len(), other.coeffs.len());
 
@@ -162,6 +173,7 @@ impl<E: Engine, G: Group<E>> EvaluationDomain<E, G> {
         });
     }
 
+    /// Perform O(n) subtraction of one polynomial from another in the domain.
     pub fn sub_assign(&mut self, worker: &Worker, other: &EvaluationDomain<E, G>) {
         assert_eq!(self.coeffs.len(), other.coeffs.len());
 
@@ -182,6 +194,37 @@ pub trait Group<E: Engine>: Sized + Copy + Clone + Send + Sync {
     fn group_mul_assign(&mut self, by: &E::Fr);
     fn group_add_assign(&mut self, other: &Self);
     fn group_sub_assign(&mut self, other: &Self);
+}
+
+pub struct Point<G: CurveProjective>(pub G);
+
+impl<G: CurveProjective> PartialEq for Point<G> {
+    fn eq(&self, other: &Point<G>) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl<G: CurveProjective> Copy for Point<G> { }
+
+impl<G: CurveProjective> Clone for Point<G> {
+    fn clone(&self) -> Point<G> {
+        *self
+    }
+}
+
+impl<G: CurveProjective> Group<G::Engine> for Point<G> {
+    fn group_zero() -> Self {
+        Point(G::zero())
+    }
+    fn group_mul_assign(&mut self, by: &G::Scalar) {
+        self.0.mul_assign(by.into_repr());
+    }
+    fn group_add_assign(&mut self, other: &Self) {
+        self.0.add_assign(&other.0);
+    }
+    fn group_sub_assign(&mut self, other: &Self) {
+        self.0.sub_assign(&other.0);
+    }
 }
 
 pub struct Scalar<E: Engine>(pub E::Fr);
