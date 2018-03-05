@@ -196,15 +196,11 @@ impl Default for FrRepr {
 }
 
 impl PrimeFieldRepr for FrRepr {
-    fn sub_noborrow(&mut self, other: &Self) -> bool {
+    fn sub_noborrow(&mut self, other: &Self) {
         self.0[0] = self.0[0].wrapping_sub(other.0[0]);
-
-        false
     }
-    fn add_nocarry(&mut self, other: &Self) -> bool {
+    fn add_nocarry(&mut self, other: &Self) {
         self.0[0] = self.0[0].wrapping_add(other.0[0]);
-
-        false
     }
     fn num_bits(&self) -> u32 {
         64 - self.0[0].leading_zeros()
@@ -219,15 +215,15 @@ impl PrimeFieldRepr for FrRepr {
         self.0[0] % 2 == 0
     }
     fn div2(&mut self) {
-        self.divn(1)
+        self.shr(1)
     }
-    fn divn(&mut self, amt: u32) {
+    fn shr(&mut self, amt: u32) {
         self.0[0] >>= amt;
     }
     fn mul2(&mut self) {
-        self.muln(1)
+        self.shl(1)
     }
-    fn muln(&mut self, amt: u32) {
+    fn shl(&mut self, amt: u32) {
         self.0[0] <<= amt;
     }
 }

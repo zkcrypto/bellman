@@ -183,7 +183,7 @@ fn multiexp_inner<Q, D, G, S>(
                         }
                     } else {
                         let mut exp = exp;
-                        exp.divn(skip);
+                        exp.shr(skip);
                         let exp = exp.as_ref()[0] % (1 << c);
 
                         if exp != 0 {
