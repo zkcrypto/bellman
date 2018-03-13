@@ -99,6 +99,18 @@ impl<E: Engine> ConstraintSystem<E> for KeypairAssembly<E> {
         Ok(Variable(Index::Aux(index)))
     }
 
+    fn num_constraints(&self) -> usize {
+        self.num_constraints
+    }
+
+    fn num_input_variables(&self) -> usize {
+        self.num_inputs
+    }
+
+    fn num_aux_variables(&self) -> usize {
+        self.num_aux
+    }
+
     fn alloc_input<F, A, AR>(
         &mut self,
         _: A,

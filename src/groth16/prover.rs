@@ -99,6 +99,18 @@ struct ProvingAssignment<E: Engine> {
 impl<E: Engine> ConstraintSystem<E> for ProvingAssignment<E> {
     type Root = Self;
 
+    fn num_constraints(&self) -> usize {
+        self.a.len()
+    }
+
+    fn num_input_variables(&self) -> usize {
+        self.input_assignment.len()
+    }
+
+    fn num_aux_variables(&self) -> usize {
+        self.aux_assignment.len()
+    }
+
     fn alloc<F, A, AR>(
         &mut self,
         _: A,

@@ -51,7 +51,7 @@ impl Variable {
 }
 
 /// Represents the index of either an input variable or
-/// auxillary variable.
+/// auxiliary variable.
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum Index {
     Input(usize),
@@ -181,7 +181,7 @@ pub enum SynthesisError {
     IoError(io::Error),
     /// During verification, our verifying key was malformed.
     MalformedVerifyingKey,
-    /// During CRS generation, we observed an unconstrained auxillary variable
+    /// During CRS generation, we observed an unconstrained auxiliary variable
     UnconstrainedVariable
 }
 
@@ -201,7 +201,7 @@ impl Error for SynthesisError {
             SynthesisError::UnexpectedIdentity => "encountered an identity element in the CRS",
             SynthesisError::IoError(_) => "encountered an I/O error",
             SynthesisError::MalformedVerifyingKey => "malformed verifying key",
-            SynthesisError::UnconstrainedVariable => "auxillary variable was unconstrained"
+            SynthesisError::UnconstrainedVariable => "auxiliary variable was unconstrained"
         }
     }
 }
@@ -228,6 +228,15 @@ pub trait ConstraintSystem<E: Engine>: Sized {
     fn one() -> Variable {
         Variable::new_unchecked(Index::Input(0))
     }
+
+    /// Get the number of constraints in the system.
+    fn num_constraints(&self) -> usize;
+
+    /// Get the number of input variables in the system.
+    fn num_input_variables(&self) -> usize;
+
+    /// Get the number of auxiliary variables in the system.
+    fn num_aux_variables(&self) -> usize;
 
     /// Allocate a private variable in the constraint system. The provided function is used to
     /// determine the assignment of the variable. The given `annotation` function is invoked
@@ -300,6 +309,18 @@ impl<'cs, E: Engine, CS: ConstraintSystem<E>> ConstraintSystem<E> for Namespace<
         CS::one()
     }
 
+    fn num_constraints(&self) -> usize {
+        self.0.num_constraints()
+    }
+
+    fn num_input_variables(&self) -> usize {
+        self.0.num_input_variables()
+    }
+
+    fn num_aux_variables(&self) -> usize {
+        self.0.num_aux_variables()
+    }
+
     fn alloc<F, A, AR>(
         &mut self,
         annotation: A,
@@ -369,6 +390,18 @@ impl<'cs, E: Engine, CS: ConstraintSystem<E>> ConstraintSystem<E> for &'cs mut C
 
     fn one() -> Variable {
         CS::one()
+    }
+
+    fn num_constraints(&self) -> usize {
+        (**self).num_constraints()
+    }
+
+    fn num_input_variables(&self) -> usize {
+        (**self).num_input_variables()
+    }
+
+    fn num_aux_variables(&self) -> usize {
+        (**self).num_aux_variables()
     }
 
     fn alloc<F, A, AR>(
