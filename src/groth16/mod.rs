@@ -149,7 +149,7 @@ impl<E: Engine> VerifyingKey<E> {
         writer.write_all(self.gamma_g2.into_uncompressed().as_ref())?;
         writer.write_all(self.delta_g1.into_uncompressed().as_ref())?;
         writer.write_all(self.delta_g2.into_uncompressed().as_ref())?;
-        writer.write_u64::<BigEndian>(self.ic.len() as u64)?;
+        writer.write_u32::<BigEndian>(self.ic.len() as u32)?;
         for ic in &self.ic {
             writer.write_all(ic.into_uncompressed().as_ref())?;
         }
@@ -182,7 +182,7 @@ impl<E: Engine> VerifyingKey<E> {
         reader.read_exact(g2_repr.as_mut())?;
         let delta_g2 = g2_repr.into_affine().map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
 
-        let ic_len = reader.read_u64::<BigEndian>()? as usize;
+        let ic_len = reader.read_u32::<BigEndian>()? as usize;
 
         let mut ic = vec![];
 
@@ -256,27 +256,27 @@ impl<E: Engine> Parameters<E> {
     {
         self.vk.write(&mut writer)?;
 
-        writer.write_u64::<BigEndian>(self.h.len() as u64)?;
+        writer.write_u32::<BigEndian>(self.h.len() as u32)?;
         for g in &self.h[..] {
             writer.write_all(g.into_uncompressed().as_ref())?;
         }
 
-        writer.write_u64::<BigEndian>(self.l.len() as u64)?;
+        writer.write_u32::<BigEndian>(self.l.len() as u32)?;
         for g in &self.l[..] {
             writer.write_all(g.into_uncompressed().as_ref())?;
         }
 
-        writer.write_u64::<BigEndian>(self.a.len() as u64)?;
+        writer.write_u32::<BigEndian>(self.a.len() as u32)?;
         for g in &self.a[..] {
             writer.write_all(g.into_uncompressed().as_ref())?;
         }
 
-        writer.write_u64::<BigEndian>(self.b_g1.len() as u64)?;
+        writer.write_u32::<BigEndian>(self.b_g1.len() as u32)?;
         for g in &self.b_g1[..] {
             writer.write_all(g.into_uncompressed().as_ref())?;
         }
 
-        writer.write_u64::<BigEndian>(self.b_g2.len() as u64)?;
+        writer.write_u32::<BigEndian>(self.b_g2.len() as u32)?;
         for g in &self.b_g2[..] {
             writer.write_all(g.into_uncompressed().as_ref())?;
         }
@@ -336,35 +336,35 @@ impl<E: Engine> Parameters<E> {
         let mut b_g2 = vec![];
 
         {
-            let len = reader.read_u64::<BigEndian>()? as usize;
+            let len = reader.read_u32::<BigEndian>()? as usize;
             for _ in 0..len {
                 h.push(read_g1(&mut reader)?);
             }
         }
 
         {
-            let len = reader.read_u64::<BigEndian>()? as usize;
+            let len = reader.read_u32::<BigEndian>()? as usize;
             for _ in 0..len {
                 l.push(read_g1(&mut reader)?);
             }
         }
 
         {
-            let len = reader.read_u64::<BigEndian>()? as usize;
+            let len = reader.read_u32::<BigEndian>()? as usize;
             for _ in 0..len {
                 a.push(read_g1(&mut reader)?);
             }
         }
 
         {
-            let len = reader.read_u64::<BigEndian>()? as usize;
+            let len = reader.read_u32::<BigEndian>()? as usize;
             for _ in 0..len {
                 b_g1.push(read_g1(&mut reader)?);
             }
         }
 
         {
-            let len = reader.read_u64::<BigEndian>()? as usize;
+            let len = reader.read_u32::<BigEndian>()? as usize;
             for _ in 0..len {
                 b_g2.push(read_g2(&mut reader)?);
             }
@@ -535,7 +535,7 @@ mod test_with_bls12_381 {
             let mut v = vec![];
 
             params.write(&mut v).unwrap();
-            assert_eq!(v.len(), 2160);
+            assert_eq!(v.len(), 2136);
 
             let de_params = Parameters::read(&v[..], true).unwrap();
             assert!(params == de_params);
