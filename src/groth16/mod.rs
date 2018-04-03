@@ -26,9 +26,9 @@ pub use self::verifier::*;
 
 #[derive(Clone)]
 pub struct Proof<E: Engine> {
-    a: E::G1Affine,
-    b: E::G2Affine,
-    c: E::G1Affine
+    pub a: E::G1Affine,
+    pub b: E::G2Affine,
+    pub c: E::G1Affine
 }
 
 impl<E: Engine> PartialEq for Proof<E> {
@@ -101,28 +101,28 @@ impl<E: Engine> Proof<E> {
 pub struct VerifyingKey<E: Engine> {
     // alpha in g1 for verifying and for creating A/C elements of
     // proof. Never the point at infinity.
-    alpha_g1: E::G1Affine,
+    pub alpha_g1: E::G1Affine,
 
     // beta in g1 and g2 for verifying and for creating B/C elements
     // of proof. Never the point at infinity.
-    beta_g1: E::G1Affine,
-    beta_g2: E::G2Affine,
+    pub beta_g1: E::G1Affine,
+    pub beta_g2: E::G2Affine,
 
     // gamma in g2 for verifying. Never the point at infinity.
-    gamma_g2: E::G2Affine,
+    pub gamma_g2: E::G2Affine,
 
     // delta in g1/g2 for verifying and proving, essentially the magic
     // trapdoor that forces the prover to evaluate the C element of the
     // proof with only components from the CRS. Never the point at
     // infinity.
-    delta_g1: E::G1Affine,
-    delta_g2: E::G2Affine,
+    pub delta_g1: E::G1Affine,
+    pub delta_g2: E::G2Affine,
 
     // Elements of the form (beta * u_i(tau) + alpha v_i(tau) + w_i(tau)) / gamma
     // for all public inputs. Because all public inputs have a dummy constraint,
     // this is the same size as the number of inputs, and never contains points
     // at infinity.
-    ic: Vec<E::G1Affine>
+    pub ic: Vec<E::G1Affine>
 }
 
 impl<E: Engine> PartialEq for VerifyingKey<E> {
@@ -218,23 +218,23 @@ pub struct Parameters<E: Engine> {
 
     // Elements of the form ((tau^i * t(tau)) / delta) for i between 0 and 
     // m-2 inclusive. Never contains points at infinity.
-    h: Arc<Vec<E::G1Affine>>,
+    pub h: Arc<Vec<E::G1Affine>>,
 
     // Elements of the form (beta * u_i(tau) + alpha v_i(tau) + w_i(tau)) / delta
     // for all auxillary inputs. Variables can never be unconstrained, so this
     // never contains points at infinity.
-    l: Arc<Vec<E::G1Affine>>,
+    pub l: Arc<Vec<E::G1Affine>>,
 
     // QAP "A" polynomials evaluated at tau in the Lagrange basis. Never contains
     // points at infinity: polynomials that evaluate to zero are omitted from
     // the CRS and the prover can deterministically skip their evaluation.
-    a: Arc<Vec<E::G1Affine>>,
+    pub a: Arc<Vec<E::G1Affine>>,
 
     // QAP "B" polynomials evaluated at tau in the Lagrange basis. Needed in
     // G1 and G2 for C/B queries, respectively. Never contains points at
     // infinity for the same reason as the "A" polynomials.
-    b_g1: Arc<Vec<E::G1Affine>>,
-    b_g2: Arc<Vec<E::G2Affine>>
+    pub b_g1: Arc<Vec<E::G1Affine>>,
+    pub b_g2: Arc<Vec<E::G2Affine>>
 }
 
 impl<E: Engine> PartialEq for Parameters<E> {
