@@ -290,6 +290,12 @@ pub fn create_proof<E, C, P: ParameterSource<E>>(
     let b_g2_inputs = multiexp(&worker, b_g2_inputs_source, b_input_density, input_assignment);
     let b_g2_aux = multiexp(&worker, b_g2_aux_source, b_aux_density, aux_assignment);
 
+    if vk.delta_g1.is_zero() || vk.delta_g2.is_zero() {
+        // If this element is zero, someone is trying to perform a
+        // subversion-CRS attack.
+        return Err(SynthesisError::UnexpectedIdentity);
+    }
+
     let mut g_a = vk.delta_g1.mul(r);
     g_a.add_assign_mixed(&vk.alpha_g1);
     let mut g_b = vk.delta_g2.mul(s);

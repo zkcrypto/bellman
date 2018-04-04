@@ -26,9 +26,9 @@ pub use self::verifier::*;
 
 #[derive(Clone)]
 pub struct Proof<E: Engine> {
-    a: E::G1Affine,
-    b: E::G2Affine,
-    c: E::G1Affine
+    pub a: E::G1Affine,
+    pub b: E::G2Affine,
+    pub c: E::G1Affine
 }
 
 impl<E: Engine> PartialEq for Proof<E> {
@@ -101,28 +101,28 @@ impl<E: Engine> Proof<E> {
 pub struct VerifyingKey<E: Engine> {
     // alpha in g1 for verifying and for creating A/C elements of
     // proof. Never the point at infinity.
-    alpha_g1: E::G1Affine,
+    pub alpha_g1: E::G1Affine,
 
     // beta in g1 and g2 for verifying and for creating B/C elements
     // of proof. Never the point at infinity.
-    beta_g1: E::G1Affine,
-    beta_g2: E::G2Affine,
+    pub beta_g1: E::G1Affine,
+    pub beta_g2: E::G2Affine,
 
     // gamma in g2 for verifying. Never the point at infinity.
-    gamma_g2: E::G2Affine,
+    pub gamma_g2: E::G2Affine,
 
     // delta in g1/g2 for verifying and proving, essentially the magic
     // trapdoor that forces the prover to evaluate the C element of the
     // proof with only components from the CRS. Never the point at
     // infinity.
-    delta_g1: E::G1Affine,
-    delta_g2: E::G2Affine,
+    pub delta_g1: E::G1Affine,
+    pub delta_g2: E::G2Affine,
 
     // Elements of the form (beta * u_i(tau) + alpha v_i(tau) + w_i(tau)) / gamma
     // for all public inputs. Because all public inputs have a dummy constraint,
     // this is the same size as the number of inputs, and never contains points
     // at infinity.
-    ic: Vec<E::G1Affine>
+    pub ic: Vec<E::G1Affine>
 }
 
 impl<E: Engine> PartialEq for VerifyingKey<E> {
@@ -149,7 +149,7 @@ impl<E: Engine> VerifyingKey<E> {
         writer.write_all(self.gamma_g2.into_uncompressed().as_ref())?;
         writer.write_all(self.delta_g1.into_uncompressed().as_ref())?;
         writer.write_all(self.delta_g2.into_uncompressed().as_ref())?;
-        writer.write_u64::<BigEndian>(self.ic.len() as u64)?;
+        writer.write_u32::<BigEndian>(self.ic.len() as u32)?;
         for ic in &self.ic {
             writer.write_all(ic.into_uncompressed().as_ref())?;
         }
@@ -182,7 +182,7 @@ impl<E: Engine> VerifyingKey<E> {
         reader.read_exact(g2_repr.as_mut())?;
         let delta_g2 = g2_repr.into_affine().map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
 
-        let ic_len = reader.read_u64::<BigEndian>()? as usize;
+        let ic_len = reader.read_u32::<BigEndian>()? as usize;
 
         let mut ic = vec![];
 
@@ -218,23 +218,23 @@ pub struct Parameters<E: Engine> {
 
     // Elements of the form ((tau^i * t(tau)) / delta) for i between 0 and 
     // m-2 inclusive. Never contains points at infinity.
-    h: Arc<Vec<E::G1Affine>>,
+    pub h: Arc<Vec<E::G1Affine>>,
 
     // Elements of the form (beta * u_i(tau) + alpha v_i(tau) + w_i(tau)) / delta
     // for all auxillary inputs. Variables can never be unconstrained, so this
     // never contains points at infinity.
-    l: Arc<Vec<E::G1Affine>>,
+    pub l: Arc<Vec<E::G1Affine>>,
 
     // QAP "A" polynomials evaluated at tau in the Lagrange basis. Never contains
     // points at infinity: polynomials that evaluate to zero are omitted from
     // the CRS and the prover can deterministically skip their evaluation.
-    a: Arc<Vec<E::G1Affine>>,
+    pub a: Arc<Vec<E::G1Affine>>,
 
     // QAP "B" polynomials evaluated at tau in the Lagrange basis. Needed in
     // G1 and G2 for C/B queries, respectively. Never contains points at
     // infinity for the same reason as the "A" polynomials.
-    b_g1: Arc<Vec<E::G1Affine>>,
-    b_g2: Arc<Vec<E::G2Affine>>
+    pub b_g1: Arc<Vec<E::G1Affine>>,
+    pub b_g2: Arc<Vec<E::G2Affine>>
 }
 
 impl<E: Engine> PartialEq for Parameters<E> {
@@ -256,27 +256,27 @@ impl<E: Engine> Parameters<E> {
     {
         self.vk.write(&mut writer)?;
 
-        writer.write_u64::<BigEndian>(self.h.len() as u64)?;
+        writer.write_u32::<BigEndian>(self.h.len() as u32)?;
         for g in &self.h[..] {
             writer.write_all(g.into_uncompressed().as_ref())?;
         }
 
-        writer.write_u64::<BigEndian>(self.l.len() as u64)?;
+        writer.write_u32::<BigEndian>(self.l.len() as u32)?;
         for g in &self.l[..] {
             writer.write_all(g.into_uncompressed().as_ref())?;
         }
 
-        writer.write_u64::<BigEndian>(self.a.len() as u64)?;
+        writer.write_u32::<BigEndian>(self.a.len() as u32)?;
         for g in &self.a[..] {
             writer.write_all(g.into_uncompressed().as_ref())?;
         }
 
-        writer.write_u64::<BigEndian>(self.b_g1.len() as u64)?;
+        writer.write_u32::<BigEndian>(self.b_g1.len() as u32)?;
         for g in &self.b_g1[..] {
             writer.write_all(g.into_uncompressed().as_ref())?;
         }
 
-        writer.write_u64::<BigEndian>(self.b_g2.len() as u64)?;
+        writer.write_u32::<BigEndian>(self.b_g2.len() as u32)?;
         for g in &self.b_g2[..] {
             writer.write_all(g.into_uncompressed().as_ref())?;
         }
@@ -336,35 +336,35 @@ impl<E: Engine> Parameters<E> {
         let mut b_g2 = vec![];
 
         {
-            let len = reader.read_u64::<BigEndian>()? as usize;
+            let len = reader.read_u32::<BigEndian>()? as usize;
             for _ in 0..len {
                 h.push(read_g1(&mut reader)?);
             }
         }
 
         {
-            let len = reader.read_u64::<BigEndian>()? as usize;
+            let len = reader.read_u32::<BigEndian>()? as usize;
             for _ in 0..len {
                 l.push(read_g1(&mut reader)?);
             }
         }
 
         {
-            let len = reader.read_u64::<BigEndian>()? as usize;
+            let len = reader.read_u32::<BigEndian>()? as usize;
             for _ in 0..len {
                 a.push(read_g1(&mut reader)?);
             }
         }
 
         {
-            let len = reader.read_u64::<BigEndian>()? as usize;
+            let len = reader.read_u32::<BigEndian>()? as usize;
             for _ in 0..len {
                 b_g1.push(read_g1(&mut reader)?);
             }
         }
 
         {
-            let len = reader.read_u64::<BigEndian>()? as usize;
+            let len = reader.read_u32::<BigEndian>()? as usize;
             for _ in 0..len {
                 b_g2.push(read_g2(&mut reader)?);
             }
@@ -535,7 +535,7 @@ mod test_with_bls12_381 {
             let mut v = vec![];
 
             params.write(&mut v).unwrap();
-            assert_eq!(v.len(), 2160);
+            assert_eq!(v.len(), 2136);
 
             let de_params = Parameters::read(&v[..], true).unwrap();
             assert!(params == de_params);

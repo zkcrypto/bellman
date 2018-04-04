@@ -7,7 +7,7 @@ extern crate bit_vec;
 extern crate crossbeam;
 extern crate byteorder;
 
-mod multicore;
+pub mod multicore;
 mod multiexp;
 pub mod domain;
 pub mod groth16;
