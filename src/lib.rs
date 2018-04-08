@@ -51,7 +51,7 @@ impl Variable {
 }
 
 /// Represents the index of either an input variable or
-/// auxillary variable.
+/// auxiliary variable.
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum Index {
     Input(usize),
@@ -181,7 +181,7 @@ pub enum SynthesisError {
     IoError(io::Error),
     /// During verification, our verifying key was malformed.
     MalformedVerifyingKey,
-    /// During CRS generation, we observed an unconstrained auxillary variable
+    /// During CRS generation, we observed an unconstrained auxiliary variable
     UnconstrainedVariable
 }
 
