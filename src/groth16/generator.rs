@@ -22,7 +22,8 @@ use ::{
     ConstraintSystem,
     LinearCombination,
     Variable,
-    Index
+    Index,
+    Profiler
 };
 
 use ::domain::{
@@ -36,7 +37,8 @@ use ::multicore::{
 
 /// Generates a random common reference string for
 /// a circuit.
-pub fn generate_random_parameters<E, C, R>(
+pub fn generate_random_parameters<'a, P: Profiler, E, C, R>(
+    profiler: &'a mut P,
     circuit: C,
     rng: &mut R
 ) -> Result<Parameters<E>, SynthesisError>
@@ -50,7 +52,8 @@ pub fn generate_random_parameters<E, C, R>(
     let delta = rng.gen();
     let tau = rng.gen();
 
-    generate_parameters::<E, C>(
+    generate_parameters::<P, E, C>(
+        profiler,
         circuit,
         g1,
         g2,
@@ -64,7 +67,7 @@ pub fn generate_random_parameters<E, C, R>(
 
 /// This is our assembly structure that we'll use to synthesize the
 /// circuit into a QAP.
-struct KeypairAssembly<E: Engine> {
+struct KeypairAssembly<'a, E: Engine, P: Profiler + 'a> {
     num_inputs: usize,
     num_aux: usize,
     num_constraints: usize,
@@ -73,10 +76,17 @@ struct KeypairAssembly<E: Engine> {
     ct_inputs: Vec<Vec<(E::Fr, usize)>>,
     at_aux: Vec<Vec<(E::Fr, usize)>>,
     bt_aux: Vec<Vec<(E::Fr, usize)>>,
-    ct_aux: Vec<Vec<(E::Fr, usize)>>
+    ct_aux: Vec<Vec<(E::Fr, usize)>>,
+    profiler: &'a mut P
 }
 
-impl<E: Engine> ConstraintSystem<E> for KeypairAssembly<E> {
+impl<'a, E: Engine, P: Profiler> ConstraintSystem<E> for KeypairAssembly<'a, E, P> {
+    type Profiler = P;
+
+    fn profiler(&mut self) -> &mut Self::Profiler {
+        self.profiler
+    }
+
     type Root = Self;
 
     fn alloc<F, A, AR>(
@@ -170,7 +180,8 @@ impl<E: Engine> ConstraintSystem<E> for KeypairAssembly<E> {
 }
 
 /// Create parameters for a circuit, given some toxic waste.
-pub fn generate_parameters<E, C>(
+pub fn generate_parameters<'a, P: Profiler, E, C>(
+    profiler: &'a mut P,
     circuit: C,
     g1: E::G1,
     g2: E::G2,
@@ -191,7 +202,8 @@ pub fn generate_parameters<E, C>(
         ct_inputs: vec![],
         at_aux: vec![],
         bt_aux: vec![],
-        ct_aux: vec![]
+        ct_aux: vec![],
+        profiler: profiler
     };
 
     // Allocate the "one" input variable

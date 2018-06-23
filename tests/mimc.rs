@@ -185,7 +185,7 @@ fn test_mimc() {
             constants: &constants
         };
 
-        generate_random_parameters(c, rng).unwrap()
+        generate_random_parameters(&mut (), c, rng).unwrap()
     };
 
     // Prepare the verification key (for proof verification)
@@ -221,7 +221,7 @@ fn test_mimc() {
             };
 
             // Create a groth16 proof with our parameters.
-            let proof = create_random_proof(c, &params, rng).unwrap();
+            let proof = create_random_proof(&mut (), c, &params, rng).unwrap();
 
             proof.write(&mut proof_vec).unwrap();
         }

@@ -217,9 +217,21 @@ impl fmt::Display for SynthesisError {
     }
 }
 
+pub trait Profiler {
+
+}
+
+impl Profiler for () {
+
+}
+
 /// Represents a constraint system which can have new variables
 /// allocated and constrains between them formed.
 pub trait ConstraintSystem<E: Engine>: Sized {
+    type Profiler: Profiler;
+
+    fn profiler(&mut self) -> &mut Self::Profiler;
+
     /// Represents the type of the "root" of this constraint system
     /// so that nested namespaces can minimize indirection.
     type Root: ConstraintSystem<E>;
@@ -294,6 +306,12 @@ pub trait ConstraintSystem<E: Engine>: Sized {
 pub struct Namespace<'a, E: Engine, CS: ConstraintSystem<E> + 'a>(&'a mut CS, PhantomData<E>);
 
 impl<'cs, E: Engine, CS: ConstraintSystem<E>> ConstraintSystem<E> for Namespace<'cs, E, CS> {
+    type Profiler = CS::Profiler;
+
+    fn profiler(&mut self) -> &mut Self::Profiler {
+        self.0.profiler()
+    }
+
     type Root = CS::Root;
 
     fn one() -> Variable {
@@ -365,6 +383,12 @@ impl<'a, E: Engine, CS: ConstraintSystem<E>> Drop for Namespace<'a, E, CS> {
 /// Convenience implementation of ConstraintSystem<E> for mutable references to
 /// constraint systems.
 impl<'cs, E: Engine, CS: ConstraintSystem<E>> ConstraintSystem<E> for &'cs mut CS {
+    type Profiler = CS::Profiler;
+
+    fn profiler(&mut self) -> &mut Self::Profiler {
+        (**self).profiler()
+    }
+
     type Root = CS::Root;
 
     fn one() -> Variable {

@@ -113,6 +113,7 @@ fn test_xordemo() {
         };
 
         generate_parameters(
+            &mut (),
             c,
             g1,
             g2,
@@ -303,6 +304,7 @@ fn test_xordemo() {
         };
 
         create_proof(
+            &mut (),
             c,
             &params,
             r,
