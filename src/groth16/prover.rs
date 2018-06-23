@@ -23,7 +23,8 @@ use ::{
     ConstraintSystem,
     LinearCombination,
     Variable,
-    Index
+    Index,
+    Profiler
 };
 
 use ::domain::{
@@ -80,7 +81,7 @@ fn eval<E: Engine>(
     acc
 }
 
-struct ProvingAssignment<E: Engine> {
+struct ProvingAssignment<'a, E: Engine, P: Profiler + 'a> {
     // Density of queries
     a_aux_density: DensityTracker,
     b_input_density: DensityTracker,
@@ -93,10 +94,18 @@ struct ProvingAssignment<E: Engine> {
 
     // Assignments of variables
     input_assignment: Vec<E::Fr>,
-    aux_assignment: Vec<E::Fr>
+    aux_assignment: Vec<E::Fr>,
+
+    profiler: &'a mut P
 }
 
-impl<E: Engine> ConstraintSystem<E> for ProvingAssignment<E> {
+impl<'a, E: Engine, P: Profiler> ConstraintSystem<E> for ProvingAssignment<'a, E, P> {
+    type Profiler = P;
+
+    fn profiler(&mut self) -> &mut Self::Profiler {
+        self.profiler
+    }
+
     type Root = Self;
 
     fn alloc<F, A, AR>(
@@ -188,9 +197,10 @@ impl<E: Engine> ConstraintSystem<E> for ProvingAssignment<E> {
     }
 }
 
-pub fn create_random_proof<E, C, R, P: ParameterSource<E>>(
+pub fn create_random_proof<'a, P: Profiler, E, C, R, Params: ParameterSource<E>>(
+    profiler: &'a mut P,
     circuit: C,
-    params: P,
+    params: Params,
     rng: &mut R
 ) -> Result<Proof<E>, SynthesisError>
     where E: Engine, C: Circuit<E>, R: Rng
@@ -198,12 +208,13 @@ pub fn create_random_proof<E, C, R, P: ParameterSource<E>>(
     let r = rng.gen();
     let s = rng.gen();
 
-    create_proof::<E, C, P>(circuit, params, r, s)
+    create_proof::<P, E, C, Params>(profiler, circuit, params, r, s)
 }
 
-pub fn create_proof<E, C, P: ParameterSource<E>>(
+pub fn create_proof<'a, P: Profiler, E, C, Params: ParameterSource<E>>(
+    profiler: &'a mut P,
     circuit: C,
-    mut params: P,
+    mut params: Params,
     r: E::Fr,
     s: E::Fr
 ) -> Result<Proof<E>, SynthesisError>
@@ -217,7 +228,8 @@ pub fn create_proof<E, C, P: ParameterSource<E>>(
         b: vec![],
         c: vec![],
         input_assignment: vec![],
-        aux_assignment: vec![]
+        aux_assignment: vec![],
+        profiler: profiler
     };
 
     prover.alloc_input(|| "", || Ok(E::Fr::one()))?;

@@ -526,7 +526,8 @@ mod test_with_bls12_381 {
 
         let rng = &mut thread_rng();
 
-        let params = generate_random_parameters::<Bls12, _, _>(
+        let params = generate_random_parameters::<_, Bls12, _, _>(
+            &mut (),
             MySillyCircuit { a: None, b: None },
             rng
         ).unwrap();
@@ -553,6 +554,7 @@ mod test_with_bls12_381 {
             c.mul_assign(&b);
 
             let proof = create_random_proof(
+                &mut (),
                 MySillyCircuit {
                     a: Some(a),
                     b: Some(b)
