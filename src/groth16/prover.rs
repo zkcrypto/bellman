@@ -4,10 +4,9 @@ use std::sync::Arc;
 
 use futures::Future;
 
+use ff::{Field, PrimeField};
 use pairing::{
     Engine,
-    PrimeField,
-    Field,
     CurveProjective,
     CurveAffine
 };

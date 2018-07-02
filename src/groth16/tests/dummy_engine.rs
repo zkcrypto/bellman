@@ -1,13 +1,10 @@
+use ff::{
+    Field, LegendreSymbol, PrimeField, PrimeFieldDecodingError,
+    PrimeFieldRepr, ScalarEngine, SqrtField};
 use pairing::{
     Engine,
-    PrimeField,
-    PrimeFieldRepr,
-    Field,
-    SqrtField,
-    LegendreSymbol,
     CurveProjective,
     CurveAffine,
-    PrimeFieldDecodingError,
     GroupDecodingError,
     EncodedPoint
 };
@@ -263,8 +260,11 @@ impl PrimeField for Fr {
 #[derive(Clone)]
 pub struct DummyEngine;
 
-impl Engine for DummyEngine {
+impl ScalarEngine for DummyEngine {
     type Fr = Fr;
+}
+
+impl Engine for DummyEngine {
     type G1 = Fr;
     type G1Affine = Fr;
     type G2 = Fr;

@@ -10,10 +10,9 @@
 //! This allows us to perform polynomial operations in O(n)
 //! by performing an O(n log n) FFT over such a domain.
 
+use ff::{Field, PrimeField};
 use pairing::{
     Engine,
-    Field,
-    PrimeField,
     CurveProjective
 };
 

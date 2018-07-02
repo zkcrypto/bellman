@@ -2,10 +2,9 @@ use rand::Rng;
 
 use std::sync::Arc;
 
+use ff::{Field, PrimeField};
 use pairing::{
     Engine,
-    PrimeField,
-    Field,
     Wnaf,
     CurveProjective,
     CurveAffine

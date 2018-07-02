@@ -1,8 +1,5 @@
-use pairing::{
-    Engine,
-    Field,
-    PrimeField
-};
+use ff::{Field, PrimeField};
+use pairing::Engine;
 
 mod dummy_engine;
 use self::dummy_engine::*;

@@ -1,3 +1,4 @@
+extern crate ff;
 extern crate pairing;
 extern crate rand;
 extern crate num_cpus;
@@ -12,7 +13,8 @@ mod multiexp;
 pub mod domain;
 pub mod groth16;
 
-use pairing::{Engine, Field};
+use ff::Field;
+use pairing::Engine;
 
 use std::ops::{Add, Sub};
 use std::fmt;

@@ -11,12 +11,16 @@ version = "0.1.0"
 [dependencies]
 rand = "0.4"
 bit-vec = "0.4.4"
+ff = "0.4"
 futures = "0.1"
 futures-cpupool = "0.1"
 num_cpus = "1"
 crossbeam = "0.3"
-pairing = "0.14"
 byteorder = "1"
+
+[dependencies.pairing]
+git = "https://github.com/ebfull/pairing"
+rev = "183a64b08e9dc7067f78624ec161371f1829623e"
 
 [features]
 default = []

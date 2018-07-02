@@ -1,8 +1,8 @@
+use ff::PrimeField;
 use pairing::{
     Engine,
     CurveProjective,
     CurveAffine,
-    PrimeField
 };
 
 use super::{
