@@ -14,8 +14,7 @@ mod multiexp;
 pub mod domain;
 pub mod groth16;
 
-use ff::Field;
-use pairing::Engine;
+use ff::{Field, ScalarEngine};
 
 use std::ops::{Add, Sub};
 use std::fmt;
@@ -27,7 +26,7 @@ use std::marker::PhantomData;
 /// rank-1 quadratic constraint systems. The `Circuit` trait represents a
 /// circuit that can be synthesized. The `synthesize` method is called during
 /// CRS generation and during proving.
-pub trait Circuit<E: Engine> {
+pub trait Circuit<E: ScalarEngine> {
     /// Synthesize the circuit into a rank-1 quadratic constraint system
     fn synthesize<CS: ConstraintSystem<E>>(
         self,
@@ -64,21 +63,21 @@ pub enum Index {
 /// This represents a linear combination of some variables, with coefficients
 /// in the scalar field of a pairing-friendly elliptic curve group.
 #[derive(Clone)]
-pub struct LinearCombination<E: Engine>(Vec<(Variable, E::Fr)>);
+pub struct LinearCombination<E: ScalarEngine>(Vec<(Variable, E::Fr)>);
 
-impl<E: Engine> AsRef<[(Variable, E::Fr)]> for LinearCombination<E> {
+impl<E: ScalarEngine> AsRef<[(Variable, E::Fr)]> for LinearCombination<E> {
     fn as_ref(&self) -> &[(Variable, E::Fr)] {
         &self.0
     }
 }
 
-impl<E: Engine> LinearCombination<E> {
+impl<E: ScalarEngine> LinearCombination<E> {
     pub fn zero() -> LinearCombination<E> {
         LinearCombination(vec![])
     }
 }
 
-impl<E: Engine> Add<(E::Fr, Variable)> for LinearCombination<E> {
+impl<E: ScalarEngine> Add<(E::Fr, Variable)> for LinearCombination<E> {
     type Output = LinearCombination<E>;
 
     fn add(mut self, (coeff, var): (E::Fr, Variable)) -> LinearCombination<E> {
@@ -88,7 +87,7 @@ impl<E: Engine> Add<(E::Fr, Variable)> for LinearCombination<E> {
     }
 }
 
-impl<E: Engine> Sub<(E::Fr, Variable)> for LinearCombination<E> {
+impl<E: ScalarEngine> Sub<(E::Fr, Variable)> for LinearCombination<E> {
     type Output = LinearCombination<E>;
 
     fn sub(self, (mut coeff, var): (E::Fr, Variable)) -> LinearCombination<E> {
@@ -98,7 +97,7 @@ impl<E: Engine> Sub<(E::Fr, Variable)> for LinearCombination<E> {
     }
 }
 
-impl<E: Engine> Add<Variable> for LinearCombination<E> {
+impl<E: ScalarEngine> Add<Variable> for LinearCombination<E> {
     type Output = LinearCombination<E>;
 
     fn add(self, other: Variable) -> LinearCombination<E> {
@@ -106,7 +105,7 @@ impl<E: Engine> Add<Variable> for LinearCombination<E> {
     }
 }
 
-impl<E: Engine> Sub<Variable> for LinearCombination<E> {
+impl<E: ScalarEngine> Sub<Variable> for LinearCombination<E> {
     type Output = LinearCombination<E>;
 
     fn sub(self, other: Variable) -> LinearCombination<E> {
@@ -114,7 +113,7 @@ impl<E: Engine> Sub<Variable> for LinearCombination<E> {
     }
 }
 
-impl<'a, E: Engine> Add<&'a LinearCombination<E>> for LinearCombination<E> {
+impl<'a, E: ScalarEngine> Add<&'a LinearCombination<E>> for LinearCombination<E> {
     type Output = LinearCombination<E>;
 
     fn add(mut self, other: &'a LinearCombination<E>) -> LinearCombination<E> {
@@ -126,7 +125,7 @@ impl<'a, E: Engine> Add<&'a LinearCombination<E>> for LinearCombination<E> {
     }
 }
 
-impl<'a, E: Engine> Sub<&'a LinearCombination<E>> for LinearCombination<E> {
+impl<'a, E: ScalarEngine> Sub<&'a LinearCombination<E>> for LinearCombination<E> {
     type Output = LinearCombination<E>;
 
     fn sub(mut self, other: &'a LinearCombination<E>) -> LinearCombination<E> {
@@ -138,7 +137,7 @@ impl<'a, E: Engine> Sub<&'a LinearCombination<E>> for LinearCombination<E> {
     }
 }
 
-impl<'a, E: Engine> Add<(E::Fr, &'a LinearCombination<E>)> for LinearCombination<E> {
+impl<'a, E: ScalarEngine> Add<(E::Fr, &'a LinearCombination<E>)> for LinearCombination<E> {
     type Output = LinearCombination<E>;
 
     fn add(mut self, (coeff, other): (E::Fr, &'a LinearCombination<E>)) -> LinearCombination<E> {
@@ -152,7 +151,7 @@ impl<'a, E: Engine> Add<(E::Fr, &'a LinearCombination<E>)> for LinearCombination
     }
 }
 
-impl<'a, E: Engine> Sub<(E::Fr, &'a LinearCombination<E>)> for LinearCombination<E> {
+impl<'a, E: ScalarEngine> Sub<(E::Fr, &'a LinearCombination<E>)> for LinearCombination<E> {
     type Output = LinearCombination<E>;
 
     fn sub(mut self, (coeff, other): (E::Fr, &'a LinearCombination<E>)) -> LinearCombination<E> {
@@ -222,7 +221,7 @@ impl fmt::Display for SynthesisError {
 
 /// Represents a constraint system which can have new variables
 /// allocated and constrains between them formed.
-pub trait ConstraintSystem<E: Engine>: Sized {
+pub trait ConstraintSystem<E: ScalarEngine>: Sized {
     /// Represents the type of the "root" of this constraint system
     /// so that nested namespaces can minimize indirection.
     type Root: ConstraintSystem<E>;
@@ -294,9 +293,9 @@ pub trait ConstraintSystem<E: Engine>: Sized {
 
 /// This is a "namespaced" constraint system which borrows a constraint system (pushing
 /// a namespace context) and, when dropped, pops out of the namespace context.
-pub struct Namespace<'a, E: Engine, CS: ConstraintSystem<E> + 'a>(&'a mut CS, PhantomData<E>);
+pub struct Namespace<'a, E: ScalarEngine, CS: ConstraintSystem<E> + 'a>(&'a mut CS, PhantomData<E>);
 
-impl<'cs, E: Engine, CS: ConstraintSystem<E>> ConstraintSystem<E> for Namespace<'cs, E, CS> {
+impl<'cs, E: ScalarEngine, CS: ConstraintSystem<E>> ConstraintSystem<E> for Namespace<'cs, E, CS> {
     type Root = CS::Root;
 
     fn one() -> Variable {
@@ -359,7 +358,7 @@ impl<'cs, E: Engine, CS: ConstraintSystem<E>> ConstraintSystem<E> for Namespace<
     }
 }
 
-impl<'a, E: Engine, CS: ConstraintSystem<E>> Drop for Namespace<'a, E, CS> {
+impl<'a, E: ScalarEngine, CS: ConstraintSystem<E>> Drop for Namespace<'a, E, CS> {
     fn drop(&mut self) {
         self.get_root().pop_namespace()
     }
@@ -367,7 +366,7 @@ impl<'a, E: Engine, CS: ConstraintSystem<E>> Drop for Namespace<'a, E, CS> {
 
 /// Convenience implementation of ConstraintSystem<E> for mutable references to
 /// constraint systems.
-impl<'cs, E: Engine, CS: ConstraintSystem<E>> ConstraintSystem<E> for &'cs mut CS {
+impl<'cs, E: ScalarEngine, CS: ConstraintSystem<E>> ConstraintSystem<E> for &'cs mut CS {
     type Root = CS::Root;
 
     fn one() -> Variable {
