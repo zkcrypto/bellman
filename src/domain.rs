@@ -371,6 +371,7 @@ fn parallel_fft<E: ScalarEngine, T: Group<E>>(
 
 // Test multiplying various (low degree) polynomials together and
 // comparing with naive evaluations.
+#[cfg(feature = "pairing")]
 #[test]
 fn polynomial_arith() {
     use pairing::bls12_381::Bls12;
@@ -418,6 +419,7 @@ fn polynomial_arith() {
     test_mul::<Bls12, _>(rng);
 }
 
+#[cfg(feature = "pairing")]
 #[test]
 fn fft_composition() {
     use pairing::bls12_381::Bls12;
@@ -456,6 +458,7 @@ fn fft_composition() {
     test_comp::<Bls12, _>(rng);
 }
 
+#[cfg(feature = "pairing")]
 #[test]
 fn parallel_fft_consistency() {
     use pairing::bls12_381::Bls12;

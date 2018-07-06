@@ -255,6 +255,7 @@ pub fn multiexp<Q, D, G, S>(
     multiexp_inner(pool, bases, density_map, exponents, 0, c, true)
 }
 
+#[cfg(feature = "pairing")]
 #[test]
 fn test_with_bls12() {
     fn naive_multiexp<G: CurveAffine>(

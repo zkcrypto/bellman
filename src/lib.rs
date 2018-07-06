@@ -1,5 +1,6 @@
 extern crate ff;
 extern crate group;
+#[cfg(feature = "pairing")]
 extern crate pairing;
 extern crate rand;
 extern crate num_cpus;
@@ -12,6 +13,7 @@ extern crate byteorder;
 pub mod multicore;
 mod multiexp;
 pub mod domain;
+#[cfg(feature = "groth16")]
 pub mod groth16;
 
 use ff::{Field, ScalarEngine};
