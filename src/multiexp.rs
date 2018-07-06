@@ -1,8 +1,5 @@
 use ff::{Field, PrimeField, PrimeFieldRepr, ScalarEngine};
-use pairing::{
-    CurveAffine,
-    CurveProjective,
-};
+use group::{CurveAffine, CurveProjective};
 use std::sync::Arc;
 use std::io;
 use bit_vec::{self, BitVec};

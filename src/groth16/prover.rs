@@ -5,11 +5,8 @@ use std::sync::Arc;
 use futures::Future;
 
 use ff::{Field, PrimeField};
-use pairing::{
-    Engine,
-    CurveProjective,
-    CurveAffine
-};
+use group::{CurveAffine, CurveProjective};
+use pairing::Engine;
 
 use super::{
     ParameterSource,

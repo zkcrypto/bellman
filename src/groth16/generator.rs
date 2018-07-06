@@ -3,12 +3,8 @@ use rand::Rng;
 use std::sync::Arc;
 
 use ff::{Field, PrimeField};
-use pairing::{
-    Engine,
-    Wnaf,
-    CurveProjective,
-    CurveAffine
-};
+use group::{CurveAffine, CurveProjective, Wnaf};
+use pairing::Engine;
 
 use super::{
     Parameters,

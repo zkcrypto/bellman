@@ -1,4 +1,5 @@
 extern crate ff;
+extern crate group;
 extern crate pairing;
 extern crate rand;
 extern crate num_cpus;

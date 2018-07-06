@@ -1,7 +1,7 @@
+use group::{CurveAffine, EncodedPoint};
 use pairing::{
     Engine,
-    CurveAffine,
-    EncodedPoint
+    PairingCurveAffine,
 };
 
 use ::{
@@ -385,9 +385,9 @@ pub struct PreparedVerifyingKey<E: Engine> {
     /// Pairing result of alpha*beta
     alpha_g1_beta_g2: E::Fqk,
     /// -gamma in G2
-    neg_gamma_g2: <E::G2Affine as CurveAffine>::Prepared,
+    neg_gamma_g2: <E::G2Affine as PairingCurveAffine>::Prepared,
     /// -delta in G2
-    neg_delta_g2: <E::G2Affine as CurveAffine>::Prepared,
+    neg_delta_g2: <E::G2Affine as PairingCurveAffine>::Prepared,
     /// Copy of IC from `VerifiyingKey`.
     ic: Vec<E::G1Affine>
 }

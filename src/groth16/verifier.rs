@@ -1,9 +1,6 @@
 use ff::PrimeField;
-use pairing::{
-    Engine,
-    CurveProjective,
-    CurveAffine,
-};
+use group::{CurveAffine, CurveProjective};
+use pairing::{Engine, PairingCurveAffine};
 
 use super::{
     Proof,

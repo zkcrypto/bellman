@@ -10,11 +10,9 @@
 //! This allows us to perform polynomial operations in O(n)
 //! by performing an O(n log n) FFT over such a domain.
 
-use ff::{Field, PrimeField};
-use pairing::{
-    Engine,
-    CurveProjective
-};
+use ff::{Field, PrimeField, ScalarEngine};
+use group::CurveProjective;
+use pairing::Engine;
 
 use super::{
     SynthesisError
@@ -188,7 +186,7 @@ impl<E: Engine, G: Group<E>> EvaluationDomain<E, G> {
     }
 }
 
-pub trait Group<E: Engine>: Sized + Copy + Clone + Send + Sync {
+pub trait Group<E: ScalarEngine>: Sized + Copy + Clone + Send + Sync {
     fn group_zero() -> Self;
     fn group_mul_assign(&mut self, by: &E::Fr);
     fn group_add_assign(&mut self, other: &Self);
