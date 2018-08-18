@@ -13,7 +13,6 @@ pub mod multicore;
 mod multiexp;
 
 use pairing::{Engine, Field};
-
 use std::error::Error;
 use std::fmt;
 use std::io;

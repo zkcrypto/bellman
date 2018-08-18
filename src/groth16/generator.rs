@@ -1,16 +1,10 @@
-use rand::Rng;
-
-use std::sync::Arc;
-
-use pairing::{CurveAffine, CurveProjective, Engine, Field, PrimeField, Wnaf};
-
 use super::{Parameters, VerifyingKey};
-
-use {Circuit, ConstraintSystem, Index, LinearCombination, SynthesisError, Variable};
-
 use domain::{EvaluationDomain, Scalar};
-
 use multicore::Worker;
+use pairing::{CurveAffine, CurveProjective, Engine, Field, PrimeField, Wnaf};
+use rand::Rng;
+use std::sync::Arc;
+use {Circuit, ConstraintSystem, Index, LinearCombination, SynthesisError, Variable};
 
 /// Generates a random common reference string for
 /// a circuit.

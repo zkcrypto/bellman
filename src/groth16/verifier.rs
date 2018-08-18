@@ -1,7 +1,5 @@
-use pairing::{CurveAffine, CurveProjective, Engine, PrimeField};
-
 use super::{PreparedVerifyingKey, Proof, VerifyingKey};
-
+use pairing::{CurveAffine, CurveProjective, Engine, PrimeField};
 use SynthesisError;
 
 pub fn prepare_verifying_key<E: Engine>(vk: &VerifyingKey<E>) -> PreparedVerifyingKey<E> {

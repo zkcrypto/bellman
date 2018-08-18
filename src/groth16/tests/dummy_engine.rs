@@ -2,7 +2,6 @@ use pairing::{
     CurveAffine, CurveProjective, EncodedPoint, Engine, Field, GroupDecodingError, LegendreSymbol,
     PrimeField, PrimeFieldDecodingError, PrimeFieldRepr, SqrtField,
 };
-
 use rand::{Rand, Rng};
 use std::cmp::Ordering;
 use std::fmt;

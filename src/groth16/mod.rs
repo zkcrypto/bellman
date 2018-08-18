@@ -1,11 +1,9 @@
-use pairing::{CurveAffine, EncodedPoint, Engine};
-
-use SynthesisError;
-
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use multiexp::SourceBuilder;
+use pairing::{CurveAffine, EncodedPoint, Engine};
 use std::io::{self, Read, Write};
 use std::sync::Arc;
+use SynthesisError;
 
 #[cfg(test)]
 mod tests;

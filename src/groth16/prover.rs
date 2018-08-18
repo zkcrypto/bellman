@@ -1,20 +1,12 @@
-use rand::Rng;
-
-use std::sync::Arc;
-
-use futures::Future;
-
-use pairing::{CurveAffine, CurveProjective, Engine, Field, PrimeField};
-
 use super::{ParameterSource, Proof};
-
-use {Circuit, ConstraintSystem, Index, LinearCombination, SynthesisError, Variable};
-
 use domain::{EvaluationDomain, Scalar};
-
-use multiexp::{multiexp, DensityTracker, FullDensity};
-
+use futures::Future;
 use multicore::Worker;
+use multiexp::{multiexp, DensityTracker, FullDensity};
+use pairing::{CurveAffine, CurveProjective, Engine, Field, PrimeField};
+use rand::Rng;
+use std::sync::Arc;
+use {Circuit, ConstraintSystem, Index, LinearCombination, SynthesisError, Variable};
 
 fn eval<E: Engine>(
     lc: &LinearCombination<E>,
