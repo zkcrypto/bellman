@@ -1,11 +1,11 @@
-use super::multicore::Worker;
-use super::SynthesisError;
 use bit_vec::{self, BitVec};
 use futures::Future;
+use multicore::Worker;
 use pairing::{CurveAffine, CurveProjective, Engine, Field, PrimeField, PrimeFieldRepr};
 use std::io;
 use std::iter;
 use std::sync::Arc;
+use SynthesisError;
 
 /// An object that builds a source of bases.
 pub trait SourceBuilder<G: CurveAffine>: Send + Sync + 'static + Clone {

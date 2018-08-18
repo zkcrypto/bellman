@@ -10,9 +10,9 @@
 //! This allows us to perform polynomial operations in O(n)
 //! by performing an O(n log n) FFT over such a domain.
 
-use super::multicore::Worker;
-use super::SynthesisError;
+use multicore::Worker;
 use pairing::{CurveProjective, Engine, Field, PrimeField};
+use SynthesisError;
 
 pub struct EvaluationDomain<E: Engine, G: Group<E>> {
     coeffs: Vec<G>,
