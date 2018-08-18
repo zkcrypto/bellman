@@ -15,7 +15,6 @@ mod multiexp;
 use pairing::{Engine, Field};
 use std::error::Error;
 use std::fmt;
-use std::io;
 use std::marker::PhantomData;
 use std::ops::{Add, Sub};
 
@@ -173,18 +172,12 @@ pub enum SynthesisError {
     PolynomialDegreeTooLarge,
     /// During proof generation, we encountered an identity in the CRS
     UnexpectedIdentity,
-    /// During proof generation, we encountered an I/O error with the CRS
-    IoError(io::Error),
+    /// During proof generation, we expected more bases from source
+    TooFewBases,
     /// During verification, our verifying key was malformed.
     MalformedVerifyingKey,
     /// During CRS generation, we observed an unconstrained auxillary variable
     UnconstrainedVariable,
-}
-
-impl From<io::Error> for SynthesisError {
-    fn from(e: io::Error) -> SynthesisError {
-        SynthesisError::IoError(e)
-    }
 }
 
 impl Error for SynthesisError {
@@ -197,7 +190,7 @@ impl Error for SynthesisError {
             SynthesisError::Unsatisfiable => "unsatisfiable constraint system",
             SynthesisError::PolynomialDegreeTooLarge => "polynomial degree is too large",
             SynthesisError::UnexpectedIdentity => "encountered an identity element in the CRS",
-            SynthesisError::IoError(_) => "encountered an I/O error",
+            SynthesisError::TooFewBases => "expected more bases from source",
             SynthesisError::MalformedVerifyingKey => "malformed verifying key",
             SynthesisError::UnconstrainedVariable => "auxillary variable was unconstrained",
         }
@@ -206,12 +199,7 @@ impl Error for SynthesisError {
 
 impl fmt::Display for SynthesisError {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        if let SynthesisError::IoError(ref e) = self {
-            write!(f, "I/O error: ")?;
-            e.fmt(f)
-        } else {
-            write!(f, "{}", self.description())
-        }
+        write!(f, "{}", self.description())
     }
 }
 

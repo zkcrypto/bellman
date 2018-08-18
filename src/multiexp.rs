@@ -2,7 +2,6 @@ use bit_vec::{self, BitVec};
 use futures::Future;
 use multicore::Worker;
 use pairing::{CurveAffine, CurveProjective, Engine, Field, PrimeField, PrimeFieldRepr};
-use std::io;
 use std::iter;
 use std::sync::Arc;
 use SynthesisError;
@@ -40,10 +39,7 @@ impl<G: CurveAffine> Source<G> for (Arc<Vec<G>>, usize) {
         to: &mut <G as CurveAffine>::Projective,
     ) -> Result<(), SynthesisError> {
         if self.0.len() <= self.1 {
-            return Err(io::Error::new(
-                io::ErrorKind::UnexpectedEof,
-                "expected more bases from source",
-            ).into());
+            return Err(SynthesisError::TooFewBases);
         }
 
         if self.0[self.1].is_zero() {
@@ -59,10 +55,7 @@ impl<G: CurveAffine> Source<G> for (Arc<Vec<G>>, usize) {
 
     fn skip(&mut self, amt: usize) -> Result<(), SynthesisError> {
         if self.0.len() <= self.1 {
-            return Err(io::Error::new(
-                io::ErrorKind::UnexpectedEof,
-                "expected more bases from source",
-            ).into());
+            return Err(SynthesisError::TooFewBases);
         }
 
         self.1 += amt;
