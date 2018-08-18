@@ -25,7 +25,7 @@ fn eval<E: Engine>(
 ) -> E::Fr {
     let mut acc = E::Fr::zero();
 
-    for &(index, coeff) in lc.0.iter() {
+    for &(index, coeff) in &lc.0 {
         let mut tmp;
 
         match index {
@@ -173,6 +173,7 @@ where
     create_proof::<E, C, P>(circuit, params, r, s)
 }
 
+#[cfg_attr(feature = "cargo-clippy", allow(many_single_char_names))]
 pub fn create_proof<E, C, P: ParameterSource<E>>(
     circuit: C,
     mut params: P,

@@ -89,7 +89,7 @@ impl<E: Engine> Proof<E> {
                 }
             })?;
 
-        Ok(Proof { a: a, b: b, c: c })
+        Ok(Proof { a, b, c })
     }
 }
 
@@ -207,13 +207,13 @@ impl<E: Engine> VerifyingKey<E> {
         }
 
         Ok(VerifyingKey {
-            alpha_g1: alpha_g1,
-            beta_g1: beta_g1,
-            beta_g2: beta_g2,
-            gamma_g2: gamma_g2,
-            delta_g1: delta_g1,
-            delta_g2: delta_g2,
-            ic: ic,
+            alpha_g1,
+            beta_g1,
+            beta_g2,
+            gamma_g2,
+            delta_g1,
+            delta_g2,
+            ic,
         })
     }
 }
@@ -373,7 +373,7 @@ impl<E: Engine> Parameters<E> {
         }
 
         Ok(Parameters {
-            vk: vk,
+            vk,
             h: Arc::new(h),
             l: Arc::new(l),
             a: Arc::new(a),

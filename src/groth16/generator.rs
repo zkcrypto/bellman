@@ -151,6 +151,7 @@ impl<E: Engine> ConstraintSystem<E> for KeypairAssembly<E> {
 }
 
 /// Create parameters for a circuit, given some toxic waste.
+#[cfg_attr(feature = "cargo-clippy", allow(too_many_arguments))]
 pub fn generate_parameters<E, C>(
     circuit: C,
     g1: E::G1,
@@ -277,6 +278,7 @@ where
     let mut ic = vec![E::G1::zero(); assembly.num_inputs];
     let mut l = vec![E::G1::zero(); assembly.num_aux];
 
+    #[cfg_attr(feature = "cargo-clippy", allow(too_many_arguments))]
     fn eval<E: Engine>(
         // wNAF window tables
         g1_wnaf: &Wnaf<usize, &[E::G1], &mut Vec<i64>>,
@@ -429,7 +431,7 @@ where
 
     // Don't allow any elements be unconstrained, so that
     // the L query is always fully dense.
-    for e in l.iter() {
+    for e in &l {
         if e.is_zero() {
             return Err(SynthesisError::UnconstrainedVariable);
         }
@@ -449,7 +451,7 @@ where
     };
 
     Ok(Parameters {
-        vk: vk,
+        vk,
         h: Arc::new(h.into_iter().map(|e| e.into_affine()).collect()),
         l: Arc::new(l.into_iter().map(|e| e.into_affine()).collect()),
 

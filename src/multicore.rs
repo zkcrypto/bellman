@@ -21,7 +21,7 @@ impl Worker {
     // CPUs configured.
     pub(crate) fn new_with_cpus(cpus: usize) -> Worker {
         Worker {
-            cpus: cpus,
+            cpus,
             pool: CpuPool::new(cpus),
         }
     }
@@ -58,6 +58,12 @@ impl Worker {
         };
 
         crossbeam::scope(|scope| f(scope, chunk_size))
+    }
+}
+
+impl Default for Worker {
+    fn default() -> Self {
+        Self::new_with_cpus(num_cpus::get())
     }
 }
 
