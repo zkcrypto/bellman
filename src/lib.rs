@@ -1,24 +1,24 @@
-extern crate pairing;
-extern crate rand;
-extern crate num_cpus;
+extern crate bit_vec;
+extern crate byteorder;
+extern crate crossbeam;
 extern crate futures;
 extern crate futures_cpupool;
-extern crate bit_vec;
-extern crate crossbeam;
-extern crate byteorder;
+extern crate num_cpus;
+extern crate pairing;
+extern crate rand;
 
-pub mod multicore;
-mod multiexp;
 pub mod domain;
 pub mod groth16;
+pub mod multicore;
+mod multiexp;
 
 use pairing::{Engine, Field};
 
-use std::ops::{Add, Sub};
-use std::fmt;
 use std::error::Error;
+use std::fmt;
 use std::io;
 use std::marker::PhantomData;
+use std::ops::{Add, Sub};
 
 /// Computations are expressed in terms of arithmetic circuits, in particular
 /// rank-1 quadratic constraint systems. The `Circuit` trait represents a
@@ -26,10 +26,7 @@ use std::marker::PhantomData;
 /// CRS generation and during proving.
 pub trait Circuit<E: Engine> {
     /// Synthesize the circuit into a rank-1 quadratic constraint system
-    fn synthesize<CS: ConstraintSystem<E>>(
-        self,
-        cs: &mut CS
-    ) -> Result<(), SynthesisError>;
+    fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError>;
 }
 
 /// Represents a variable in our constraint system.
@@ -55,7 +52,7 @@ impl Variable {
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum Index {
     Input(usize),
-    Aux(usize)
+    Aux(usize),
 }
 
 /// This represents a linear combination of some variables, with coefficients
@@ -182,7 +179,7 @@ pub enum SynthesisError {
     /// During verification, our verifying key was malformed.
     MalformedVerifyingKey,
     /// During CRS generation, we observed an unconstrained auxillary variable
-    UnconstrainedVariable
+    UnconstrainedVariable,
 }
 
 impl From<io::Error> for SynthesisError {
@@ -194,14 +191,16 @@ impl From<io::Error> for SynthesisError {
 impl Error for SynthesisError {
     fn description(&self) -> &str {
         match *self {
-            SynthesisError::AssignmentMissing => "an assignment for a variable could not be computed",
+            SynthesisError::AssignmentMissing => {
+                "an assignment for a variable could not be computed"
+            }
             SynthesisError::DivisionByZero => "division by zero",
             SynthesisError::Unsatisfiable => "unsatisfiable constraint system",
             SynthesisError::PolynomialDegreeTooLarge => "polynomial degree is too large",
             SynthesisError::UnexpectedIdentity => "encountered an identity element in the CRS",
             SynthesisError::IoError(_) => "encountered an I/O error",
             SynthesisError::MalformedVerifyingKey => "malformed verifying key",
-            SynthesisError::UnconstrainedVariable => "auxillary variable was unconstrained"
+            SynthesisError::UnconstrainedVariable => "auxillary variable was unconstrained",
         }
     }
 }
@@ -218,7 +217,7 @@ impl fmt::Display for SynthesisError {
 }
 
 /// Represents a constraint system which can have new variables
-/// allocated and constrains between them formed.
+/// allocated and constraints between them formed.
 pub trait ConstraintSystem<E: Engine>: Sized {
     /// Represents the type of the "root" of this constraint system
     /// so that nested namespaces can minimize indirection.
@@ -233,40 +232,36 @@ pub trait ConstraintSystem<E: Engine>: Sized {
     /// determine the assignment of the variable. The given `annotation` function is invoked
     /// in testing contexts in order to derive a unique name for this variable in the current
     /// namespace.
-    fn alloc<F, A, AR>(
-        &mut self,
-        annotation: A,
-        f: F
-    ) -> Result<Variable, SynthesisError>
-        where F: FnOnce() -> Result<E::Fr, SynthesisError>, A: FnOnce() -> AR, AR: Into<String>;
+    fn alloc<F, A, AR>(&mut self, annotation: A, f: F) -> Result<Variable, SynthesisError>
+    where
+        F: FnOnce() -> Result<E::Fr, SynthesisError>,
+        A: FnOnce() -> AR,
+        AR: Into<String>;
 
     /// Allocate a public variable in the constraint system. The provided function is used to
     /// determine the assignment of the variable.
-    fn alloc_input<F, A, AR>(
-        &mut self,
-        annotation: A,
-        f: F
-    ) -> Result<Variable, SynthesisError>
-        where F: FnOnce() -> Result<E::Fr, SynthesisError>, A: FnOnce() -> AR, AR: Into<String>;
+    fn alloc_input<F, A, AR>(&mut self, annotation: A, f: F) -> Result<Variable, SynthesisError>
+    where
+        F: FnOnce() -> Result<E::Fr, SynthesisError>,
+        A: FnOnce() -> AR,
+        AR: Into<String>;
 
     /// Enforce that `A` * `B` = `C`. The `annotation` function is invoked in testing contexts
     /// in order to derive a unique name for the constraint in the current namespace.
-    fn enforce<A, AR, LA, LB, LC>(
-        &mut self,
-        annotation: A,
-        a: LA,
-        b: LB,
-        c: LC
-    )
-        where A: FnOnce() -> AR, AR: Into<String>,
-              LA: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
-              LB: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
-              LC: FnOnce(LinearCombination<E>) -> LinearCombination<E>;
+    fn enforce<A, AR, LA, LB, LC>(&mut self, annotation: A, a: LA, b: LB, c: LC)
+    where
+        A: FnOnce() -> AR,
+        AR: Into<String>,
+        LA: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
+        LB: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
+        LC: FnOnce(LinearCombination<E>) -> LinearCombination<E>;
 
     /// Create a new (sub)namespace and enter into it. Not intended
     /// for downstream use; use `namespace` instead.
     fn push_namespace<NR, N>(&mut self, name_fn: N)
-        where NR: Into<String>, N: FnOnce() -> NR;
+    where
+        NR: Into<String>,
+        N: FnOnce() -> NR;
 
     /// Exit out of the existing namespace. Not intended for
     /// downstream use; use `namespace` instead.
@@ -277,11 +272,10 @@ pub trait ConstraintSystem<E: Engine>: Sized {
     fn get_root(&mut self) -> &mut Self::Root;
 
     /// Begin a namespace for this constraint system.
-    fn namespace<'a, NR, N>(
-        &'a mut self,
-        name_fn: N
-    ) -> Namespace<'a, E, Self::Root>
-        where NR: Into<String>, N: FnOnce() -> NR
+    fn namespace<'a, NR, N>(&'a mut self, name_fn: N) -> Namespace<'a, E, Self::Root>
+    where
+        NR: Into<String>,
+        N: FnOnce() -> NR,
     {
         self.get_root().push_namespace(name_fn);
 
@@ -300,37 +294,31 @@ impl<'cs, E: Engine, CS: ConstraintSystem<E>> ConstraintSystem<E> for Namespace<
         CS::one()
     }
 
-    fn alloc<F, A, AR>(
-        &mut self,
-        annotation: A,
-        f: F
-    ) -> Result<Variable, SynthesisError>
-        where F: FnOnce() -> Result<E::Fr, SynthesisError>, A: FnOnce() -> AR, AR: Into<String>
+    fn alloc<F, A, AR>(&mut self, annotation: A, f: F) -> Result<Variable, SynthesisError>
+    where
+        F: FnOnce() -> Result<E::Fr, SynthesisError>,
+        A: FnOnce() -> AR,
+        AR: Into<String>,
     {
         self.0.alloc(annotation, f)
     }
 
-    fn alloc_input<F, A, AR>(
-        &mut self,
-        annotation: A,
-        f: F
-    ) -> Result<Variable, SynthesisError>
-        where F: FnOnce() -> Result<E::Fr, SynthesisError>, A: FnOnce() -> AR, AR: Into<String>
+    fn alloc_input<F, A, AR>(&mut self, annotation: A, f: F) -> Result<Variable, SynthesisError>
+    where
+        F: FnOnce() -> Result<E::Fr, SynthesisError>,
+        A: FnOnce() -> AR,
+        AR: Into<String>,
     {
         self.0.alloc_input(annotation, f)
     }
 
-    fn enforce<A, AR, LA, LB, LC>(
-        &mut self,
-        annotation: A,
-        a: LA,
-        b: LB,
-        c: LC
-    )
-        where A: FnOnce() -> AR, AR: Into<String>,
-              LA: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
-              LB: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
-              LC: FnOnce(LinearCombination<E>) -> LinearCombination<E>
+    fn enforce<A, AR, LA, LB, LC>(&mut self, annotation: A, a: LA, b: LB, c: LC)
+    where
+        A: FnOnce() -> AR,
+        AR: Into<String>,
+        LA: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
+        LB: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
+        LC: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
     {
         self.0.enforce(annotation, a, b, c)
     }
@@ -340,18 +328,18 @@ impl<'cs, E: Engine, CS: ConstraintSystem<E>> ConstraintSystem<E> for Namespace<
     // never a root constraint system.
 
     fn push_namespace<NR, N>(&mut self, _: N)
-        where NR: Into<String>, N: FnOnce() -> NR
+    where
+        NR: Into<String>,
+        N: FnOnce() -> NR,
     {
         panic!("only the root's push_namespace should be called");
     }
 
-    fn pop_namespace(&mut self)
-    {
+    fn pop_namespace(&mut self) {
         panic!("only the root's pop_namespace should be called");
     }
 
-    fn get_root(&mut self) -> &mut Self::Root
-    {
+    fn get_root(&mut self) -> &mut Self::Root {
         self.0.get_root()
     }
 }
@@ -371,54 +359,48 @@ impl<'cs, E: Engine, CS: ConstraintSystem<E>> ConstraintSystem<E> for &'cs mut C
         CS::one()
     }
 
-    fn alloc<F, A, AR>(
-        &mut self,
-        annotation: A,
-        f: F
-    ) -> Result<Variable, SynthesisError>
-        where F: FnOnce() -> Result<E::Fr, SynthesisError>, A: FnOnce() -> AR, AR: Into<String>
+    fn alloc<F, A, AR>(&mut self, annotation: A, f: F) -> Result<Variable, SynthesisError>
+    where
+        F: FnOnce() -> Result<E::Fr, SynthesisError>,
+        A: FnOnce() -> AR,
+        AR: Into<String>,
     {
         (**self).alloc(annotation, f)
     }
 
-    fn alloc_input<F, A, AR>(
-        &mut self,
-        annotation: A,
-        f: F
-    ) -> Result<Variable, SynthesisError>
-        where F: FnOnce() -> Result<E::Fr, SynthesisError>, A: FnOnce() -> AR, AR: Into<String>
+    fn alloc_input<F, A, AR>(&mut self, annotation: A, f: F) -> Result<Variable, SynthesisError>
+    where
+        F: FnOnce() -> Result<E::Fr, SynthesisError>,
+        A: FnOnce() -> AR,
+        AR: Into<String>,
     {
         (**self).alloc_input(annotation, f)
     }
 
-    fn enforce<A, AR, LA, LB, LC>(
-        &mut self,
-        annotation: A,
-        a: LA,
-        b: LB,
-        c: LC
-    )
-        where A: FnOnce() -> AR, AR: Into<String>,
-              LA: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
-              LB: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
-              LC: FnOnce(LinearCombination<E>) -> LinearCombination<E>
+    fn enforce<A, AR, LA, LB, LC>(&mut self, annotation: A, a: LA, b: LB, c: LC)
+    where
+        A: FnOnce() -> AR,
+        AR: Into<String>,
+        LA: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
+        LB: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
+        LC: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
     {
         (**self).enforce(annotation, a, b, c)
     }
 
     fn push_namespace<NR, N>(&mut self, name_fn: N)
-        where NR: Into<String>, N: FnOnce() -> NR
+    where
+        NR: Into<String>,
+        N: FnOnce() -> NR,
     {
         (**self).push_namespace(name_fn)
     }
 
-    fn pop_namespace(&mut self)
-    {
+    fn pop_namespace(&mut self) {
         (**self).pop_namespace()
     }
 
-    fn get_root(&mut self) -> &mut Self::Root
-    {
+    fn get_root(&mut self) -> &mut Self::Root {
         (**self).get_root()
     }
 }
