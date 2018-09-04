@@ -628,4 +628,71 @@ mod test {
             }
         }
     }
+
+    #[test]
+    fn test_blake2s_test_vectors() {
+        let mut rng = XorShiftRng::from_seed([
+            0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06,
+            0xbc, 0xe5,
+        ]);
+
+        let expecteds = [
+            hex!("a1309e334376c8f36a736a4ab0e691ef931ee3ebdb9ea96187127136fea622a1"),
+            hex!("82fefff60f265cea255252f7c194a7f93965dffee0609ef74eb67f0d76cd41c6"),
+        ];
+        for i in 0..2 {
+            let mut h = Blake2sParams::new()
+                .hash_length(32)
+                .personal(b"12345678")
+                .to_state();
+            let input_len = 1024;
+            let data: Vec<u8> = (0..input_len).map(|_| rng.next_u32() as u8).collect();
+
+            h.update(&data);
+
+            let hash_result = h.finalize();
+
+            let mut cs = TestConstraintSystem::<Bls12>::new();
+
+            let mut input_bits = vec![];
+
+            for (byte_i, input_byte) in data.into_iter().enumerate() {
+                for bit_i in 0..8 {
+                    let cs = cs.namespace(|| format!("input bit {} {}", byte_i, bit_i));
+
+                    input_bits.push(
+                        AllocatedBit::alloc(cs, Some((input_byte >> bit_i) & 1u8 == 1u8))
+                            .unwrap()
+                            .into(),
+                    );
+                }
+            }
+
+            let r = blake2s(&mut cs, &input_bits, b"12345678").unwrap();
+
+            assert!(cs.is_satisfied());
+
+            let mut s = hash_result
+                .as_ref()
+                .iter()
+                .flat_map(|&byte| (0..8).map(move |i| (byte >> i) & 1u8 == 1u8));
+
+            for b in r {
+                match b {
+                    Boolean::Is(b) => {
+                        assert!(s.next().unwrap() == b.get_value().unwrap());
+                    }
+                    Boolean::Not(b) => {
+                        assert!(s.next().unwrap() != b.get_value().unwrap());
+                    }
+                    Boolean::Constant(b) => {
+                        assert!(input_len == 0);
+                        assert!(s.next().unwrap() == b);
+                    }
+                }
+            }
+
+            assert_eq!(expecteds[i], hash_result.as_bytes());
+        }
+    }
 }
