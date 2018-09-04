@@ -154,7 +154,6 @@ where
         Ok(tmp)
     })?;
 
-
     let one = CS::one();
 
     // Compute the coefficients for the lookup constraints
