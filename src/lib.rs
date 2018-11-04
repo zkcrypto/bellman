@@ -3,12 +3,17 @@ extern crate group;
 #[cfg(feature = "pairing")]
 extern crate pairing;
 extern crate rand;
-extern crate num_cpus;
+
 extern crate futures;
-extern crate futures_cpupool;
 extern crate bit_vec;
-extern crate crossbeam;
 extern crate byteorder;
+
+#[cfg(feature = "multicore")]
+extern crate crossbeam;
+#[cfg(feature = "multicore")]
+extern crate futures_cpupool;
+#[cfg(feature = "multicore")]
+extern crate num_cpus;
 
 pub mod multicore;
 mod multiexp;
