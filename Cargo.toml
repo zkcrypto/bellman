@@ -17,12 +17,8 @@ futures-cpupool = "0.1"
 group = "0.1"
 num_cpus = "1"
 crossbeam = "0.3"
+pairing = { path = "../pairing", optional = true }
 byteorder = "1"
-
-[dependencies.pairing]
-git = "https://github.com/str4d/pairing"
-rev = "3d41ee5abaa4888ff3607689aba007be8856816d"
-optional = true
 
 [features]
 groth16 = ["pairing"]
