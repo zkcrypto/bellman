@@ -3,18 +3,25 @@
 //! currently just a thin wrapper around CpuPool and
 //! crossbeam but may be extended in the future to
 //! allow for various parallelism strategies.
-
-use num_cpus;
 use futures::{Future, IntoFuture, Poll};
+#[cfg(not(multithread))]
+use futures::future::{result, FutureResult};
+
+#[cfg(multithread)]
+use num_cpus;
+#[cfg(multithread)]
 use futures_cpupool::{CpuPool, CpuFuture};
+#[cfg(multithread)]
 use crossbeam::{self, Scope};
 
+#[cfg(multithread)]
 #[derive(Clone)]
 pub struct Worker {
     cpus: usize,
     pool: CpuPool
 }
 
+#[cfg(multithread)]
 impl Worker {
     // We don't expose this outside the library so that
     // all `Worker` instances have the same number of
@@ -67,8 +74,72 @@ impl Worker {
     }
 }
 
+
+#[cfg(multithread)]
 pub struct WorkerFuture<T, E> {
     future: CpuFuture<T, E>
+}
+
+#[cfg(not(multithread))]
+#[derive(Clone)]
+pub struct Worker {}
+
+#[cfg(not(multithread))]
+impl Worker {
+
+    pub fn new() -> Worker { Worker {} } 
+
+    pub fn log_num_cpus(&self) -> u32 {
+        log2_floor(1)
+    }
+
+    pub fn compute<F, R>(
+        &self, f: F
+    ) -> WorkerFuture<R::Item, R::Error>
+        where F: FnOnce() -> R,
+              R: IntoFuture + 'static,
+              R::Future: Send + 'static,
+              R::Item: Send + 'static,
+              R::Error: Send + 'static
+    {
+        let future = f().into_future();
+
+        WorkerFuture {
+            future: result(future.wait())
+        }
+    }
+
+    pub fn scope<F, R>(
+        &self,
+        _elements: usize,
+        f: F
+    ) -> R
+        where F: FnOnce(&Scope, usize) -> R
+    {
+    
+        let scope = Scope {};  
+        f(&scope, 1)
+  
+    }
+}
+
+#[cfg(not(multithread))]
+pub struct Scope {
+}
+
+#[cfg(not(multithread))]
+impl Scope {
+pub fn spawn<F, T>(&self, f: F) -> T  where
+        F: FnOnce() -> T + Send , T: Send 
+    {
+        f()
+    }
+
+}
+
+#[cfg(not(multithread))]
+pub struct WorkerFuture<T, E> {
+    future: FutureResult<T, E>
 }
 
 impl<T: Send + 'static, E: Send + 'static> Future for WorkerFuture<T, E> {
@@ -104,3 +175,4 @@ fn test_log2_floor() {
     assert_eq!(log2_floor(7), 2);
     assert_eq!(log2_floor(8), 3);
 }
+

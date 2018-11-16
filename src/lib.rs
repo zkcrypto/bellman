@@ -1,11 +1,16 @@
 extern crate pairing;
 extern crate rand;
-extern crate num_cpus;
 extern crate futures;
-extern crate futures_cpupool;
 extern crate bit_vec;
-extern crate crossbeam;
 extern crate byteorder;
+
+#[cfg(multithread)]
+extern crate futures_cpupool;
+#[cfg(multithread)]
+extern crate num_cpus;
+#[cfg(multithread)]
+extern crate crossbeam;
+
 
 pub mod multicore;
 mod multiexp;
