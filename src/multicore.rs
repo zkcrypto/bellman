@@ -4,29 +4,31 @@
 //! crossbeam but may be extended in the future to
 //! allow for various parallelism strategies.
 use futures::{Future, IntoFuture, Poll};
-#[cfg(not(multithread))]
-use futures::future::{result, FutureResult};
 
-#[cfg(multithread)]
+#[cfg(feature = "multithread")]
 use num_cpus;
-#[cfg(multithread)]
+#[cfg(feature = "multithread")]
 use futures_cpupool::{CpuPool, CpuFuture};
-#[cfg(multithread)]
+#[cfg(feature = "multithread")]
 use crossbeam::{self, Scope};
 
-#[cfg(multithread)]
+#[cfg(not(feature = "multithread"))]
+use futures::future::{result, FutureResult};
+
+#[cfg(feature = "multithread")]
 #[derive(Clone)]
 pub struct Worker {
     cpus: usize,
     pool: CpuPool
 }
 
-#[cfg(multithread)]
+#[cfg(feature = "multithread")]
 impl Worker {
     // We don't expose this outside the library so that
     // all `Worker` instances have the same number of
     // CPUs configured.
     pub(crate) fn new_with_cpus(cpus: usize) -> Worker {
+
         Worker {
             cpus: cpus,
             pool: CpuPool::new(cpus)
@@ -74,17 +76,16 @@ impl Worker {
     }
 }
 
-
-#[cfg(multithread)]
+#[cfg(feature = "multithread")]
 pub struct WorkerFuture<T, E> {
     future: CpuFuture<T, E>
 }
 
-#[cfg(not(multithread))]
+#[cfg(not(feature = "multithread"))]
 #[derive(Clone)]
 pub struct Worker {}
 
-#[cfg(not(multithread))]
+#[cfg(not(feature = "multithread"))]
 impl Worker {
 
     pub fn new() -> Worker { Worker {} } 
@@ -116,18 +117,16 @@ impl Worker {
     ) -> R
         where F: FnOnce(&Scope, usize) -> R
     {
-    
         let scope = Scope {};  
         f(&scope, 1)
-  
     }
 }
 
-#[cfg(not(multithread))]
+#[cfg(not(feature = "multithread"))]
 pub struct Scope {
 }
 
-#[cfg(not(multithread))]
+#[cfg(not(feature = "multithread"))]
 impl Scope {
 pub fn spawn<F, T>(&self, f: F) -> T  where
         F: FnOnce() -> T + Send , T: Send 
@@ -137,7 +136,7 @@ pub fn spawn<F, T>(&self, f: F) -> T  where
 
 }
 
-#[cfg(not(multithread))]
+#[cfg(not(feature = "multithread"))]
 pub struct WorkerFuture<T, E> {
     future: FutureResult<T, E>
 }
@@ -175,4 +174,3 @@ fn test_log2_floor() {
     assert_eq!(log2_floor(7), 2);
     assert_eq!(log2_floor(8), 3);
 }
-

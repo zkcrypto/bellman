@@ -4,13 +4,12 @@ extern crate futures;
 extern crate bit_vec;
 extern crate byteorder;
 
-#[cfg(multithread)]
+#[cfg(feature = "multithread")]
 extern crate futures_cpupool;
-#[cfg(multithread)]
+#[cfg(feature = "multithread")]
 extern crate num_cpus;
-#[cfg(multithread)]
+#[cfg(feature = "multithread")]
 extern crate crossbeam;
-
 
 pub mod multicore;
 mod multiexp;
