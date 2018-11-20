@@ -1,8 +1,11 @@
 //! This is an interface for dealing with the kinds of
 //! parallel computations involved in bellman. It's
-//! currently just a thin wrapper around CpuPool and
+//! currently just an optional thin wrapper around CpuPool and
 //! crossbeam but may be extended in the future to
 //! allow for various parallelism strategies.
+//! Compile without the "multithread" feature for targets that
+//! don't support parallel computation.
+
 use futures::{Future, IntoFuture, Poll};
 
 #[cfg(feature = "multithread")]
@@ -81,6 +84,7 @@ pub struct WorkerFuture<T, E> {
     future: CpuFuture<T, E>
 }
 
+//Dummy worker for single-threaded mode
 #[cfg(not(feature = "multithread"))]
 #[derive(Clone)]
 pub struct Worker {}
@@ -122,6 +126,7 @@ impl Worker {
     }
 }
 
+//
 #[cfg(not(feature = "multithread"))]
 pub struct Scope {
 }
