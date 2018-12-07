@@ -12,9 +12,12 @@
 
 use pairing::{
     Engine,
-    Field,
-    PrimeField,
     CurveProjective
+};
+
+use ff::{
+    Field, 
+    PrimeField
 };
 
 use super::{
@@ -47,22 +50,36 @@ impl<E: Engine, G: Group<E>> EvaluationDomain<E, G> {
 
     pub fn from_coeffs(mut coeffs: Vec<G>) -> Result<EvaluationDomain<E, G>, SynthesisError>
     {
+        use ff::PrimeField;
         // Compute the size of our evaluation domain
+
+        let coeffs_len = coeffs.len();
+
+        // m is a size of domain where Z polynomial does NOT vanish
+        // in normal domain Z is in a form of (X-1)(X-2)...(X-N)
         let mut m = 1;
         let mut exp = 0;
-        while m < coeffs.len() {
+        let mut omega = E::Fr::root_of_unity();
+        let max_degree = (1 << E::Fr::S) - 1;
+
+        if coeffs_len > max_degree {
+            return Err(SynthesisError::PolynomialDegreeTooLarge)
+        }
+
+        while m < coeffs_len {
             m *= 2;
             exp += 1;
 
             // The pairing-friendly curve may not be able to support
             // large enough (radix2) evaluation domains.
-            if exp >= E::Fr::S {
+            if exp > E::Fr::S {
                 return Err(SynthesisError::PolynomialDegreeTooLarge)
             }
         }
 
+        // If full domain is not needed - limit it,
+        // e.g. if (2^N)th power is not required, just double omega and get 2^(N-1)th
         // Compute omega, the 2^exp primitive root of unity
-        let mut omega = E::Fr::root_of_unity();
         for _ in exp..E::Fr::S {
             omega.square();
         }

@@ -24,7 +24,7 @@ pub use self::generator::*;
 pub use self::prover::*;
 pub use self::verifier::*;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Proof<E: Engine> {
     pub a: E::G1Affine,
     pub b: E::G2Affine,
@@ -487,7 +487,7 @@ mod test_with_bls12_381 {
     use {Circuit, SynthesisError, ConstraintSystem};
 
     use rand::{Rand, thread_rng};
-    use pairing::{Field};
+    use ff::{Field};
     use pairing::bls12_381::{Bls12, Fr};
 
     #[test]

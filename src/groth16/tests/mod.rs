@@ -1,7 +1,10 @@
 use pairing::{
-    Engine,
+    Engine
+};
+
+use ff:: {
     Field,
-    PrimeField
+    PrimeField,
 };
 
 mod dummy_engine;

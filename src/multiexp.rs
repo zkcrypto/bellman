@@ -1,11 +1,15 @@
 use pairing::{
     CurveAffine,
     CurveProjective,
-    Engine,
+    Engine
+};
+
+use ff::{
     PrimeField,
     Field,
-    PrimeFieldRepr
-};
+    PrimeFieldRepr,
+    ScalarEngine};
+
 use std::sync::Arc;
 use std::io;
 use bit_vec::{self, BitVec};
@@ -96,6 +100,7 @@ impl<'a> QueryDensity for &'a FullDensity {
     }
 }
 
+#[derive(Clone)]
 pub struct DensityTracker {
     bv: BitVec,
     total_density: usize
@@ -141,7 +146,8 @@ fn multiexp_inner<Q, D, G, S>(
     pool: &Worker,
     bases: S,
     density_map: D,
-    exponents: Arc<Vec<<<G::Engine as Engine>::Fr as PrimeField>::Repr>>,
+    exponents: Arc<Vec<<G::Scalar as PrimeField>::Repr>>,
+    // exponents: Arc<Vec<<<G::Engine as Engine>::Fr as PrimeField>::Repr>>,
     mut skip: u32,
     c: u32,
     handle_trivial: bool
@@ -157,6 +163,7 @@ fn multiexp_inner<Q, D, G, S>(
         let exponents = exponents.clone();
         let density_map = density_map.clone();
 
+        // This looks like a Pippenger’s algorithm
         pool.compute(move || {
             // Accumulate the result
             let mut acc = G::Projective::zero();
@@ -164,14 +171,18 @@ fn multiexp_inner<Q, D, G, S>(
             // Build a source for the bases
             let mut bases = bases.new();
 
+            // Create buckets to place remainders s mod 2^c,
+            // it will be 2^c - 1 buckets (no bucket for zeroes)
+
             // Create space for the buckets
             let mut buckets = vec![<G as CurveAffine>::Projective::zero(); (1 << c) - 1];
 
-            let zero = <G::Engine as Engine>::Fr::zero().into_repr();
-            let one = <G::Engine as Engine>::Fr::one().into_repr();
+            let zero = <G::Engine as ScalarEngine>::Fr::zero().into_repr();
+            let one = <G::Engine as ScalarEngine>::Fr::one().into_repr();
 
             // Sort the bases into buckets
             for (&exp, density) in exponents.iter().zip(density_map.as_ref().iter()) {
+                // Go over density and exponents
                 if density {
                     if exp == zero {
                         bases.skip(1)?;
@@ -182,6 +193,11 @@ fn multiexp_inner<Q, D, G, S>(
                             bases.skip(1)?;
                         }
                     } else {
+                        // Place multiplication into the bucket: Separate s * P as 
+                        // (s/2^c) * P + (s mod 2^c) P
+                        // First multiplication is c bits less, do one can do it,
+                        // sum results from different buckets and double it c times,
+                        // then add with (s mod 2^c) P parts
                         let mut exp = exp;
                         exp.shr(skip);
                         let exp = exp.as_ref()[0] % (1 << c);
@@ -211,7 +227,7 @@ fn multiexp_inner<Q, D, G, S>(
 
     skip += c;
 
-    if skip >= <G::Engine as Engine>::Fr::NUM_BITS {
+    if skip >= <G::Engine as ScalarEngine>::Fr::NUM_BITS {
         // There isn't another region.
         Box::new(this)
     } else {
@@ -238,7 +254,7 @@ pub fn multiexp<Q, D, G, S>(
     pool: &Worker,
     bases: S,
     density_map: D,
-    exponents: Arc<Vec<<<G::Engine as Engine>::Fr as PrimeField>::Repr>>
+    exponents: Arc<Vec<<<G::Engine as ScalarEngine>::Fr as PrimeField>::Repr>>
 ) -> Box<Future<Item=<G as CurveAffine>::Projective, Error=SynthesisError>>
     where for<'a> &'a Q: QueryDensity,
           D: Send + Sync + 'static + Clone + AsRef<Q>,
@@ -285,7 +301,7 @@ fn test_with_bls12() {
     const SAMPLES: usize = 1 << 14;
 
     let rng = &mut rand::thread_rng();
-    let v = Arc::new((0..SAMPLES).map(|_| <Bls12 as Engine>::Fr::rand(rng).into_repr()).collect::<Vec<_>>());
+    let v = Arc::new((0..SAMPLES).map(|_| <Bls12 as ScalarEngine>::Fr::rand(rng).into_repr()).collect::<Vec<_>>());
     let g = Arc::new((0..SAMPLES).map(|_| <Bls12 as Engine>::G1::rand(rng).into_affine()).collect::<Vec<_>>());
 
     let naive = naive_multiexp(g.clone(), v.clone());

@@ -1,15 +1,19 @@
 use pairing::{
     Engine,
+    CurveProjective,
+    CurveAffine,
+    GroupDecodingError,
+    EncodedPoint
+};
+
+use ff::{
     PrimeField,
     PrimeFieldRepr,
     Field,
     SqrtField,
     LegendreSymbol,
-    CurveProjective,
-    CurveAffine,
+    ScalarEngine,
     PrimeFieldDecodingError,
-    GroupDecodingError,
-    EncodedPoint
 };
 
 use std::cmp::Ordering;
@@ -263,8 +267,11 @@ impl PrimeField for Fr {
 #[derive(Clone)]
 pub struct DummyEngine;
 
-impl Engine for DummyEngine {
+impl ScalarEngine for DummyEngine {
     type Fr = Fr;
+}
+
+impl Engine for DummyEngine {
     type G1 = Fr;
     type G1Affine = Fr;
     type G2 = Fr;

@@ -1,9 +1,10 @@
 use pairing::{
     Engine,
     CurveProjective,
-    CurveAffine,
-    PrimeField
+    CurveAffine
 };
+
+use ff::{PrimeField};
 
 use super::{
     Proof,
