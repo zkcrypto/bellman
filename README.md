@@ -1,14 +1,6 @@
-# Plasma cash history SNARK
-
-Compacts history in Plasma Cashes by hiding Merkle proofs under the private witness. Currently contains only non-inclusion circuit, with inclusion being trivially extended.
-
-Without much optimization is requires 4270718 constraints for 128 block of non-inclusion for 24 tree depth.
-
-Public inputs to the zkSNARK:
-
-- Start of the interval index (if single coin - just index)
-- Interval length (is single coin - 1)
-- Set of roots for which this coin index is proved to be non-included
+# bellman "Community edition"
+ 
+Originally developed for ZCash, with extensions from us to make it a little more pleasant. Uses our "community edition" pairing for Ethereum's BN256 curve.
 
 ## License
 
