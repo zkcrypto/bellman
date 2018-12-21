@@ -1,5 +1,5 @@
 [package]
-authors = ["Sean Bowe <ewillbefull@gmail.com>", "Alex Vlasov <alex.m.vlasov@gmail.com>"]
+authors = ["Sean Bowe <ewillbefull@gmail.com>", "Alex Vlasov <alex.m.vlasov@gmail.com>", "Alex Gluchowski <alex@gluchowski.net"]
 description = "zk-SNARK library"
 documentation = "https://github.com/matterinc/bellman"
 homepage = "https://github.com/matterinc/bellman"
