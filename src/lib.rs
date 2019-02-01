@@ -14,6 +14,10 @@ pub mod multicore;
 mod multiexp;
 pub mod domain;
 pub mod groth16;
+pub mod gm17;
+
+#[cfg(test)]
+mod tests;
 
 use pairing::{Engine};
 use ff::Field;
