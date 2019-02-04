@@ -348,6 +348,7 @@ pub fn create_aggregate<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
         ).into_affine()
     };
 
+    // TODO: parallelize
     // Let's open up C to every y.
     fn compute_value<E: Engine>(y: &E::Fr, poly_positive: &[E::Fr], poly_negative: &[E::Fr]) -> E::Fr {
         let mut value = E::Fr::zero();
@@ -431,6 +432,7 @@ pub fn create_aggregate<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
         }
     }
 
+    // TODO: parallelize
     let s_opening = {
         let mut value = expected_value;
         value.negate();

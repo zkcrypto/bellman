@@ -9,3 +9,11 @@ Initial SONIC proof system integration using the code from the [original impleme
 - Smart-contract implementation of verifiers
 - Code cleanup
 - Migration for smart-contract compatible transcripts
+
+## TODO Plan
+
+- [ ] Parallelize using existing primitives
+- [ ] Put public inputs into the account
+- [ ] Basic Ethereum smart-contract
+- [ ] Add blinding factors
+- [ ] Implement unhelped version
