@@ -15,6 +15,7 @@ mod multiexp;
 pub mod domain;
 pub mod groth16;
 pub mod gm17;
+pub mod sonic;
 
 #[cfg(test)]
 mod tests;

@@ -391,7 +391,7 @@ pub fn generate_parameters<E, C>(
             worker.scope(domain.len(), |scope, chunk| {
                 for (i, subdomain) in domain.chunks_mut(chunk).enumerate()
                 {
-                    scope.spawn(move || {
+                    scope.spawn(move |_| {
                         let mut current_power = tau.pow(&[(i*chunk) as u64]);
 
                         for p in subdomain {
@@ -420,7 +420,7 @@ pub fn generate_parameters<E, C>(
             for (gamma2_z_t_g1, p) in gamma2_z_t_g1.chunks_mut(chunk).zip(domain.as_ref().chunks(chunk))
             {
                 let mut g1_wnaf = g1_wnaf.shared();
-                scope.spawn(move || {
+                scope.spawn(move |_| {
                     // Set values of the H query to g1^{(tau^i * t(tau)) / delta}
                     for (gamma2_z_t_g1, p) in gamma2_z_t_g1.iter_mut().zip(p.iter())
                     {
@@ -554,7 +554,7 @@ pub fn generate_parameters<E, C>(
                 let mut g1_wnaf = g1_wnaf.shared();
                 let mut g2_wnaf = g2_wnaf.shared();
 
-                scope.spawn(move || {
+                scope.spawn(move |_| {
                     for (((((a_g1, a_g2), c_1_g1), c_2_g1), at), ct) in a_g1.iter_mut()
                                                                        .zip(a_g2.iter_mut())
                                                                        .zip(c_1_g1.iter_mut())

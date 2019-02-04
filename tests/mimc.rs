@@ -82,6 +82,7 @@ fn mimc<E: Engine>(
 
 /// This is our demo circuit for proving knowledge of the
 /// preimage of a MiMC hash invocation.
+#[derive(Clone)]
 struct MiMCDemo<'a, E: Engine> {
     xl: Option<E::Fr>,
     xr: Option<E::Fr>,
@@ -342,3 +343,200 @@ fn test_mimc_bn256() {
     println!("Average verifying time: {:?} seconds", verifying_avg);
 }
 
+/// This is our demo circuit for proving knowledge of the
+/// preimage of a MiMC hash invocation.
+#[derive(Clone)]
+struct MiMCDemoNoInputs<'a, E: Engine> {
+    xl: Option<E::Fr>,
+    xr: Option<E::Fr>,
+    image: Option<E::Fr>,
+    constants: &'a [E::Fr]
+}
+
+/// Our demo circuit implements this `Circuit` trait which
+/// is used during paramgen and proving in order to
+/// synthesize the constraint system.
+impl<'a, E: Engine> Circuit<E> for MiMCDemoNoInputs<'a, E> {
+    fn synthesize<CS: ConstraintSystem<E>>(
+        self,
+        cs: &mut CS
+    ) -> Result<(), SynthesisError>
+    {
+        assert_eq!(self.constants.len(), MIMC_ROUNDS);
+
+        // Allocate the first component of the preimage.
+        let mut xl_value = self.xl;
+        let mut xl = cs.alloc(|| "preimage xl", || {
+            xl_value.ok_or(SynthesisError::AssignmentMissing)
+        })?;
+
+        // Allocate the second component of the preimage.
+        let mut xr_value = self.xr;
+        let mut xr = cs.alloc(|| "preimage xr", || {
+            xr_value.ok_or(SynthesisError::AssignmentMissing)
+        })?;
+
+        for i in 0..MIMC_ROUNDS {
+            // xL, xR := xR + (xL + Ci)^3, xL
+            let cs = &mut cs.namespace(|| format!("round {}", i));
+
+            // tmp = (xL + Ci)^2
+            let mut tmp_value = xl_value.map(|mut e| {
+                e.add_assign(&self.constants[i]);
+                e.square();
+                e
+            });
+            let mut tmp = cs.alloc(|| "tmp", || {
+                tmp_value.ok_or(SynthesisError::AssignmentMissing)
+            })?;
+
+            cs.enforce(
+                || "tmp = (xL + Ci)^2",
+                |lc| lc + xl + (self.constants[i], CS::one()),
+                |lc| lc + xl + (self.constants[i], CS::one()),
+                |lc| lc + tmp
+            );
+
+            // new_xL = xR + (xL + Ci)^3
+            // new_xL = xR + tmp * (xL + Ci)
+            // new_xL - xR = tmp * (xL + Ci)
+            let mut new_xl_value = xl_value.map(|mut e| {
+                e.add_assign(&self.constants[i]);
+                e.mul_assign(&tmp_value.unwrap());
+                e.add_assign(&xr_value.unwrap());
+                e
+            });
+
+            let mut new_xl = if i == (MIMC_ROUNDS-1) {
+                // This is the last round, xL is our image and so
+                // we use the image
+                let image_value = self.image;
+                cs.alloc(|| "image", || {
+                    image_value.ok_or(SynthesisError::AssignmentMissing)
+                })?
+            } else {
+                cs.alloc(|| "new_xl", || {
+                    new_xl_value.ok_or(SynthesisError::AssignmentMissing)
+                })?
+            };
+
+            cs.enforce(
+                || "new_xL = xR + (xL + Ci)^3",
+                |lc| lc + tmp,
+                |lc| lc + xl + (self.constants[i], CS::one()),
+                |lc| lc + new_xl - xr
+            );
+
+            // xR = xL
+            xr = xl;
+            xr_value = xl_value;
+
+            // xL = new_xL
+            xl = new_xl;
+            xl_value = new_xl_value;
+        }
+
+        Ok(())
+    }
+}
+
+#[test]
+fn test_sonic_mimc() {
+    use ff::{Field, PrimeField};
+    use pairing::{Engine, CurveAffine, CurveProjective};
+    use pairing::bls12_381::{Bls12, Fr};
+    use std::time::{Instant};
+    use bellman::sonic::srs::SRS;
+
+    let srs_x = Fr::from_str("23923").unwrap();
+    let srs_alpha = Fr::from_str("23728792").unwrap();
+    println!("making srs");
+    let start = Instant::now();
+    let srs = SRS::<Bls12>::dummy(830564, srs_x, srs_alpha);
+    println!("done in {:?}", start.elapsed());
+
+    {
+        // This may not be cryptographically safe, use
+        // `OsRng` (for example) in production software.
+        let rng = &mut thread_rng();
+
+        // Generate the MiMC round constants
+        let constants = (0..MIMC_ROUNDS).map(|_| rng.gen()).collect::<Vec<_>>();
+        let samples: usize = 100;
+
+        const NUM_BITS: usize = 384;
+
+        let xl = rng.gen();
+        let xr = rng.gen();
+        let image = mimc::<Bls12>(xl, xr, &constants);
+
+        // Create an instance of our circuit (with the
+        // witness)
+        let circuit = MiMCDemoNoInputs {
+            xl: Some(xl),
+            xr: Some(xr),
+            image: Some(image),
+            constants: &constants
+        };
+
+        use bellman::sonic::cs::Basic;
+        use bellman::sonic::sonic::AdaptorCircuit;
+        use bellman::sonic::helped::{create_proof, create_advice, create_aggregate, MultiVerifier};
+
+        println!("creating proof");
+        let start = Instant::now();
+        let proof = create_proof::<Bls12, _, Basic>(&AdaptorCircuit(circuit.clone()), &srs).unwrap();
+        println!("done in {:?}", start.elapsed());
+
+        println!("creating advice");
+        let start = Instant::now();
+        let advice = create_advice::<Bls12, _, Basic>(&AdaptorCircuit(circuit.clone()), &proof, &srs);
+        println!("done in {:?}", start.elapsed());
+
+        println!("creating aggregate for {} proofs", samples);
+        let start = Instant::now();
+        let proofs: Vec<_> = (0..samples).map(|_| (proof.clone(), advice.clone())).collect();
+        let aggregate = create_aggregate::<Bls12, _, Basic>(&AdaptorCircuit(circuit.clone()), &proofs, &srs);
+        println!("done in {:?}", start.elapsed());
+
+        {
+            let mut verifier = MultiVerifier::<Bls12, _, Basic>::new(AdaptorCircuit(circuit.clone()), &srs).unwrap();
+            println!("verifying 1 proof without advice");
+            let start = Instant::now();
+            {
+                for _ in 0..1 {
+                    verifier.add_proof(&proof, &[], |_, _| None);
+                }
+                assert_eq!(verifier.check_all(), true); // TODO
+            }
+            println!("done in {:?}", start.elapsed());
+        }
+
+        {
+            let mut verifier = MultiVerifier::<Bls12, _, Basic>::new(AdaptorCircuit(circuit.clone()), &srs).unwrap();
+            println!("verifying {} proofs without advice", samples);
+            let start = Instant::now();
+            {
+                for _ in 0..samples {
+                    verifier.add_proof(&proof, &[], |_, _| None);
+                }
+                assert_eq!(verifier.check_all(), true); // TODO
+            }
+            println!("done in {:?}", start.elapsed());
+        }
+        
+        {
+            let mut verifier = MultiVerifier::<Bls12, _, Basic>::new(AdaptorCircuit(circuit.clone()), &srs).unwrap();
+            println!("verifying 100 proofs with advice");
+            let start = Instant::now();
+            {
+                for (ref proof, ref advice) in &proofs {
+                    verifier.add_proof_with_advice(proof, &[], advice);
+                }
+                verifier.add_aggregate(&proofs, &aggregate);
+                assert_eq!(verifier.check_all(), true); // TODO
+            }
+            println!("done in {:?}", start.elapsed());
+        }
+    }
+}
