@@ -109,22 +109,30 @@ impl<E: Engine> Batch<E> {
         let alpha_x = multiexp(
             self.alpha_x.iter().map(|x| &x.0),
             self.alpha_x.iter().map(|x| &x.1),
-        ).into_affine().prepare();
+        ).into_affine();
+
+        let alpha_x = alpha_x.prepare();
 
         let alpha = multiexp(
             self.alpha.iter().map(|x| &x.0),
             self.alpha.iter().map(|x| &x.1),
-        ).into_affine().prepare();
+        ).into_affine();
+
+        let alpha = alpha.prepare();
 
         let neg_h = multiexp(
             self.neg_h.iter().map(|x| &x.0),
             self.neg_h.iter().map(|x| &x.1),
-        ).into_affine().prepare();
+        ).into_affine();
+
+        let neg_h = neg_h.prepare();
 
         let neg_x_n_minus_d = multiexp(
             self.neg_x_n_minus_d.iter().map(|x| &x.0),
             self.neg_x_n_minus_d.iter().map(|x| &x.1),
-        ).into_affine().prepare();
+        ).into_affine();
+
+        let neg_x_n_minus_d = neg_x_n_minus_d.prepare();
 
         E::final_exponentiation(&E::miller_loop(&[
             (&alpha_x, &self.alpha_x_precomp),
@@ -135,7 +143,7 @@ impl<E: Engine> Batch<E> {
     }
 }
 
-
+#[derive(Clone, Debug)]
 pub struct VerifyingKey<E: Engine> {
     pub alpha_x: E::G2Affine,
 

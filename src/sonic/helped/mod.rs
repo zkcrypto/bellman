@@ -16,19 +16,19 @@ pub use self::helper::{Aggregate, create_aggregate};
 pub use self::verifier::{MultiVerifier};
 pub use self::prover::{create_proof, create_advice};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct SxyAdvice<E: Engine> {
-    s: E::G1Affine,
-    opening: E::G1Affine,
-    szy: E::Fr,
+    pub s: E::G1Affine,
+    pub opening: E::G1Affine,
+    pub szy: E::Fr,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Proof<E: Engine> {
-    r: E::G1Affine,
-    t: E::G1Affine,
-    rz: E::Fr,
-    rzy: E::Fr,
-    z_opening: E::G1Affine,
-    zy_opening: E::G1Affine
+    pub r: E::G1Affine,
+    pub t: E::G1Affine,
+    pub rz: E::Fr,
+    pub rzy: E::Fr,
+    pub z_opening: E::G1Affine,
+    pub zy_opening: E::G1Affine
 }

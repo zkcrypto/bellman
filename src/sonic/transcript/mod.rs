@@ -58,7 +58,7 @@ impl<H: Hasher> RollingHashTranscript<H> {
     }
 
     pub fn commit_bytes(&mut self, personalization: &[u8], bytes: &[u8]) {
-        let mut h = H::new(personalization);
+        let mut h = H::new(&[]);
         h.update(&self.buffer);
         h.update(personalization);
         h.update(bytes);
@@ -101,7 +101,6 @@ impl<H:Hasher> TranscriptProtocol for RollingHashTranscript<H> {
 
     fn get_challenge_scalar<F: PrimeField>(&mut self) -> F {
         use byteorder::ByteOrder;
-
         let mut nonce = 0u32;
         loop {
             let mut nonce_bytes = vec![0u8; 4];
@@ -111,6 +110,7 @@ impl<H:Hasher> TranscriptProtocol for RollingHashTranscript<H> {
             repr.read_be(&challenge_bytes[..]).unwrap();
 
             if let Ok(result) = F::from_repr(repr) {
+                // println!("Got a challenge {} for nonce = {}", result, nonce);
                 return result;
             }
             if nonce == (0xffffffff as u32) {
