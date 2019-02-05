@@ -247,6 +247,14 @@ impl<E: Engine, C: Circuit<E>, S: SynthesisDriver> MultiVerifier<E, C, S> {
         }
     }
 
+    pub fn get_k_map(&self) -> Vec<usize> {
+        return self.k_map.clone();
+    }
+
+    pub fn get_n(&self) -> usize {
+        return self.n;
+    }
+
     pub fn check_all(self) -> bool {
         self.batch.check_all()
     }
