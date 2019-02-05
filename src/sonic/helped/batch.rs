@@ -10,8 +10,16 @@
 
 use ff::{Field};
 use pairing::{Engine, CurveAffine, CurveProjective};
+
+use crate::SynthesisError;
+
+use crate::sonic::cs::{Backend, SynthesisDriver};
+use crate::sonic::cs::{Circuit};
+
 use crate::sonic::srs::SRS;
 use crate::sonic::util::multiexp;
+
+use std::marker::PhantomData;
 
 // One of the primary functions of the `Batch` abstraction is handling
 // Kate commitment openings:
@@ -128,20 +136,50 @@ impl<E: Engine> Batch<E> {
 }
 
 
-pub struct VerifyingKey<E:Engine> {
+pub struct VerifyingKey<E: Engine> {
     pub alpha_x: E::G2Affine,
 
     pub alpha: E::G2Affine,
 
     pub neg_h: E::G2Affine,
 
-    pub neg_x_n_minus_d: E::G2Affine
+    pub neg_x_n_minus_d: E::G2Affine,
 
+    pub k_map: Vec<usize>,
+
+    pub n: usize,
+
+    pub q: usize
 }
 
 impl<E: Engine> VerifyingKey<E> {
-    pub fn new(srs: &SRS<E>, n: usize) -> Self {
-        Self {
+    pub fn new<C: Circuit<E>, S: SynthesisDriver>(circuit: C, srs: &SRS<E>) -> Result<Self, SynthesisError> {
+        struct Preprocess<E: Engine> {
+            k_map: Vec<usize>,
+            n: usize,
+            q: usize,
+            _marker: PhantomData<E>
+        }
+
+        impl<'a, E: Engine> Backend<E> for &'a mut Preprocess<E> {
+            fn new_k_power(&mut self, index: usize) {
+                self.k_map.push(index);
+            }
+
+            fn new_multiplication_gate(&mut self) {
+                self.n += 1;
+            }
+
+            fn new_linear_constraint(&mut self) {
+                self.q += 1;
+            }
+        }
+
+        let mut preprocess = Preprocess { k_map: vec![], n: 0, q: 0, _marker: PhantomData };
+
+        S::synthesize(&mut preprocess, &circuit)?;
+
+        Ok(Self {
             alpha_x: srs.h_positive_x_alpha[1],
 
             alpha: srs.h_positive_x_alpha[0],
@@ -154,11 +192,15 @@ impl<E: Engine> VerifyingKey<E> {
             },
 
             neg_x_n_minus_d: {
-                let mut tmp = srs.h_negative_x[srs.d - n];
+                let mut tmp = srs.h_negative_x[srs.d - preprocess.n];
                 tmp.negate();
 
                 tmp
             },
-        }
+
+            k_map: preprocess.k_map,
+            n: preprocess.n,
+            q: preprocess.q
+        })
     }
 }
