@@ -128,18 +128,18 @@ impl<E: Engine> Batch<E> {
 }
 
 
-pub struct VerificationKey<E:Engine> {
-    alpha_x: E::G2Affine,
+pub struct VerifyingKey<E:Engine> {
+    pub alpha_x: E::G2Affine,
 
-    alpha: E::G2Affine,
+    pub alpha: E::G2Affine,
 
-    neg_h: E::G2Affine,
+    pub neg_h: E::G2Affine,
 
-    neg_x_n_minus_d: E::G2Affine
+    pub neg_x_n_minus_d: E::G2Affine
 
 }
 
-impl<E: Engine> VerificationKey<E> {
+impl<E: Engine> VerifyingKey<E> {
     pub fn new(srs: &SRS<E>, n: usize) -> Self {
         Self {
             alpha_x: srs.h_positive_x_alpha[1],

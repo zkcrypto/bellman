@@ -11,7 +11,7 @@ mod batch;
 mod poly;
 mod helper;
 
-pub use self::batch::{Batch, VerificationKey};
+pub use self::batch::{Batch, VerifyingKey};
 pub use self::helper::{Aggregate, create_aggregate};
 pub use self::verifier::{MultiVerifier};
 pub use self::prover::{create_proof, create_advice};
