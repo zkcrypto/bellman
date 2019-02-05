@@ -98,14 +98,14 @@ impl<E: Engine, G: Group<E>> EvaluationDomain<E, G> {
     }
 
     // this one does expect coefficients to be smaller than `num_roots_of_unity/2` as we expect multiplication
-    pub fn from_coeffs_for_multiplication(mut coeffs: Vec<G>, expected_power: usize) -> Result<EvaluationDomain<E, G>, SynthesisError>
+    pub fn from_coeffs_into_sized(mut coeffs: Vec<G>, size: usize) -> Result<EvaluationDomain<E, G>, SynthesisError>
     {
         use ff::PrimeField;
         // Compute the size of our evaluation domain
 
-        assert!(expected_power >= coeffs.len());
+        assert!(size >= coeffs.len());
 
-        let coeffs_len = expected_power;
+        let coeffs_len = size;
 
         // m is a size of domain where Z polynomial does NOT vanish
         // in normal domain Z is in a form of (X-1)(X-2)...(X-N)

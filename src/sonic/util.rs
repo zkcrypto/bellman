@@ -266,7 +266,7 @@ fn laurent_division() {
     assert_eq!(lhs, rhs);
 }
 
-pub fn multiply_polynomials<E: Engine>(mut a: Vec<E::Fr>, mut b: Vec<E::Fr>) -> Vec<E::Fr> {
+pub fn multiply_polynomials<E: Engine>(a: Vec<E::Fr>, b: Vec<E::Fr>) -> Vec<E::Fr> {
     let result_len = a.len() + b.len() - 1;
 
     use crate::multicore::Worker;
@@ -274,10 +274,10 @@ pub fn multiply_polynomials<E: Engine>(mut a: Vec<E::Fr>, mut b: Vec<E::Fr>) -> 
 
     let worker = Worker::new();
     let scalars_a: Vec<Scalar<E>> = a.into_iter().map(|e| Scalar::<E>(e)).collect();
-    let mut domain_a = EvaluationDomain::from_coeffs_for_multiplication(scalars_a, result_len).unwrap();
+    let mut domain_a = EvaluationDomain::from_coeffs_into_sized(scalars_a, result_len).unwrap();
 
     let scalars_b: Vec<Scalar<E>> = b.into_iter().map(|e| Scalar::<E>(e)).collect();
-    let mut domain_b = EvaluationDomain::from_coeffs_for_multiplication(scalars_b, result_len).unwrap();
+    let mut domain_b = EvaluationDomain::from_coeffs_into_sized(scalars_b, result_len).unwrap();
 
     domain_a.fft(&worker);
     domain_b.fft(&worker);
