@@ -84,6 +84,43 @@ where
     IB::IntoIter: ExactSizeIterator + Clone,
     IS::IntoIter: ExactSizeIterator,
 {
+    use std::sync::Arc;
+    use futures::Future;
+    use ff::PrimeFieldRepr;
+    use pairing::CurveAffine;
+
+    use crate::multicore::Worker;
+    use crate::multiexp;
+    use crate::multiexp::FullDensity;
+
+    let s: Arc<Vec<<G::Scalar as PrimeField>::Repr>> = Arc::new(s.into_iter().map(|e| e.into_repr()).collect::<Vec<_>>());
+    let g: Arc<Vec<G>> = Arc::new(g.into_iter().map(|e| *e).collect::<Vec<_>>());
+
+    let pool = Worker::new();
+
+    let result = multiexp::multiexp(
+        &pool,
+        (g, 0),
+        FullDensity,
+        s
+    ).wait().unwrap();
+
+    result
+}
+
+pub fn multiexp_serial<
+    'a,
+    G: CurveAffine,
+    IB: IntoIterator<Item = &'a G>,
+    IS: IntoIterator<Item = &'a G::Scalar>,
+>(
+    g: IB,
+    s: IS,
+) -> G::Projective
+where
+    IB::IntoIter: ExactSizeIterator + Clone,
+    IS::IntoIter: ExactSizeIterator,
+{
     let g = g.into_iter();
     let s = s.into_iter();
     assert_eq!(g.len(), s.len());
@@ -232,6 +269,34 @@ fn laurent_division() {
 pub fn multiply_polynomials<E: Engine>(mut a: Vec<E::Fr>, mut b: Vec<E::Fr>) -> Vec<E::Fr> {
     let result_len = a.len() + b.len() - 1;
 
+    use crate::multicore::Worker;
+    use crate::domain::{EvaluationDomain, Scalar};
+
+    let worker = Worker::new();
+    let scalars_a: Vec<Scalar<E>> = a.into_iter().map(|e| Scalar::<E>(e)).collect();
+    let mut domain_a = EvaluationDomain::from_coeffs_for_multiplication(scalars_a, result_len).unwrap();
+
+    let scalars_b: Vec<Scalar<E>> = b.into_iter().map(|e| Scalar::<E>(e)).collect();
+    let mut domain_b = EvaluationDomain::from_coeffs_for_multiplication(scalars_b, result_len).unwrap();
+
+    domain_a.fft(&worker);
+    domain_b.fft(&worker);
+
+    domain_a.mul_assign(&worker, &domain_b);
+    drop(domain_b);
+
+    domain_a.ifft(&worker);
+
+    let mut mul_result: Vec<E::Fr> = domain_a.into_coeffs().iter().map(|e| e.0).collect();
+
+    mul_result.truncate(result_len);
+
+    mul_result
+}
+
+pub fn multiply_polynomials_serial<E: Engine>(mut a: Vec<E::Fr>, mut b: Vec<E::Fr>) -> Vec<E::Fr> {
+    let result_len = a.len() + b.len() - 1;
+
     // Compute the size of our evaluation domain
     let mut m = 1;
     let mut exp = 0;
@@ -334,4 +399,24 @@ impl<T> OptionExt<T> for Option<T> {
             None => Err(SynthesisError::AssignmentMissing),
         }
     }
+}
+
+#[test]
+
+fn test_mul() {
+    use rand::{self, Rand};
+    use pairing::bls12_381::Bls12;
+    use pairing::bls12_381::Fr;
+
+    const SAMPLES: usize = 100;
+
+    let rng = &mut rand::thread_rng();
+    let a = (0..SAMPLES).map(|_| Fr::rand(rng)).collect::<Vec<_>>();
+    let b = (0..SAMPLES).map(|_| Fr::rand(rng)).collect::<Vec<_>>();
+
+    let serial_res = multiply_polynomials_serial::<Bls12>(a.clone(), b.clone());
+    let parallel_res = multiply_polynomials::<Bls12>(a, b);
+
+    assert_eq!(serial_res.len(), parallel_res.len());
+    assert_eq!(serial_res, parallel_res);
 }

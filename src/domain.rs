@@ -97,6 +97,58 @@ impl<E: Engine, G: Group<E>> EvaluationDomain<E, G> {
         })
     }
 
+    // this one does expect coefficients to be smaller than `num_roots_of_unity/2` as we expect multiplication
+    pub fn from_coeffs_for_multiplication(mut coeffs: Vec<G>, expected_power: usize) -> Result<EvaluationDomain<E, G>, SynthesisError>
+    {
+        use ff::PrimeField;
+        // Compute the size of our evaluation domain
+
+        assert!(expected_power >= coeffs.len());
+
+        let coeffs_len = expected_power;
+
+        // m is a size of domain where Z polynomial does NOT vanish
+        // in normal domain Z is in a form of (X-1)(X-2)...(X-N)
+        let mut m = 1;
+        let mut exp = 0;
+        let mut omega = E::Fr::root_of_unity();
+        let max_degree = (1 << E::Fr::S) - 1;
+
+        if coeffs_len > max_degree {
+            return Err(SynthesisError::PolynomialDegreeTooLarge)
+        }
+
+        while m < coeffs_len {
+            m *= 2;
+            exp += 1;
+
+            // The pairing-friendly curve may not be able to support
+            // large enough (radix2) evaluation domains.
+            if exp > E::Fr::S {
+                return Err(SynthesisError::PolynomialDegreeTooLarge)
+            }
+        }
+
+        // If full domain is not needed - limit it,
+        // e.g. if (2^N)th power is not required, just double omega and get 2^(N-1)th
+        // Compute omega, the 2^exp primitive root of unity
+        for _ in exp..E::Fr::S {
+            omega.square();
+        }
+
+        // Extend the coeffs vector with zeroes if necessary
+        coeffs.resize(m, G::group_zero());
+
+        Ok(EvaluationDomain {
+            coeffs: coeffs,
+            exp: exp,
+            omega: omega,
+            omegainv: omega.inverse().unwrap(),
+            geninv: E::Fr::multiplicative_generator().inverse().unwrap(),
+            minv: E::Fr::from_str(&format!("{}", m)).unwrap().inverse().unwrap()
+        })
+    }
+
     pub fn fft(&mut self, worker: &Worker)
     {
         best_fft(&mut self.coeffs, worker, &self.omega, self.exp);
@@ -275,7 +327,7 @@ impl<E: Engine> Group<E> for Scalar<E> {
     }
 }
 
-fn best_fft<E: Engine, T: Group<E>>(a: &mut [T], worker: &Worker, omega: &E::Fr, log_n: u32)
+pub(crate) fn best_fft<E: Engine, T: Group<E>>(a: &mut [T], worker: &Worker, omega: &E::Fr, log_n: u32)
 {
     let log_cpus = worker.log_num_cpus();
 
@@ -286,7 +338,7 @@ fn best_fft<E: Engine, T: Group<E>>(a: &mut [T], worker: &Worker, omega: &E::Fr,
     }
 }
 
-fn serial_fft<E: Engine, T: Group<E>>(a: &mut [T], omega: &E::Fr, log_n: u32)
+pub(crate) fn serial_fft<E: Engine, T: Group<E>>(a: &mut [T], omega: &E::Fr, log_n: u32)
 {
     fn bitreverse(mut n: u32, l: u32) -> u32 {
         let mut r = 0;
@@ -331,7 +383,7 @@ fn serial_fft<E: Engine, T: Group<E>>(a: &mut [T], omega: &E::Fr, log_n: u32)
     }
 }
 
-fn parallel_fft<E: Engine, T: Group<E>>(
+pub(crate) fn parallel_fft<E: Engine, T: Group<E>>(
     a: &mut [T],
     worker: &Worker,
     omega: &E::Fr,

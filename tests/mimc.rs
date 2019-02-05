@@ -464,8 +464,6 @@ fn test_sonic_mimc() {
         let constants = (0..MIMC_ROUNDS).map(|_| rng.gen()).collect::<Vec<_>>();
         let samples: usize = 100;
 
-        const NUM_BITS: usize = 384;
-
         let xl = rng.gen();
         let xr = rng.gen();
         let image = mimc::<Bls12>(xl, xr, &constants);
@@ -532,6 +530,105 @@ fn test_sonic_mimc() {
             {
                 for (ref proof, ref advice) in &proofs {
                     verifier.add_proof_with_advice(proof, &[], advice);
+                }
+                verifier.add_aggregate(&proofs, &aggregate);
+                assert_eq!(verifier.check_all(), true); // TODO
+            }
+            println!("done in {:?}", start.elapsed());
+        }
+    }
+}
+
+#[test]
+fn test_inputs_into_sonic_mimc() {
+    use ff::{Field, PrimeField};
+    use pairing::{Engine, CurveAffine, CurveProjective};
+    use pairing::bn256::{Bn256, Fr};
+    // use pairing::bls12_381::{Bls12, Fr};
+    use std::time::{Instant};
+    use bellman::sonic::srs::SRS;
+
+    let srs_x = Fr::from_str("23923").unwrap();
+    let srs_alpha = Fr::from_str("23728792").unwrap();
+    println!("making srs");
+    let start = Instant::now();
+    let srs = SRS::<Bn256>::dummy(830564, srs_x, srs_alpha);
+    println!("done in {:?}", start.elapsed());
+
+    {
+        // This may not be cryptographically safe, use
+        // `OsRng` (for example) in production software.
+        let rng = &mut thread_rng();
+
+        // Generate the MiMC round constants
+        let constants = (0..MIMC_ROUNDS).map(|_| rng.gen()).collect::<Vec<_>>();
+        let samples: usize = 100;
+
+        let xl = rng.gen();
+        let xr = rng.gen();
+        let image = mimc::<Bn256>(xl, xr, &constants);
+
+        // Create an instance of our circuit (with the
+        // witness)
+        let circuit = MiMCDemo {
+            xl: Some(xl),
+            xr: Some(xr),
+            constants: &constants
+        };
+
+        use bellman::sonic::cs::Basic;
+        use bellman::sonic::sonic::AdaptorCircuit;
+        use bellman::sonic::helped::{create_proof, create_advice, create_aggregate, MultiVerifier};
+
+        println!("creating proof");
+        let start = Instant::now();
+        let proof = create_proof::<Bn256, _, Basic>(&AdaptorCircuit(circuit.clone()), &srs).unwrap();
+        println!("done in {:?}", start.elapsed());
+
+        println!("creating advice");
+        let start = Instant::now();
+        let advice = create_advice::<Bn256, _, Basic>(&AdaptorCircuit(circuit.clone()), &proof, &srs);
+        println!("done in {:?}", start.elapsed());
+
+        println!("creating aggregate for {} proofs", samples);
+        let start = Instant::now();
+        let proofs: Vec<_> = (0..samples).map(|_| (proof.clone(), advice.clone())).collect();
+        let aggregate = create_aggregate::<Bn256, _, Basic>(&AdaptorCircuit(circuit.clone()), &proofs, &srs);
+        println!("done in {:?}", start.elapsed());
+
+        {
+            let mut verifier = MultiVerifier::<Bn256, _, Basic>::new(AdaptorCircuit(circuit.clone()), &srs).unwrap();
+            println!("verifying 1 proof without advice");
+            let start = Instant::now();
+            {
+                for _ in 0..1 {
+                    verifier.add_proof(&proof, &[image], |_, _| None);
+                }
+                assert_eq!(verifier.check_all(), true); // TODO
+            }
+            println!("done in {:?}", start.elapsed());
+        }
+
+        {
+            let mut verifier = MultiVerifier::<Bn256, _, Basic>::new(AdaptorCircuit(circuit.clone()), &srs).unwrap();
+            println!("verifying {} proofs without advice", samples);
+            let start = Instant::now();
+            {
+                for _ in 0..samples {
+                    verifier.add_proof(&proof, &[image], |_, _| None);
+                }
+                assert_eq!(verifier.check_all(), true); // TODO
+            }
+            println!("done in {:?}", start.elapsed());
+        }
+        
+        {
+            let mut verifier = MultiVerifier::<Bn256, _, Basic>::new(AdaptorCircuit(circuit.clone()), &srs).unwrap();
+            println!("verifying 100 proofs with advice");
+            let start = Instant::now();
+            {
+                for (ref proof, ref advice) in &proofs {
+                    verifier.add_proof_with_advice(proof, &[image], advice);
                 }
                 verifier.add_aggregate(&proofs, &aggregate);
                 assert_eq!(verifier.check_all(), true); // TODO
