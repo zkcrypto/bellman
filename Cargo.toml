@@ -22,5 +22,11 @@ pairing = { git = 'https://github.com/matterinc/pairing' }
 byteorder = "1"
 ff = { git = 'https://github.com/matterinc/ff', features = ["derive"] }
 
+tiny-keccak = "1.4.2"
+
+[dependencies.blake2-rfc]
+git = "https://github.com/gtank/blake2-rfc"
+rev = "7a5b5fc99ae483a0043db7547fb79a6fa44b88a9"
+
 [features]
 default = []

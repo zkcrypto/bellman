@@ -126,3 +126,39 @@ impl<E: Engine> Batch<E> {
         ])).unwrap() == E::Fqk::one()
     }
 }
+
+
+pub struct VerificationKey<E:Engine> {
+    alpha_x: E::G2Affine,
+
+    alpha: E::G2Affine,
+
+    neg_h: E::G2Affine,
+
+    neg_x_n_minus_d: E::G2Affine
+
+}
+
+impl<E: Engine> VerificationKey<E> {
+    pub fn new(srs: &SRS<E>, n: usize) -> Self {
+        Self {
+            alpha_x: srs.h_positive_x_alpha[1],
+
+            alpha: srs.h_positive_x_alpha[0],
+
+            neg_h: {
+                let mut tmp = srs.h_negative_x[0];
+                tmp.negate();
+
+                tmp
+            },
+
+            neg_x_n_minus_d: {
+                let mut tmp = srs.h_negative_x[srs.d - n];
+                tmp.negate();
+
+                tmp
+            },
+        }
+    }
+}

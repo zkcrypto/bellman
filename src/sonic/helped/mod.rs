@@ -1,25 +1,20 @@
 extern crate ff;
 extern crate pairing;
-// extern crate merlin;
 
 use ff::{Field};
 use pairing::{Engine, CurveProjective};
 use std::marker::PhantomData;
-// use merlin::{Transcript};
 
 mod verifier;
 mod prover;
 mod batch;
 mod poly;
+mod helper;
 
-pub use self::verifier::{MultiVerifier, create_aggregate};
-pub use self::prover::{Aggregate, create_proof, create_advice};
-
-// use super::super::util::*;
-// pub use super::batch::Batch;
-// use crate::synthesis::{Backend, SynthesisDriver};
-// use crate::{Circuit, SynthesisError, Variable, Coeff};
-// use crate::srs::SRS;
+pub use self::batch::{Batch, VerificationKey};
+pub use self::helper::{Aggregate, create_aggregate};
+pub use self::verifier::{MultiVerifier};
+pub use self::prover::{create_proof, create_advice};
 
 #[derive(Clone)]
 pub struct SxyAdvice<E: Engine> {
