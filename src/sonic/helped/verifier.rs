@@ -255,6 +255,10 @@ impl<E: Engine, C: Circuit<E>, S: SynthesisDriver> MultiVerifier<E, C, S> {
         return self.n;
     }
 
+    pub fn get_q(&self) -> usize {
+        return self.q;
+    }
+
     pub fn check_all(self) -> bool {
         self.batch.check_all()
     }
