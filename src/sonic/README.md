@@ -16,7 +16,7 @@ Initial SONIC proof system integration using the code from the [original impleme
 - [x] Test on BN256 
 - [x] Parallelize using existing primitives
 - [ ] Implement polynomial parallelized evaluation
-- [ ] Make custom transcriptor that is easy to transform into the smart-contract
-- [ ] Basic Ethereum smart-contract
+- [x] Make custom transcriptor that is easy to transform into the smart-contract
+- [x] Basic Ethereum smart-contract
 - [ ] Add blinding factors
 - [ ] Implement unhelped version
