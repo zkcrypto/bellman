@@ -634,10 +634,23 @@ fn test_inputs_into_sonic_mimc() {
             }
             println!("done in {:?}", start.elapsed());
         }
-        
+
         {
             let mut verifier = MultiVerifier::<Bn256, _, Basic>::new(AdaptorCircuit(circuit.clone()), &srs).unwrap();
             println!("verifying 100 proofs with advice");
+            let start = Instant::now();
+            {
+                for _ in 0..samples {
+                    verifier.add_proof_with_advice(&proof, &[image], &advice);
+                }
+                assert_eq!(verifier.check_all(), true); // TODO
+            }
+            println!("done in {:?}", start.elapsed());
+        }
+        
+        {
+            let mut verifier = MultiVerifier::<Bn256, _, Basic>::new(AdaptorCircuit(circuit.clone()), &srs).unwrap();
+            println!("verifying 100 proofs with advice and aggregate");
             let start = Instant::now();
             {
                 for (ref proof, ref advice) in &proofs {

@@ -3,4 +3,4 @@ extern crate pairing;
 
 mod adaptor;
 
-pub use self::adaptor::{AdaptorCircuit};
+pub use self::adaptor::{Adaptor, AdaptorCircuit};

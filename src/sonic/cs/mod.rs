@@ -7,7 +7,6 @@ use pairing::{Engine};
 use crate::{SynthesisError};
 use std::marker::PhantomData;
 
-
 mod lc;
 pub use self::lc::{Coeff, Variable, LinearCombination};
 

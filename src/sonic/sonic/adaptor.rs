@@ -16,10 +16,9 @@ use crate::sonic::cs::Circuit as SonicCircuit;
 use crate::sonic::cs::ConstraintSystem as SonicConstraintSystem;
 use crate::sonic::cs::Variable as SonicVariable;
 use crate::sonic::cs::Coeff;
-// use crate::sonic::cs::synthesis::*;
 use std::marker::PhantomData;
 
-struct Adaptor<'a, E: Engine, CS: SonicConstraintSystem<E> + 'a> {
+pub struct Adaptor<'a, E: Engine, CS: SonicConstraintSystem<E> + 'a> {
     cs: &'a mut CS,
     _marker: PhantomData<E>,
 }
@@ -112,7 +111,7 @@ impl<'a, E: Engine, CS: SonicConstraintSystem<E> + 'a> crate::ConstraintSystem<E
 
             Some(ret)
         }
-
+        
         let a_lc = convert(a(crate::LinearCombination::zero()));
         let a_value = eval(&a_lc, &*self.cs);
         let b_lc = convert(b(crate::LinearCombination::zero()));
