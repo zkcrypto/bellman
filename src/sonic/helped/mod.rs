@@ -16,7 +16,13 @@ mod generator;
 pub use self::batch::{Batch};
 pub use self::helper::{Aggregate, create_aggregate};
 pub use self::verifier::{MultiVerifier};
-pub use self::prover::{create_proof, create_advice};
+pub use self::prover::{
+    create_advice,
+    create_advice_on_information_and_srs,
+    create_advice_on_srs,
+    create_proof
+};
+
 pub use self::generator::{
     CircuitParameters, 
     generate_parameters, 

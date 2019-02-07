@@ -35,6 +35,10 @@ impl Worker {
         log2_floor(self.cpus)
     }
 
+    pub(crate) fn num_cpus(&self) -> usize {
+        self.cpus
+    }
+
     pub fn compute<F, R>(
         &self, f: F
     ) -> WorkerFuture<R::Item, R::Error>

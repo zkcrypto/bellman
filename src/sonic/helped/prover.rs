@@ -5,6 +5,7 @@ use std::marker::PhantomData;
 use super::{Proof, SxyAdvice};
 use super::batch::Batch;
 use super::poly::{SxEval, SyEval};
+use super::parameters::{Parameters};
 
 use crate::SynthesisError;
 
@@ -14,31 +15,13 @@ use crate::sonic::cs::{Backend, SynthesisDriver};
 use crate::sonic::cs::{Circuit, Variable, Coeff};
 use crate::sonic::srs::SRS;
 
-pub fn create_advice<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
+pub fn create_advice_on_information_and_srs<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
     circuit: &C,
     proof: &Proof<E>,
-    srs: &SRS<E>
+    srs: &SRS<E>,
+    n: usize
 ) -> SxyAdvice<E>
 {
-    // annoying, but we need n to compute s(z, y), and this isn't
-    // precomputed anywhere yet
-    let n = {
-        struct CountN {
-            n: usize
-        }
-
-        impl<'a, E: Engine> Backend<E> for &'a mut CountN {
-            fn new_multiplication_gate(&mut self) {
-                self.n += 1;
-            }
-        }
-
-        let mut tmp = CountN{n:0};
-        S::synthesize(&mut tmp, circuit).unwrap(); // TODO
-
-        tmp.n
-    };
-
     let z: E::Fr;
     let y: E::Fr;
     {
@@ -109,6 +92,44 @@ pub fn create_advice<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
         szy,
         opening
     }
+}
+
+pub fn create_advice<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
+    circuit: &C,
+    proof: &Proof<E>,
+    parameters: &Parameters<E>,
+) -> SxyAdvice<E>
+{
+    let n = parameters.vk.n;
+    create_advice_on_information_and_srs::<E, C, S>(circuit, proof, &parameters.srs, n)   
+}
+
+pub fn create_advice_on_srs<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
+    circuit: &C,
+    proof: &Proof<E>,
+    srs: &SRS<E>
+) -> SxyAdvice<E>
+{
+    // annoying, but we need n to compute s(z, y), and this isn't
+    // precomputed anywhere yet
+    let n = {
+        struct CountN {
+            n: usize
+        }
+
+        impl<'a, E: Engine> Backend<E> for &'a mut CountN {
+            fn new_multiplication_gate(&mut self) {
+                self.n += 1;
+            }
+        }
+
+        let mut tmp = CountN{n:0};
+        S::synthesize(&mut tmp, circuit).unwrap(); // TODO
+
+        tmp.n
+    };
+
+    create_advice_on_information_and_srs::<E, C, S>(circuit, proof, srs, n)   
 }
 
 pub fn create_proof<E: Engine, C: Circuit<E>, S: SynthesisDriver>(

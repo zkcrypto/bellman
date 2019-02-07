@@ -479,7 +479,7 @@ fn test_sonic_mimc() {
 
         use bellman::sonic::cs::Basic;
         use bellman::sonic::sonic::AdaptorCircuit;
-        use bellman::sonic::helped::{create_proof, create_advice, create_aggregate, MultiVerifier};
+        use bellman::sonic::helped::{create_proof, create_advice, create_aggregate, MultiVerifier, create_advice_on_srs};
 
         println!("creating proof");
         let start = Instant::now();
@@ -488,7 +488,7 @@ fn test_sonic_mimc() {
 
         println!("creating advice");
         let start = Instant::now();
-        let advice = create_advice::<Bls12, _, Basic>(&AdaptorCircuit(circuit.clone()), &proof, &srs);
+        let advice = create_advice_on_srs::<Bls12, _, Basic>(&AdaptorCircuit(circuit.clone()), &proof, &srs);
         println!("done in {:?}", start.elapsed());
 
         println!("creating aggregate for {} proofs", samples);
@@ -578,7 +578,7 @@ fn test_inputs_into_sonic_mimc() {
 
         use bellman::sonic::cs::Basic;
         use bellman::sonic::sonic::AdaptorCircuit;
-        use bellman::sonic::helped::{create_proof, get_circuit_parameters, create_advice, create_aggregate, MultiVerifier};
+        use bellman::sonic::helped::{create_proof, get_circuit_parameters, create_advice, create_aggregate, MultiVerifier, create_advice_on_srs};
 
         let info = get_circuit_parameters::<Bn256, _>(circuit.clone()).expect("Must get circuit info");
         println!("{:?}", info);
@@ -590,7 +590,7 @@ fn test_inputs_into_sonic_mimc() {
 
         println!("creating advice");
         let start = Instant::now();
-        let advice = create_advice::<Bn256, _, Basic>(&AdaptorCircuit(circuit.clone()), &proof, &srs);
+        let advice = create_advice_on_srs::<Bn256, _, Basic>(&AdaptorCircuit(circuit.clone()), &proof, &srs);
         println!("done in {:?}", start.elapsed());
 
         println!("creating aggregate for {} proofs", samples);

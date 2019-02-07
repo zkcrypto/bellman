@@ -452,15 +452,7 @@ pub fn generate_parameters_on_srs_and_information<E: Engine>(
 
     Ok(Parameters{
         vk: vk,
-        d: trimmed_srs.d,
-        g_negative_x: Arc::new(trimmed_srs.g_negative_x),
-        g_positive_x: Arc::new(trimmed_srs.g_positive_x),
-        h_negative_x: Arc::new(trimmed_srs.h_negative_x),
-        h_positive_x: Arc::new(trimmed_srs.h_positive_x),
-        g_negative_x_alpha: Arc::new(trimmed_srs.g_negative_x_alpha),
-        g_positive_x_alpha: Arc::new(trimmed_srs.g_positive_x_alpha),
-        h_negative_x_alpha: Arc::new(trimmed_srs.h_negative_x_alpha),
-        h_positive_x_alpha: Arc::new(trimmed_srs.h_positive_x_alpha)
+        srs: trimmed_srs
     })
 }
 

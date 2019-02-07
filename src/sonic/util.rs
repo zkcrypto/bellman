@@ -71,6 +71,118 @@ where
     }
 }
 
+extern crate crossbeam;
+use self::crossbeam::channel::{unbounded, RecvError};
+
+pub fn evaluate_at_consequitive_powers<'a, F: Field> (
+    coeffs: &[F],
+    first_power: F,
+    base: F
+) -> F
+    {
+    use crate::multicore::Worker;
+
+    let (s, r) = unbounded();
+
+    let worker = Worker::new();
+
+    worker.scope(coeffs.len(), |scope, chunk| {
+        for (i, coeffs) in coeffs.chunks(chunk).enumerate()
+        {
+            let s = s.clone();
+            scope.spawn(move |_| {
+                let mut current_power = base.pow(&[(i*chunk) as u64]);
+                current_power.mul_assign(&first_power);
+
+                let mut acc = F::zero();
+
+                for p in coeffs {
+                    let mut tmp = *p;
+                    tmp.mul_assign(&current_power);
+                    acc.add_assign(&tmp);
+
+                    current_power.mul_assign(&base);
+                }
+
+                s.send(acc).expect("must send");
+            });
+        }
+    });
+
+    drop(s);
+
+    // all threads in a scope have done working, so we can safely read
+    let mut result = F::zero();
+
+    loop {
+        let v = r.recv();
+        match v {
+            Ok(value) => {
+                result.add_assign(&value);
+            },
+            Err(RecvError) => {
+                break;
+            }
+        }
+    }
+
+    result
+}
+
+pub fn mut_evaluate_at_consequitive_powers<'a, F: Field> (
+    coeffs: &mut [F],
+    first_power: F,
+    base: F
+) -> F
+    {
+    use crate::multicore::Worker;
+
+    let (s, r) = unbounded();
+
+    let worker = Worker::new();
+
+    worker.scope(coeffs.len(), |scope, chunk| {
+        for (i, coeffs) in coeffs.chunks_mut(chunk).enumerate()
+        {
+            let s = s.clone();
+            scope.spawn(move |_| {
+                let mut current_power = base.pow(&[(i*chunk) as u64]);
+                current_power.mul_assign(&first_power);
+
+                let mut acc = F::zero();
+
+                for mut p in coeffs {
+                    p.mul_assign(&current_power);
+                    acc.add_assign(&p);
+
+                    current_power.mul_assign(&base);
+                }
+
+                s.send(acc).expect("must send");
+            });
+        }
+    });
+
+    drop(s);
+
+    // all threads in a scope have done working, so we can safely read
+    let mut result = F::zero();
+
+    loop {
+        let v = r.recv();
+        match v {
+            Ok(value) => {
+                result.add_assign(&value);
+            },
+            Err(RecvError) => {
+                break;
+            }
+        }
+    }
+
+    result
+}
+
 pub fn multiexp<
     'a,
     G: CurveAffine,
@@ -420,4 +532,69 @@ fn test_mul() {
 
     assert_eq!(serial_res.len(), parallel_res.len());
     assert_eq!(serial_res, parallel_res);
+}
+
+#[test]
+fn test_eval_at_powers() {
+    use rand::{self, Rand, Rng};
+    use pairing::bls12_381::Bls12;
+    use pairing::bls12_381::Fr;
+
+    const SAMPLES: usize = 100000;
+
+    let rng = &mut rand::thread_rng();
+    let a = (0..SAMPLES).map(|_| Fr::rand(rng)).collect::<Vec<_>>();
+    let x: Fr = rng.gen();
+    let n: u32 = rng.gen();
+
+    let mut acc = Fr::zero();
+
+    {
+        let mut tmp = x.pow(&[n as u64]);
+
+        for coeff in a.iter() {
+            let mut c = *coeff;
+            c.mul_assign(&tmp);
+            acc.add_assign(&c);
+            tmp.mul_assign(&x);
+        }
+    }
+
+    let first_power = x.pow(&[n as u64]);
+    let acc_parallel = evaluate_at_consequitive_powers(&a[..], first_power, x);
+
+    assert_eq!(acc_parallel, acc);
+}
+
+#[test]
+fn test_mut_eval_at_powers() {
+    use rand::{self, Rand, Rng};
+    use pairing::bls12_381::Bls12;
+    use pairing::bls12_381::Fr;
+
+    const SAMPLES: usize = 100000;
+
+    let rng = &mut rand::thread_rng();
+    let mut a = (0..SAMPLES).map(|_| Fr::rand(rng)).collect::<Vec<_>>();
+    let mut b = a.clone();
+    let x: Fr = rng.gen();
+    let n: u32 = rng.gen();
+
+    let mut acc = Fr::zero();
+
+    {
+        let mut tmp = x.pow(&[n as u64]);
+
+        for mut coeff in a.iter_mut() {
+            coeff.mul_assign(&tmp);
+            acc.add_assign(&coeff);
+            tmp.mul_assign(&x);
+        }
+    }
+
+    let first_power = x.pow(&[n as u64]);
+    let acc_parallel = mut_evaluate_at_consequitive_powers(&mut b[..], first_power, x);
+
+    assert_eq!(acc_parallel, acc);
+    assert!(a == b);
 }

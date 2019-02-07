@@ -300,45 +300,38 @@ pub struct PreparedVerifyingKey<E: Engine> {
 pub struct Parameters<E: Engine> {
     pub vk: VerifyingKey<E>,
 
-    pub d: usize,
+    pub srs: SRS<E>,
+    // pub d: usize,
 
-    // g^{x^0}, g^{x^{-1}}, g^{x^{-2}}, ..., g^{x^{-d}}
-    pub g_negative_x: Arc<Vec<E::G1Affine>>,
+    // // g^{x^0}, g^{x^{-1}}, g^{x^{-2}}, ..., g^{x^{-d}}
+    // pub g_negative_x: Arc<Vec<E::G1Affine>>,
 
-    // g^{x^0}, g^{x^{1}}, g^{x^{2}}, ..., g^{x^{d}}
-    pub g_positive_x: Arc<Vec<E::G1Affine>>,
+    // // g^{x^0}, g^{x^{1}}, g^{x^{2}}, ..., g^{x^{d}}
+    // pub g_positive_x: Arc<Vec<E::G1Affine>>,
 
-    // g^{x^0}, g^{x^{-1}}, g^{x^{-2}}, ..., g^{x^{-d}}
-    pub h_negative_x: Arc<Vec<E::G2Affine>>,
+    // // g^{x^0}, g^{x^{-1}}, g^{x^{-2}}, ..., g^{x^{-d}}
+    // pub h_negative_x: Arc<Vec<E::G2Affine>>,
 
-    // g^{x^0}, g^{x^{1}}, g^{x^{2}}, ..., g^{x^{d}}
-    pub h_positive_x: Arc<Vec<E::G2Affine>>,
+    // // g^{x^0}, g^{x^{1}}, g^{x^{2}}, ..., g^{x^{d}}
+    // pub h_positive_x: Arc<Vec<E::G2Affine>>,
 
-    // alpha*(g^{x^{-1}}, g^{x^{-2}}, ..., g^{x^{-d}})
-    pub g_negative_x_alpha: Arc<Vec<E::G1Affine>>,
+    // // alpha*(g^{x^{-1}}, g^{x^{-2}}, ..., g^{x^{-d}})
+    // pub g_negative_x_alpha: Arc<Vec<E::G1Affine>>,
 
-    // alpha*(g^{x^{1}}, g^{x^{2}}, ..., g^{x^{d}})
-    pub g_positive_x_alpha: Arc<Vec<E::G1Affine>>,
+    // // alpha*(g^{x^{1}}, g^{x^{2}}, ..., g^{x^{d}})
+    // pub g_positive_x_alpha: Arc<Vec<E::G1Affine>>,
 
-    // alpha*(h^{x^0}, h^{x^{-1}}, g^{x^{-2}}, ..., g^{x^{-d}})
-    pub h_negative_x_alpha: Arc<Vec<E::G2Affine>>,
+    // // alpha*(h^{x^0}, h^{x^{-1}}, g^{x^{-2}}, ..., g^{x^{-d}})
+    // pub h_negative_x_alpha: Arc<Vec<E::G2Affine>>,
 
-    // alpha*(h^{x^0}, g^{x^{1}}, g^{x^{2}}, ..., g^{x^{d}})
-    pub h_positive_x_alpha: Arc<Vec<E::G2Affine>>,
+    // // alpha*(h^{x^0}, g^{x^{1}}, g^{x^{2}}, ..., g^{x^{d}})
+    // pub h_positive_x_alpha: Arc<Vec<E::G2Affine>>,
 }
 
 impl<E: Engine> PartialEq for Parameters<E> {
     fn eq(&self, other: &Parameters<E>) -> bool {
         self.vk == other.vk &&
-        self.d == other.d &&
-        self.g_negative_x == other.g_negative_x &&
-        self.g_positive_x == other.g_positive_x &&
-        self.h_negative_x == other.h_negative_x &&
-        self.h_positive_x == other.h_positive_x &&
-        self.g_negative_x_alpha == other.g_negative_x_alpha &&
-        self.g_positive_x_alpha == other.g_positive_x_alpha &&
-        self.h_negative_x_alpha == other.h_negative_x_alpha &&
-        self.h_positive_x_alpha == other.h_positive_x_alpha
+        self.srs == other.srs
     }
 }
 
@@ -349,48 +342,7 @@ impl<E: Engine> Parameters<E> {
     ) -> io::Result<()>
     {
         self.vk.write(&mut writer)?;
-
-        assert_eq!(self.d + 1, self.g_negative_x.len());
-        assert_eq!(self.d + 1, self.g_positive_x.len());
-
-        assert_eq!(self.d + 1, self.h_negative_x.len());
-        assert_eq!(self.d + 1, self.h_positive_x.len());
-
-        assert_eq!(self.d, self.g_negative_x_alpha.len());
-        assert_eq!(self.d, self.g_positive_x_alpha.len());
-
-        assert_eq!(self.d + 1, self.h_negative_x_alpha.len());
-        assert_eq!(self.d + 1, self.h_positive_x_alpha.len());
-
-        writer.write_u32::<BigEndian>(self.d as u32)?;
-
-        for g in &self.g_negative_x[..] {
-            writer.write_all(g.into_uncompressed().as_ref())?;
-        }
-        for g in &self.g_positive_x[..] {
-            writer.write_all(g.into_uncompressed().as_ref())?;
-        }
-
-        for g in &self.h_negative_x[..] {
-            writer.write_all(g.into_uncompressed().as_ref())?;
-        }
-        for g in &self.h_positive_x[..] {
-            writer.write_all(g.into_uncompressed().as_ref())?;
-        }
-
-        for g in &self.g_negative_x_alpha[..] {
-            writer.write_all(g.into_uncompressed().as_ref())?;
-        }
-        for g in &self.g_positive_x_alpha[..] {
-            writer.write_all(g.into_uncompressed().as_ref())?;
-        }
-
-        for g in &self.h_negative_x_alpha[..] {
-            writer.write_all(g.into_uncompressed().as_ref())?;
-        }
-        for g in &self.h_positive_x_alpha[..] {
-            writer.write_all(g.into_uncompressed().as_ref())?;
-        }
+        self.srs.write(&mut writer)?;
 
         Ok(())
     }
@@ -400,107 +352,12 @@ impl<E: Engine> Parameters<E> {
         checked: bool
     ) -> io::Result<Self>
     {
-        let read_g1 = |reader: &mut R| -> io::Result<E::G1Affine> {
-            let mut repr = <E::G1Affine as CurveAffine>::Uncompressed::empty();
-            reader.read_exact(repr.as_mut())?;
-
-            if checked {
-                repr
-                .into_affine()
-            } else {
-                repr
-                .into_affine_unchecked()
-            }
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
-            .and_then(|e| if e.is_zero() {
-                Err(io::Error::new(io::ErrorKind::InvalidData, "point at infinity"))
-            } else {
-                Ok(e)
-            })
-        };
-
-        let read_g2 = |reader: &mut R| -> io::Result<E::G2Affine> {
-            let mut repr = <E::G2Affine as CurveAffine>::Uncompressed::empty();
-            reader.read_exact(repr.as_mut())?;
-
-            if checked {
-                repr
-                .into_affine()
-            } else {
-                repr
-                .into_affine_unchecked()
-            }
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
-            .and_then(|e| if e.is_zero() {
-                Err(io::Error::new(io::ErrorKind::InvalidData, "point at infinity"))
-            } else {
-                Ok(e)
-            })
-        };
-
         let vk = VerifyingKey::<E>::read(&mut reader)?;
+        let srs = SRS::<E>::read(&mut reader, checked)?;
 
-        let mut g_negative_x = vec![];
-        let mut g_positive_x = vec![];
-
-        let mut h_negative_x = vec![];
-        let mut h_positive_x = vec![];
-
-        let mut g_negative_x_alpha = vec![];
-        let mut g_positive_x_alpha = vec![];
-
-        let mut h_negative_x_alpha = vec![];
-        let mut h_positive_x_alpha = vec![];
-
-        let d = reader.read_u32::<BigEndian>()? as usize;
-
-        {
-            for _ in 0..(d+1) {
-                g_negative_x.push(read_g1(&mut reader)?);
-            }
-            for _ in 0..(d+1) {
-                g_positive_x.push(read_g1(&mut reader)?);
-            }
-        }
-        
-        {
-            for _ in 0..(d+1) {
-                h_negative_x.push(read_g2(&mut reader)?);
-            }
-            for _ in 0..(d+1) {
-                h_positive_x.push(read_g2(&mut reader)?);
-            }
-        }
-
-        {
-            for _ in 0..d {
-                g_negative_x_alpha.push(read_g1(&mut reader)?);
-            }
-            for _ in 0..d {
-                g_positive_x_alpha.push(read_g1(&mut reader)?);
-            }
-        }
-
-        {
-            for _ in 0..(d+1) {
-                h_negative_x_alpha.push(read_g2(&mut reader)?);
-            }
-            for _ in 0..(d+1) {
-                h_positive_x_alpha.push(read_g2(&mut reader)?);
-            }
-        }
-        
         Ok(Parameters {
             vk: vk,
-            d: d,
-            g_negative_x: Arc::new(g_negative_x),
-            g_positive_x: Arc::new(g_positive_x),
-            h_negative_x: Arc::new(h_negative_x),
-            h_positive_x: Arc::new(h_positive_x),
-            g_negative_x_alpha: Arc::new(g_negative_x_alpha),
-            g_positive_x_alpha: Arc::new(g_positive_x_alpha),
-            h_negative_x_alpha: Arc::new(h_negative_x_alpha),
-            h_positive_x_alpha: Arc::new(h_positive_x_alpha)
+            srs: srs
         })
     }
 }

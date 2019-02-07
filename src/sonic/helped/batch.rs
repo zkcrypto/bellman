@@ -16,6 +16,8 @@ use crate::SynthesisError;
 use crate::sonic::cs::{Backend, SynthesisDriver};
 use crate::sonic::cs::{Circuit};
 
+use super::parameters::VerifyingKey;
+
 use crate::sonic::srs::SRS;
 use crate::sonic::util::multiexp;
 
@@ -80,6 +82,25 @@ impl<E: Engine> Batch<E> {
 
             value: E::Fr::zero(),
             g: srs.g_positive_x[0],
+        }
+    }
+
+    pub fn new_from_key(vk: &VerifyingKey<E>) -> Self {
+        Batch {
+            alpha_x: vec![],
+            alpha_x_precomp: vk.alpha_x.prepare(),
+
+            alpha: vec![],
+            alpha_precomp: vk.alpha.prepare(),
+
+            neg_h: vec![],
+            neg_h_precomp: vk.neg_h.prepare(),
+
+            neg_x_n_minus_d: vec![],
+            neg_x_n_minus_d_precomp: vk.neg_x_n_minus_d.prepare(),
+
+            value: E::Fr::zero(),
+            g: E::G1Affine::one(),
         }
     }
 
