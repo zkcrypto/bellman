@@ -381,7 +381,7 @@ pub fn generate_parameters<E, C>(
     where E: Engine, C: Circuit<E> 
 {
     let circuit_parameters = get_circuit_parameters::<E, C>(circuit)?; 
-    let min_d = circuit_parameters.n * 3;
+    let min_d = circuit_parameters.n * 4;
 
     let srs = generate_srs(alpha, x, min_d)?;
 
@@ -407,8 +407,8 @@ pub fn generate_parameters_on_srs_and_information<E: Engine>(
     information: CircuitParameters<E>
 ) -> Result<Parameters<E>, SynthesisError>
 {
-    assert!(srs.d >= information.n * 3);
-    let min_d = information.n * 3;
+    assert!(srs.d >= information.n * 4);
+    let min_d = information.n * 4;
 
     let trimmed_srs: SRS<E> = SRS {
         d: min_d,
@@ -736,7 +736,7 @@ fn parameters_generation() {
     use rand::{Rand, thread_rng};
 
     let info = get_circuit_parameters::<Bls12, _>(MySillyCircuit { a: None, b: None }).expect("Must get circuit info");
-
+    println!("{:?}", info);
     let rng = &mut thread_rng();
 
     let x: Fr = rng.gen();

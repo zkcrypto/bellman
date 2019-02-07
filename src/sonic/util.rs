@@ -267,6 +267,7 @@ fn laurent_division() {
 }
 
 pub fn multiply_polynomials<E: Engine>(a: Vec<E::Fr>, b: Vec<E::Fr>) -> Vec<E::Fr> {
+    println!("Multiplying polynomails of degrees {} and {}", a.len(), b.len());
     let result_len = a.len() + b.len() - 1;
 
     use crate::multicore::Worker;

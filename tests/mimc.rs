@@ -578,7 +578,10 @@ fn test_inputs_into_sonic_mimc() {
 
         use bellman::sonic::cs::Basic;
         use bellman::sonic::sonic::AdaptorCircuit;
-        use bellman::sonic::helped::{create_proof, create_advice, create_aggregate, MultiVerifier};
+        use bellman::sonic::helped::{create_proof, get_circuit_parameters, create_advice, create_aggregate, MultiVerifier};
+
+        let info = get_circuit_parameters::<Bn256, _>(circuit.clone()).expect("Must get circuit info");
+        println!("{:?}", info);
 
         println!("creating proof");
         let start = Instant::now();
