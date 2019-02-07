@@ -20,7 +20,7 @@ pub fn create_advice_on_information_and_srs<E: Engine, C: Circuit<E>, S: Synthes
     proof: &Proof<E>,
     srs: &SRS<E>,
     n: usize
-) -> SxyAdvice<E>
+) -> Result<SxyAdvice<E>, SynthesisError>
 {
     let z: E::Fr;
     let y: E::Fr;
@@ -31,11 +31,11 @@ pub fn create_advice_on_information_and_srs<E: Engine, C: Circuit<E>, S: Synthes
         transcript.commit_point(&proof.t);
         z = transcript.get_challenge_scalar();
     }
-    let z_inv = z.inverse().unwrap(); // TODO
+    let z_inv = z.inverse().ok_or(SynthesisError::DivisionByZero)?;
 
     let (s_poly_negative, s_poly_positive) = {
         let mut tmp = SxEval::new(y, n);
-        S::synthesize(&mut tmp, circuit).unwrap(); // TODO
+        S::synthesize(&mut tmp, circuit)?;
 
         tmp.poly()
     };
@@ -87,18 +87,18 @@ pub fn create_advice_on_information_and_srs<E: Engine, C: Circuit<E>, S: Synthes
         ).into_affine()
     };
 
-    SxyAdvice {
+    Ok(SxyAdvice {
         s,
         szy,
         opening
-    }
+    })
 }
 
 pub fn create_advice<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
     circuit: &C,
     proof: &Proof<E>,
     parameters: &Parameters<E>,
-) -> SxyAdvice<E>
+) -> Result<SxyAdvice<E>, SynthesisError>
 {
     let n = parameters.vk.n;
     create_advice_on_information_and_srs::<E, C, S>(circuit, proof, &parameters.srs, n)   
@@ -108,7 +108,7 @@ pub fn create_advice_on_srs<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
     circuit: &C,
     proof: &Proof<E>,
     srs: &SRS<E>
-) -> SxyAdvice<E>
+) -> Result<SxyAdvice<E>, SynthesisError>
 {
     // annoying, but we need n to compute s(z, y), and this isn't
     // precomputed anywhere yet
@@ -124,7 +124,7 @@ pub fn create_advice_on_srs<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
         }
 
         let mut tmp = CountN{n:0};
-        S::synthesize(&mut tmp, circuit).unwrap(); // TODO
+        S::synthesize(&mut tmp, circuit)?;
 
         tmp.n
     };
@@ -216,7 +216,7 @@ pub fn create_proof<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
     rx1.extend(wires.a);
 
     let mut rxy = rx1.clone();
-    let y_inv = y.inverse().unwrap(); // TODO
+    let y_inv = y.inverse().ok_or(SynthesisError::DivisionByZero)?;
     let mut tmp = y.pow(&[n as u64]);
 
     for rxy in rxy.iter_mut().rev() {
@@ -226,7 +226,7 @@ pub fn create_proof<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
 
     let (s_poly_negative, s_poly_positive) = {
         let mut tmp = SxEval::new(y, n);
-        S::synthesize(&mut tmp, circuit).unwrap(); // TODO
+        S::synthesize(&mut tmp, circuit)?;
 
         tmp.poly()
     };
@@ -262,7 +262,7 @@ pub fn create_proof<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
     transcript.commit_point(&t);
 
     let z: E::Fr = transcript.get_challenge_scalar();
-    let z_inv = z.inverse().unwrap(); // TODO
+    let z_inv = z.inverse().ok_or(SynthesisError::DivisionByZero)?;
 
     // TODO: use the faster way to evaluate the polynomials
     let mut rz = E::Fr::zero();
