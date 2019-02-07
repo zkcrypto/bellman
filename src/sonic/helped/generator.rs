@@ -221,8 +221,10 @@ impl<'a, E: Engine, CS: SonicConstraintSystem<E> + 'a> crate::ConstraintSystem<E
 
 
 
-/// Create parameters for a circuit, given some toxic waste.
-fn get_circuit_parameters<E, C>(
+/// Get circuit information such as number of input, variables, 
+/// constraints, and the corresponding SONIC parameters
+/// k_map, n, q
+pub fn get_circuit_parameters<E, C>(
     circuit: C,
 ) -> Result<CircuitParameters<E>, SynthesisError>
     where E: Engine, C: Circuit<E>
@@ -239,7 +241,7 @@ fn get_circuit_parameters<E, C>(
     impl<E: Engine, B: Backend<E>> SonicConstraintSystem<E> for NonassigningSynthesizer<E, B> {
         const ONE: SonicVariable = SonicVariable::A(1);
 
-        fn alloc<F>(&mut self, value: F) -> Result<SonicVariable, SynthesisError>
+        fn alloc<F>(&mut self, _value: F) -> Result<SonicVariable, SynthesisError>
         where
             F: FnOnce() -> Result<E::Fr, SynthesisError>
         {
@@ -287,7 +289,7 @@ fn get_circuit_parameters<E, C>(
             }
         }
 
-        fn multiply<F>(&mut self, values: F) -> Result<(SonicVariable, SonicVariable, SonicVariable), SynthesisError>
+        fn multiply<F>(&mut self, _values: F) -> Result<(SonicVariable, SonicVariable, SonicVariable), SynthesisError>
         where
             F: FnOnce() -> Result<(E::Fr, E::Fr, E::Fr), SynthesisError>
         {
@@ -346,9 +348,6 @@ fn get_circuit_parameters<E, C>(
             (SonicVariable::A(1), SonicVariable::A(1)) => {},
             _ => return Err(SynthesisError::UnconstrainedVariable)
         }
-
-        // let adapted_circuit = AdaptorCircuit(circuit);
-
 
         let mut assembly = GeneratorAssembly::<'_, E, _> {
             cs: &mut cs,
