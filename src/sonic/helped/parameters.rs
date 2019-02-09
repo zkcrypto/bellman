@@ -19,15 +19,23 @@ use std::io::{self, Read, Write};
 use std::sync::Arc;
 use byteorder::{BigEndian, WriteBytesExt, ReadBytesExt};
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Eq)]
 pub struct SxyAdvice<E: Engine> {
     pub s: E::G1Affine,
     pub opening: E::G1Affine,
     pub szy: E::Fr,
 }
 
+impl<E: Engine> PartialEq for SxyAdvice<E> {
+    fn eq(&self, other: &SxyAdvice<E>) -> bool {
+        self.s == other.s &&
+        self.opening == other.opening &&
+        self.szy == other.szy
+    }
+}
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+
+#[derive(Clone, Debug, Eq)]
 pub struct Proof<E: Engine> {
     pub r: E::G1Affine,
     pub t: E::G1Affine,
@@ -35,6 +43,17 @@ pub struct Proof<E: Engine> {
     pub rzy: E::Fr,
     pub z_opening: E::G1Affine,
     pub zy_opening: E::G1Affine
+}
+
+impl<E: Engine> PartialEq for Proof<E> {
+    fn eq(&self, other: &Proof<E>) -> bool {
+        self.r == other.r &&
+        self.t == other.t &&
+        self.rz == other.rz &&
+        self.rzy == other.rzy &&
+        self.z_opening == other.z_opening &&
+        self.zy_opening == other.zy_opening
+    }
 }
 
 impl<E: Engine> Proof<E> {
@@ -49,6 +68,7 @@ impl<E: Engine> Proof<E> {
         let mut buffer = vec![];
         self.rz.into_repr().write_be(&mut buffer)?;
         writer.write_all(&buffer[..])?;
+        let mut buffer = vec![];
         self.rzy.into_repr().write_be(&mut buffer)?;
         writer.write_all(&buffer[..])?;
         writer.write_all(self.z_opening.into_compressed().as_ref())?;
@@ -362,185 +382,105 @@ impl<E: Engine> Parameters<E> {
     }
 }
 
-// pub trait ParameterSource<E: Engine> {
-//     type G1Builder: SourceBuilder<E::G1Affine>;
-//     type G2Builder: SourceBuilder<E::G2Affine>;
+#[test]
+fn parameters_generation() {
+    use crate::{ConstraintSystem, Circuit};
 
-//     fn get_vk(
-//         &mut self,
-//         num_ic: usize
-//     ) -> Result<VerifyingKey<E>, SynthesisError>;
-//     fn get_h(
-//         &mut self,
-//         num_h: usize
-//     ) -> Result<Self::G1Builder, SynthesisError>;
-//     fn get_l(
-//         &mut self,
-//         num_l: usize
-//     ) -> Result<Self::G1Builder, SynthesisError>;
-//     fn get_a(
-//         &mut self,
-//         num_inputs: usize,
-//         num_aux: usize
-//     ) -> Result<(Self::G1Builder, Self::G1Builder), SynthesisError>;
-//     fn get_b_g1(
-//         &mut self,
-//         num_inputs: usize,
-//         num_aux: usize
-//     ) -> Result<(Self::G1Builder, Self::G1Builder), SynthesisError>;
-//     fn get_b_g2(
-//         &mut self,
-//         num_inputs: usize,
-//         num_aux: usize
-//     ) -> Result<(Self::G2Builder, Self::G2Builder), SynthesisError>;
-// }
+    use pairing::bls12_381::{Bls12, Fr};
 
-// impl<'a, E: Engine> ParameterSource<E> for &'a Parameters<E> {
-//     type G1Builder = (Arc<Vec<E::G1Affine>>, usize);
-//     type G2Builder = (Arc<Vec<E::G2Affine>>, usize);
+    #[derive(Clone)]
+    struct MySillyCircuit<E: Engine> {
+        a: Option<E::Fr>,
+        b: Option<E::Fr>
+    }
 
-//     fn get_vk(
-//         &mut self,
-//         _: usize
-//     ) -> Result<VerifyingKey<E>, SynthesisError>
-//     {
-//         Ok(self.vk.clone())
-//     }
+    impl<E: Engine> Circuit<E> for MySillyCircuit<E> {
+        fn synthesize<CS: ConstraintSystem<E>>(
+            self,
+            cs: &mut CS
+        ) -> Result<(), SynthesisError>
+        {
+            let a = cs.alloc(|| "a", || self.a.ok_or(SynthesisError::AssignmentMissing))?;
+            let b = cs.alloc(|| "b", || self.b.ok_or(SynthesisError::AssignmentMissing))?;
+            let c = cs.alloc_input(|| "c", || {
+                let mut a = self.a.ok_or(SynthesisError::AssignmentMissing)?;
+                let b = self.b.ok_or(SynthesisError::AssignmentMissing)?;
 
-//     fn get_h(
-//         &mut self,
-//         _: usize
-//     ) -> Result<Self::G1Builder, SynthesisError>
-//     {
-//         Ok((self.h.clone(), 0))
-//     }
+                a.mul_assign(&b);
+                Ok(a)
+            })?;
 
-//     fn get_l(
-//         &mut self,
-//         _: usize
-//     ) -> Result<Self::G1Builder, SynthesisError>
-//     {
-//         Ok((self.l.clone(), 0))
-//     }
+            cs.enforce(
+                || "a*b=c",
+                |lc| lc + a,
+                |lc| lc + b,
+                |lc| lc + c
+            );
 
-//     fn get_a(
-//         &mut self,
-//         num_inputs: usize,
-//         _: usize
-//     ) -> Result<(Self::G1Builder, Self::G1Builder), SynthesisError>
-//     {
-//         Ok(((self.a.clone(), 0), (self.a.clone(), num_inputs)))
-//     }
+            Ok(())
+        }
+    }
 
-//     fn get_b_g1(
-//         &mut self,
-//         num_inputs: usize,
-//         _: usize
-//     ) -> Result<(Self::G1Builder, Self::G1Builder), SynthesisError>
-//     {
-//         Ok(((self.b_g1.clone(), 0), (self.b_g1.clone(), num_inputs)))
-//     }
+    use rand::{Rng, Rand, thread_rng};
+    use super::{generate_parameters, get_circuit_parameters, generate_srs, generate_parameters_on_srs_and_information};
+    use super::adapted_prover::create_proof;
 
-//     fn get_b_g2(
-//         &mut self,
-//         num_inputs: usize,
-//         _: usize
-//     ) -> Result<(Self::G2Builder, Self::G2Builder), SynthesisError>
-//     {
-//         Ok(((self.b_g2.clone(), 0), (self.b_g2.clone(), num_inputs)))
-//     }
-// }
+    let info = get_circuit_parameters::<Bls12, _>(MySillyCircuit { a: None, b: None }).expect("Must get circuit info");
+    println!("{:?}", info);
+    let rng = &mut thread_rng();
 
-// #[cfg(test)]
-// mod test_with_bls12_381 {
-//     use super::*;
-//     use {Circuit, SynthesisError, ConstraintSystem};
+    let x: Fr = rng.gen();
+    let alpha: Fr = rng.gen();
 
-//     use rand::{Rand, thread_rng};
-//     use ff::{Field};
-//     use pairing::bls12_381::{Bls12, Fr};
+    let params = generate_parameters::<Bls12, _>(MySillyCircuit { a: None, b: None }, alpha, x).unwrap();
+    let srs = generate_srs::<Bls12>(alpha, x, info.n * 100).unwrap();
+    let naive_srs = SRS::<Bls12>::new(
+        info.n * 100,
+        x,
+        alpha,
+    );
 
-//     #[test]
-//     fn serialization() {
-//         struct MySillyCircuit<E: Engine> {
-//             a: Option<E::Fr>,
-//             b: Option<E::Fr>
-//         }
+    assert!(srs == naive_srs);
 
-//         impl<E: Engine> Circuit<E> for MySillyCircuit<E> {
-//             fn synthesize<CS: ConstraintSystem<E>>(
-//                 self,
-//                 cs: &mut CS
-//             ) -> Result<(), SynthesisError>
-//             {
-//                 let a = cs.alloc(|| "a", || self.a.ok_or(SynthesisError::AssignmentMissing))?;
-//                 let b = cs.alloc(|| "b", || self.b.ok_or(SynthesisError::AssignmentMissing))?;
-//                 let c = cs.alloc_input(|| "c", || {
-//                     let mut a = self.a.ok_or(SynthesisError::AssignmentMissing)?;
-//                     let b = self.b.ok_or(SynthesisError::AssignmentMissing)?;
+    let params_on_srs = generate_parameters_on_srs_and_information::<Bls12>(&srs, info.clone()).unwrap();
 
-//                     a.mul_assign(&b);
-//                     Ok(a)
-//                 })?;
+    assert!(params == params_on_srs);
 
-//                 cs.enforce(
-//                     || "a*b=c",
-//                     |lc| lc + a,
-//                     |lc| lc + b,
-//                     |lc| lc + c
-//                 );
+    {
+        let mut v = vec![];
 
-//                 Ok(())
-//             }
-//         }
+        params.write(&mut v).unwrap();
 
-//         let rng = &mut thread_rng();
+        let de_params = Parameters::read(&v[..], true).unwrap();
+        assert!(params == de_params);
 
-//         let params = generate_random_parameters::<Bls12, _, _>(
-//             MySillyCircuit { a: None, b: None },
-//             rng
-//         ).unwrap();
+        let de_params = Parameters::read(&v[..], false).unwrap();
+        assert!(params == de_params);
+    }
 
-//         {
-//             let mut v = vec![];
+    for _ in 0..100 {
+        let a = Fr::rand(rng);
+        let b = Fr::rand(rng);
+        let mut c = a;
+        c.mul_assign(&b);
 
-//             params.write(&mut v).unwrap();
-//             assert_eq!(v.len(), 2136);
+        let proof = create_proof (
+            MySillyCircuit {
+                a: Some(a),
+                b: Some(b)
+            },
+            &params,
+        ).unwrap();
 
-//             let de_params = Parameters::read(&v[..], true).unwrap();
-//             assert!(params == de_params);
+        let mut v = vec![];
+        proof.write(&mut v).unwrap();
 
-//             let de_params = Parameters::read(&v[..], false).unwrap();
-//             assert!(params == de_params);
-//         }
+        assert_eq!(v.len(), 256);
 
-//         let pvk = prepare_verifying_key::<Bls12>(&params.vk);
+        let de_proof = Proof::read(&v[..]).unwrap();
+        assert!(proof == de_proof);
 
-//         for _ in 0..100 {
-//             let a = Fr::rand(rng);
-//             let b = Fr::rand(rng);
-//             let mut c = a;
-//             c.mul_assign(&b);
-
-//             let proof = create_random_proof(
-//                 MySillyCircuit {
-//                     a: Some(a),
-//                     b: Some(b)
-//                 },
-//                 &params,
-//                 rng
-//             ).unwrap();
-
-//             let mut v = vec![];
-//             proof.write(&mut v).unwrap();
-
-//             assert_eq!(v.len(), 192);
-
-//             let de_proof = Proof::read(&v[..]).unwrap();
-//             assert!(proof == de_proof);
-
-//             assert!(verify_proof(&pvk, &proof, &[c]).unwrap());
-//             assert!(!verify_proof(&pvk, &proof, &[a]).unwrap());
-//         }
-//     }
-// }
+        // assert!(verify_proof(&pvk, &proof, &[c]).unwrap());
+        // assert!(!verify_proof(&pvk, &proof, &[a]).unwrap());
+    }
+}

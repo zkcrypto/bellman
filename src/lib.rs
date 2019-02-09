@@ -10,12 +10,22 @@ extern crate crossbeam;
 extern crate byteorder;
 extern crate ff;
 
-pub mod multicore;
-mod multiexp;
 pub mod domain;
 pub mod groth16;
 pub mod gm17;
 pub mod sonic;
+
+mod group;
+mod source;
+
+#[feature(not(singlecore))]
+mod parallel_fft;
+mod multicore;
+mod parallel_multiexp;
+
+#[feature(singlecore)]
+mod serial_fft;
+mod serial_multiexp;
 
 #[cfg(test)]
 mod tests;
@@ -28,6 +38,16 @@ use std::fmt;
 use std::error::Error;
 use std::io;
 use std::marker::PhantomData;
+
+pub mod multiexp {
+    pub use source::*;
+
+    #[feature(not(singlecore))]
+    pub use parallel_multiexp::*;
+
+    #[feature(singlecore)]
+    pub use serial_multiexp::*;
+}
 
 /// Computations are expressed in terms of arithmetic circuits, in particular
 /// rank-1 quadratic constraint systems. The `Circuit` trait represents a

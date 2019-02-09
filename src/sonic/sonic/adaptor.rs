@@ -111,7 +111,7 @@ impl<'a, E: Engine, CS: SonicConstraintSystem<E> + 'a> crate::ConstraintSystem<E
 
             Some(ret)
         }
-        
+
         let a_lc = convert(a(crate::LinearCombination::zero()));
         let a_value = eval(&a_lc, &*self.cs);
         let b_lc = convert(b(crate::LinearCombination::zero()));
@@ -146,6 +146,7 @@ impl<'a, E: Engine, CS: SonicConstraintSystem<E> + 'a> crate::ConstraintSystem<E
     }
 }
 
+#[derive(Clone)]
 pub struct AdaptorCircuit<T>(pub T);
 
 impl<'a, E: Engine, C: crate::Circuit<E> + Clone> SonicCircuit<E> for AdaptorCircuit<C> {

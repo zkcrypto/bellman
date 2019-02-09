@@ -217,3 +217,111 @@ impl SynthesisDriver for Basic {
         Ok(())
     }
 }
+
+pub struct Nonassigning;
+
+impl SynthesisDriver for Nonassigning {
+    fn synthesize<E: Engine, C: Circuit<E>, B: Backend<E>>(backend: B, circuit: &C) -> Result<(), SynthesisError> {
+        struct NonassigningSynthesizer<E: Engine, B: Backend<E>> {
+                backend: B,
+                current_variable: Option<usize>,
+                _marker: PhantomData<E>,
+                q: usize,
+                n: usize,
+            }
+
+            impl<E: Engine, B: Backend<E>> ConstraintSystem<E> for NonassigningSynthesizer<E, B> {
+                const ONE: Variable = Variable::A(1);
+
+                fn alloc<F>(&mut self, _value: F) -> Result<Variable, SynthesisError>
+                where
+                    F: FnOnce() -> Result<E::Fr, SynthesisError>
+                {
+                    match self.current_variable.take() {
+                        Some(index) => {
+                            let var_b = Variable::B(index);
+
+                            self.current_variable = None;
+
+                            Ok(var_b)
+                        },
+                        None => {
+                            self.n += 1;
+                            let index = self.n;
+                            self.backend.new_multiplication_gate();
+
+                            let var_a = Variable::A(index);
+
+                            self.current_variable = Some(index);
+
+                            Ok(var_a)
+                        }
+                    }
+                }
+
+                fn alloc_input<F>(&mut self, value: F) -> Result<Variable, SynthesisError>
+                where
+                    F: FnOnce() -> Result<E::Fr, SynthesisError>
+                {
+                    let input_var = self.alloc(value)?;
+
+                    self.enforce_zero(LinearCombination::zero() + input_var);
+                    self.backend.new_k_power(self.q);
+
+                    Ok(input_var)
+                }
+
+                fn enforce_zero(&mut self, lc: LinearCombination<E>)
+                {
+                    self.q += 1;
+                    self.backend.new_linear_constraint();
+
+                    for (var, coeff) in lc.as_ref() {
+                        self.backend.insert_coefficient(*var, *coeff);
+                    }
+                }
+
+                fn multiply<F>(&mut self, _values: F) -> Result<(Variable, Variable, Variable), SynthesisError>
+                where
+                    F: FnOnce() -> Result<(E::Fr, E::Fr, E::Fr), SynthesisError>
+                {
+                    self.n += 1;
+                    let index = self.n;
+                    self.backend.new_multiplication_gate();
+
+                    let a = Variable::A(index);
+                    let b = Variable::B(index);
+                    let c = Variable::C(index);
+
+                    Ok((a, b, c))
+                }
+
+                fn get_value(&self, var: Variable) -> Result<E::Fr, ()> {
+                    self.backend.get_var(var).ok_or(())
+                }
+            }
+
+            let mut tmp: NonassigningSynthesizer<E, B> = NonassigningSynthesizer {
+                backend: backend,
+                current_variable: None,
+                _marker: PhantomData,
+                q: 0,
+                n: 0,
+            };
+
+            let one = tmp.alloc_input(|| Ok(E::Fr::one())).expect("should have no issues");
+
+            match (one, <NonassigningSynthesizer<E, B> as ConstraintSystem<E>>::ONE) {
+                (Variable::A(1), Variable::A(1)) => {},
+                _ => panic!("one variable is incorrect")
+            }
+
+            circuit.synthesize(&mut tmp)?;
+
+            // TODO: add blinding factors so we actually get zero-knowledge
+
+            // println!("n = {}", tmp.n);
+
+            Ok(())
+    }
+}

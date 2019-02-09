@@ -30,3 +30,5 @@ rev = "7a5b5fc99ae483a0043db7547fb79a6fa44b88a9"
 
 [features]
 default = []
+
+singlecore = []

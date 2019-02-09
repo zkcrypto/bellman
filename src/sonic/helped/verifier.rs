@@ -226,6 +226,7 @@ impl<E: Engine, C: Circuit<E>, S: SynthesisDriver> MultiVerifier<E, C, S> {
         });
 
         // Finally, compute t(z, y)
+        // t(z, y) = (r(z, y) + s(z,y))*r(z, 1) - k(y)
         let mut tzy = proof.rzy;
         tzy.add_assign(&szy);
         tzy.mul_assign(&proof.rz);

@@ -134,6 +134,13 @@ pub fn create_advice_on_srs<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
 
 pub fn create_proof<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
     circuit: &C,
+    parameters: &Parameters<E>
+) -> Result<Proof<E>, SynthesisError> {
+    create_proof_on_srs::<E, C, S>(circuit, &parameters.srs)
+}
+
+pub fn create_proof_on_srs<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
+    circuit: &C,
     srs: &SRS<E>
 ) -> Result<Proof<E>, SynthesisError>
 {
@@ -209,6 +216,10 @@ pub fn create_proof<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
 
     let y: E::Fr = transcript.get_challenge_scalar();
 
+    // create r(X, 1) by observation that it's just a series of coefficients.
+    // Used representation is for powers X^{-2n}...X^{-n-1}, X^{-n}...X^{-1}, X^{1}...X^{n}
+    // Same representation is ok for r(X, Y) too cause powers always match
+    // TODO: add blindings c_{n+1}*X^{-2n - 1}, c_{n+2}*X^{-2n - 2}, c_{n+3}*X^{-2n - 3}, c_{n+4}*X^{-2n - 4}
     let mut rx1 = wires.b;
     rx1.extend(wires.c);
     rx1.reverse();
@@ -219,11 +230,13 @@ pub fn create_proof<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
     let y_inv = y.inverse().ok_or(SynthesisError::DivisionByZero)?;
     let mut tmp = y.pow(&[n as u64]);
 
+    // evaluate r(X, y)
     for rxy in rxy.iter_mut().rev() {
         rxy.mul_assign(&tmp);
         tmp.mul_assign(&y_inv);
     }
 
+    // negative powers [-n, -1], positive [1, 2n]
     let (s_poly_negative, s_poly_positive) = {
         let mut tmp = SxEval::new(y, n);
         S::synthesize(&mut tmp, circuit)?;
@@ -231,10 +244,11 @@ pub fn create_proof<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
         tmp.poly()
     };
 
+    // r'(X, y) = r(X, y) + s(X, y). Note `y` - those are evaluated at the point already
     let mut rxy_prime = rxy.clone();
     {
         rxy_prime.resize(4 * n + 1, E::Fr::zero());
-        // Add s(x, y)
+        // add coefficients in front of X^{-2n}...X^{-n-1}, X^{-n}...X^{-1}
         for (r, s) in rxy_prime[0..(2 * n)]
             .iter_mut()
             .rev()
@@ -242,14 +256,18 @@ pub fn create_proof<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
         {
             r.add_assign(&s);
         }
+        // add coefficients in front of X^{1}...X^{n}, X^{n+1}...X^{2*n}
         for (r, s) in rxy_prime[(2 * n + 1)..].iter_mut().zip(s_poly_positive) {
             r.add_assign(&s);
         }
     }
 
+    // t(X, y) = r'(X, y)*r(X, 1) and will be later evaluated at z
+    // contained degree in respect to X are from -4*n to 3*n including X^0
     let mut txy = multiply_polynomials::<E>(rx1.clone(), rxy_prime);
     txy[4 * n] = E::Fr::zero(); // -k(y)
 
+    // commit to t(X, y) to later open at z
     let t = multiexp(
         srs.g_positive_x_alpha[0..(3 * n)]
             .iter()
@@ -392,7 +410,7 @@ fn my_fun_circuit_test() {
         Fr::from_str("22222").unwrap(),
         Fr::from_str("33333333").unwrap(),
     );
-    let proof = create_proof::<Bls12, _, Basic>(&MyCircuit, &srs).unwrap();
+    let proof = self::create_proof_on_srs::<Bls12, _, Basic>(&MyCircuit, &srs).unwrap();
 
     use std::time::{Instant};
     let start = Instant::now();

@@ -6,22 +6,18 @@ use pairing::{Engine, CurveProjective};
 use std::marker::PhantomData;
 
 mod verifier;
-mod prover;
 mod batch;
 mod poly;
 mod helper;
 mod parameters;
 mod generator;
+mod adapted_prover;
+
+pub mod prover;
 
 pub use self::batch::{Batch};
 pub use self::helper::{Aggregate, create_aggregate};
 pub use self::verifier::{MultiVerifier};
-pub use self::prover::{
-    create_advice,
-    create_advice_on_information_and_srs,
-    create_advice_on_srs,
-    create_proof
-};
 
 pub use self::generator::{
     CircuitParameters, 
@@ -33,3 +29,10 @@ pub use self::generator::{
     get_circuit_parameters
 };
 pub use self::parameters::{Proof, SxyAdvice, Parameters, VerifyingKey, PreparedVerifyingKey};
+pub use self::adapted_prover::{
+    create_advice,
+    create_advice_on_srs,
+    create_advice_on_information_and_srs, 
+    create_proof, 
+    create_proof_on_srs, 
+};

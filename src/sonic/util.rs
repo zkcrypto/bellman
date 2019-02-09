@@ -202,20 +202,18 @@ where
     use pairing::CurveAffine;
 
     use crate::multicore::Worker;
-    use crate::multiexp;
-    use crate::multiexp::FullDensity;
+    use crate::multiexp::dense_multiexp;
 
-    let s: Arc<Vec<<G::Scalar as PrimeField>::Repr>> = Arc::new(s.into_iter().map(|e| e.into_repr()).collect::<Vec<_>>());
-    let g: Arc<Vec<G>> = Arc::new(g.into_iter().map(|e| *e).collect::<Vec<_>>());
+    let s: Vec<<G::Scalar as PrimeField>::Repr> = s.into_iter().map(|e| e.into_repr()).collect::<Vec<_>>();
+    let g: Vec<G> = g.into_iter().map(|e| *e).collect::<Vec<_>>();
 
     let pool = Worker::new();
 
-    let result = multiexp::multiexp(
+    let result = dense_multiexp(
         &pool,
-        (g, 0),
-        FullDensity,
-        s
-    ).wait().unwrap();
+        &g,
+        &s
+    ).unwrap();
 
     result
 }
@@ -379,7 +377,6 @@ fn laurent_division() {
 }
 
 pub fn multiply_polynomials<E: Engine>(a: Vec<E::Fr>, b: Vec<E::Fr>) -> Vec<E::Fr> {
-    println!("Multiplying polynomails of degrees {} and {}", a.len(), b.len());
     let result_len = a.len() + b.len() - 1;
 
     use crate::multicore::Worker;

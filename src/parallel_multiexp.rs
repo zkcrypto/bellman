@@ -11,136 +11,11 @@ use ff::{
     ScalarEngine};
 
 use std::sync::Arc;
-use std::io;
-use bit_vec::{self, BitVec};
-use std::iter;
+use super::source::*;
 use futures::{Future};
 use super::multicore::Worker;
 
 use super::SynthesisError;
-
-/// An object that builds a source of bases.
-pub trait SourceBuilder<G: CurveAffine>: Send + Sync + 'static + Clone {
-    type Source: Source<G>;
-
-    fn new(self) -> Self::Source;
-}
-
-/// A source of bases, like an iterator.
-pub trait Source<G: CurveAffine> {
-    /// Parses the element from the source. Fails if the point is at infinity.
-    fn add_assign_mixed(&mut self, to: &mut <G as CurveAffine>::Projective) -> Result<(), SynthesisError>;
-
-    /// Skips `amt` elements from the source, avoiding deserialization.
-    fn skip(&mut self, amt: usize) -> Result<(), SynthesisError>;
-}
-
-impl<G: CurveAffine> SourceBuilder<G> for (Arc<Vec<G>>, usize) {
-    type Source = (Arc<Vec<G>>, usize);
-
-    fn new(self) -> (Arc<Vec<G>>, usize) {
-        (self.0.clone(), self.1)
-    }
-}
-
-impl<G: CurveAffine> Source<G> for (Arc<Vec<G>>, usize) {
-    fn add_assign_mixed(&mut self, to: &mut <G as CurveAffine>::Projective) -> Result<(), SynthesisError> {
-        if self.0.len() <= self.1 {
-            return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "expected more bases when adding from source").into());
-        }
-
-        if self.0[self.1].is_zero() {
-            return Err(SynthesisError::UnexpectedIdentity)
-        }
-
-        to.add_assign_mixed(&self.0[self.1]);
-
-        self.1 += 1;
-
-        Ok(())
-    }
-
-    fn skip(&mut self, amt: usize) -> Result<(), SynthesisError> {
-        if self.0.len() <= self.1 {
-            return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "expected more bases skipping from source").into());
-        }
-
-        self.1 += amt;
-
-        Ok(())
-    }
-}
-
-pub trait QueryDensity {
-    /// Returns whether the base exists.
-    type Iter: Iterator<Item=bool>;
-
-    fn iter(self) -> Self::Iter;
-    fn get_query_size(self) -> Option<usize>;
-}
-
-#[derive(Clone)]
-pub struct FullDensity;
-
-impl AsRef<FullDensity> for FullDensity {
-    fn as_ref(&self) -> &FullDensity {
-        self
-    }
-}
-
-impl<'a> QueryDensity for &'a FullDensity {
-    type Iter = iter::Repeat<bool>;
-
-    fn iter(self) -> Self::Iter {
-        iter::repeat(true)
-    }
-
-    fn get_query_size(self) -> Option<usize> {
-        None
-    }
-}
-
-#[derive(Clone)]
-pub struct DensityTracker {
-    bv: BitVec,
-    total_density: usize
-}
-
-impl<'a> QueryDensity for &'a DensityTracker {
-    type Iter = bit_vec::Iter<'a>;
-
-    fn iter(self) -> Self::Iter {
-        self.bv.iter()
-    }
-
-    fn get_query_size(self) -> Option<usize> {
-        Some(self.bv.len())
-    }
-}
-
-impl DensityTracker {
-    pub fn new() -> DensityTracker {
-        DensityTracker {
-            bv: BitVec::new(),
-            total_density: 0
-        }
-    }
-
-    pub fn add_element(&mut self) {
-        self.bv.push(false);
-    }
-
-    pub fn inc(&mut self, idx: usize) {
-        if !self.bv.get(idx).unwrap() {
-            self.bv.set(idx, true);
-            self.total_density += 1;
-        }
-    }
-
-    pub fn get_total_density(&self) -> usize {
-        self.total_density
-    }
-}
 
 /// This genious piece of code works in the following way:
 /// - choose `c` - the bit length of the region that one thread works on
@@ -307,6 +182,114 @@ pub fn multiexp<Q, D, G, S>(
     multiexp_inner(pool, bases, density_map, exponents, 0, c, true)
 }
 
+
+/// Perform multi-exponentiation. The caller is responsible for ensuring that
+/// the number of bases is the same as the number of exponents.
+pub fn dense_multiexp<G: CurveAffine>(
+    pool: &Worker,
+    bases: & [G],
+    exponents: & [<<G::Engine as ScalarEngine>::Fr as PrimeField>::Repr]
+) -> Result<<G as CurveAffine>::Projective, SynthesisError>
+{
+    if exponents.len() != bases.len() {
+        return Err(SynthesisError::AssignmentMissing);
+    }
+    let c = if exponents.len() < 32 {
+        3u32
+    } else {
+        (f64::from(exponents.len() as u32)).ln().ceil() as u32
+    };
+
+    dense_multiexp_inner(pool, bases, exponents, 0, c, true)
+}
+
+fn dense_multiexp_inner<G: CurveAffine>(
+    pool: &Worker,
+    bases: & [G],
+    exponents: & [<<G::Engine as ScalarEngine>::Fr as PrimeField>::Repr],
+    mut skip: u32,
+    c: u32,
+    handle_trivial: bool
+) -> Result<<G as CurveAffine>::Projective, SynthesisError>
+{
+    // Perform this region of the multiexp. We use a different strategy - go over region in parallel,
+    // then over another region, etc. No Arc required
+    let this = {
+        let this_region = pool.scope(bases.len(), |scope, chunk| {
+            let mut handles = vec![];
+            let mut this_acc = <G as CurveAffine>::Projective::zero();
+            for (base, exp) in bases.chunks(chunk).zip(exponents.chunks(chunk)) {
+                let handle = scope.spawn(move |_| {
+                    let mut buckets = vec![<G as CurveAffine>::Projective::zero(); (1 << c) - 1];
+                    // Accumulate the result
+                    let mut acc = G::Projective::zero();
+                    let zero = <G::Engine as ScalarEngine>::Fr::zero().into_repr();
+                    let one = <G::Engine as ScalarEngine>::Fr::one().into_repr();
+
+                    for (base, &exp) in base.iter().zip(exp.iter()) {
+                        if exp != zero {
+                            if exp == one {
+                                if handle_trivial {
+                                    acc.add_assign_mixed(base);
+                                }
+                            } else {
+                                let mut exp = exp;
+                                exp.shr(skip);
+                                let exp = exp.as_ref()[0] % (1 << c);
+                                if exp != 0 {
+                                    buckets[(exp - 1) as usize].add_assign_mixed(base);
+                                }
+                            }
+                        }
+                    }
+
+                    // buckets are filled with the corresponding accumulated value, now sum
+                    let mut running_sum = G::Projective::zero();
+                    for exp in buckets.into_iter().rev() {
+                        running_sum.add_assign(&exp);
+                        acc.add_assign(&running_sum);
+                    }
+
+                    // acc contains values over this region
+                    acc
+                });
+        
+                handles.push(handle);
+            }
+
+            // wait for all threads to finish
+            for r in handles.into_iter().rev() {
+                let thread_result = r.join().unwrap();
+                this_acc.add_assign(&thread_result);
+            }
+
+            this_acc
+        });
+
+        this_region
+    };
+
+    skip += c;
+
+    if skip >= <G::Engine as ScalarEngine>::Fr::NUM_BITS {
+        // There isn't another region, and this will be the highest region
+        return Ok(this);
+    } else {
+        // next region is actually higher than this one, so double it enough times
+        let mut next_region = dense_multiexp_inner(
+            pool, bases, exponents, skip, c, false).unwrap();
+        for _ in 0..c {
+            next_region.double();
+        }
+
+        next_region.add_assign(&this);
+
+        return Ok(next_region);
+    }
+}
+
+
+
 #[test]
 fn test_with_bls12() {
     fn naive_multiexp<G: CurveAffine>(
@@ -377,4 +360,42 @@ fn test_speed_with_bn256() {
     println!("Elapsed {} ns for {} samples", duration_ns, SAMPLES);
     let time_per_sample = duration_ns/(SAMPLES as f64);
     println!("Tested on {} samples on {} CPUs with {} ns per multiplication", SAMPLES, cpus, time_per_sample);
+}
+
+
+#[test]
+fn test_dense_multiexp() {
+    use rand::{self, Rand};
+    use pairing::bn256::Bn256;
+    use num_cpus;
+
+    const SAMPLES: usize = 1 << 22;
+
+    let rng = &mut rand::thread_rng();
+    let v = (0..SAMPLES).map(|_| <Bn256 as ScalarEngine>::Fr::rand(rng).into_repr()).collect::<Vec<_>>();
+    let g = (0..SAMPLES).map(|_| <Bn256 as Engine>::G1::rand(rng).into_affine()).collect::<Vec<_>>();
+
+    let pool = Worker::new();
+
+    let start = std::time::Instant::now();
+
+    let dense = dense_multiexp(
+        &pool, &g, &v).unwrap();
+
+    let duration_ns = start.elapsed().as_nanos() as f64;
+    println!("{} ns for dense for {} samples", duration_ns, SAMPLES);
+
+    let start = std::time::Instant::now();
+
+    let sparse = multiexp(
+        &pool,
+        (Arc::new(g), 0),
+        FullDensity,
+        Arc::new(v)
+    ).wait().unwrap();
+
+    let duration_ns = start.elapsed().as_nanos() as f64;
+    println!("{} ns for sparse for {} samples", duration_ns, SAMPLES);
+
+    assert_eq!(dense, sparse);
 }
