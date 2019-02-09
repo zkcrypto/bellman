@@ -18,12 +18,12 @@ pub mod sonic;
 mod group;
 mod source;
 
-#[feature(not(singlecore))]
+#[cfg(not(feature = "singlecore"))]
 mod parallel_fft;
 mod multicore;
 mod parallel_multiexp;
 
-#[feature(singlecore)]
+#[cfg(feature = "singlecore")]
 mod serial_fft;
 mod serial_multiexp;
 
@@ -42,10 +42,10 @@ use std::marker::PhantomData;
 pub mod multiexp {
     pub use source::*;
 
-    #[feature(not(singlecore))]
+    #[cfg(not(feature = "singlecore"))]
     pub use parallel_multiexp::*;
 
-    #[feature(singlecore)]
+    #[cfg(feature = "singlecore")]
     pub use serial_multiexp::*;
 }
 
