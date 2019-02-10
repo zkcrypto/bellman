@@ -5,6 +5,7 @@ use std::marker::PhantomData;
 use super::{Proof, SxyAdvice};
 use super::batch::Batch;
 use super::poly::{SxEval, SyEval};
+use super::Parameters;
 
 use crate::SynthesisError;
 
@@ -27,6 +28,18 @@ pub struct Aggregate<E: Engine> {
 }
 
 pub fn create_aggregate<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
+    circuit: &C,
+    inputs: &[(Proof<E>, SxyAdvice<E>)],
+    params: &Parameters<E>,
+) -> Aggregate<E>
+{
+    let n = params.vk.n;
+    let q = params.vk.q;
+
+    create_aggregate_on_srs_using_information::<E, C, S>(circuit, inputs, &params.srs, n, q)
+}
+
+pub fn create_aggregate_on_srs<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
     circuit: &C,
     inputs: &[(Proof<E>, SxyAdvice<E>)],
     srs: &SRS<E>,
@@ -55,6 +68,17 @@ pub fn create_aggregate<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
         (tmp.n, tmp.q)
     };
 
+    create_aggregate_on_srs_using_information::<E, C, S>(circuit, inputs, srs, n, q)
+}
+
+pub fn create_aggregate_on_srs_using_information<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
+    circuit: &C,
+    inputs: &[(Proof<E>, SxyAdvice<E>)],
+    srs: &SRS<E>,
+    n: usize,
+    q: usize,
+) -> Aggregate<E>
+{
     let mut transcript = Transcript::new(&[]);
     let mut y_values: Vec<E::Fr> = Vec::with_capacity(inputs.len());
     for &(ref proof, ref sxyadvice) in inputs {

@@ -5,19 +5,18 @@ use ff::{Field};
 use pairing::{Engine, CurveProjective};
 use std::marker::PhantomData;
 
-mod verifier;
 mod batch;
 mod poly;
-mod helper;
+pub mod prover;
+pub mod verifier;
+pub mod helper;
 mod parameters;
 mod generator;
 mod adapted_prover;
 mod adapted_verifier;
-
-pub mod prover;
+mod adapted_helper;
 
 pub use self::batch::{Batch};
-pub use self::helper::{Aggregate, create_aggregate};
 pub use self::verifier::{MultiVerifier};
 
 pub use self::generator::{
@@ -29,7 +28,13 @@ pub use self::generator::{
     generate_srs,
     get_circuit_parameters
 };
-pub use self::parameters::{Proof, SxyAdvice, Parameters, VerifyingKey, PreparedVerifyingKey};
+pub use self::parameters::{
+    Proof, 
+    SxyAdvice, 
+    Parameters, 
+    VerifyingKey, 
+    PreparedVerifyingKey
+};
 pub use self::adapted_prover::{
     create_advice,
     create_advice_on_srs,
@@ -41,4 +46,8 @@ pub use self::adapted_prover::{
 pub use self::adapted_verifier::{
     verify_proofs,
     verify_aggregate
+};
+
+pub use self::adapted_helper::{
+    create_aggregate
 };

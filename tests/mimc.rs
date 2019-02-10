@@ -480,7 +480,8 @@ fn test_sonic_mimc() {
         use bellman::sonic::cs::Basic;
         use bellman::sonic::sonic::AdaptorCircuit;
         use bellman::sonic::helped::prover::{create_advice_on_srs, create_proof_on_srs};
-        use bellman::sonic::helped::{create_aggregate, MultiVerifier};
+        use bellman::sonic::helped::{MultiVerifier, get_circuit_parameters};
+        use bellman::sonic::helped::helper::{create_aggregate_on_srs};
 
         println!("creating proof");
         let start = Instant::now();
@@ -495,7 +496,7 @@ fn test_sonic_mimc() {
         println!("creating aggregate for {} proofs", samples);
         let start = Instant::now();
         let proofs: Vec<_> = (0..samples).map(|_| (proof.clone(), advice.clone())).collect();
-        let aggregate = create_aggregate::<Bls12, _, Basic>(&AdaptorCircuit(circuit.clone()), &proofs, &srs);
+        let aggregate = create_aggregate_on_srs::<Bls12, _, Basic>(&AdaptorCircuit(circuit.clone()), &proofs, &srs);
         println!("done in {:?}", start.elapsed());
 
         {
@@ -583,7 +584,8 @@ fn test_inputs_into_sonic_mimc() {
         use bellman::sonic::cs::Basic;
         use bellman::sonic::sonic::AdaptorCircuit;
         use bellman::sonic::helped::prover::{create_advice_on_srs, create_proof_on_srs};
-        use bellman::sonic::helped::{create_aggregate, MultiVerifier, get_circuit_parameters};
+        use bellman::sonic::helped::{MultiVerifier, get_circuit_parameters};
+        use bellman::sonic::helped::helper::{create_aggregate_on_srs};
 
         let info = get_circuit_parameters::<Bn256, _>(circuit.clone()).expect("Must get circuit info");
         println!("{:?}", info);
@@ -601,7 +603,7 @@ fn test_inputs_into_sonic_mimc() {
         println!("creating aggregate for {} proofs", samples);
         let start = Instant::now();
         let proofs: Vec<_> = (0..samples).map(|_| (proof.clone(), advice.clone())).collect();
-        let aggregate = create_aggregate::<Bn256, _, Basic>(&AdaptorCircuit(circuit.clone()), &proofs, &srs);
+        let aggregate = create_aggregate_on_srs::<Bn256, _, Basic>(&AdaptorCircuit(circuit.clone()), &proofs, &srs);
         println!("done in {:?}", start.elapsed());
 
         {
@@ -651,19 +653,16 @@ fn test_inputs_into_sonic_mimc() {
 
 #[test]
 fn test_high_level_sonic_api() {
-    use ff::{Field, PrimeField};
-    use pairing::{Engine, CurveAffine, CurveProjective};
-    use pairing::bn256::{Bn256, Fr};
+    use pairing::bn256::{Bn256};
     use std::time::{Instant};
-    use bellman::sonic::helped::{generate_random_parameters, 
+    use bellman::sonic::helped::{
+        generate_random_parameters, 
         verify_aggregate, 
         verify_proofs, 
         create_proof, 
         create_advice,
         create_aggregate
     };
-    use bellman::sonic::cs::Basic;
-    use bellman::sonic::sonic::AdaptorCircuit;
 
     {
         // This may not be cryptographically safe, use
@@ -701,7 +700,7 @@ fn test_high_level_sonic_api() {
         println!("creating aggregate for {} proofs", samples);
         let start = Instant::now();
         let proofs: Vec<_> = (0..samples).map(|_| (proof.clone(), advice.clone())).collect();
-        let aggregate = create_aggregate::<Bn256, _, Basic>(&AdaptorCircuit(circuit.clone()), &proofs, &params.srs);
+        let aggregate = create_aggregate::<Bn256, _>(circuit.clone(), &proofs, &params);
         println!("done in {:?}", start.elapsed());
 
         {
