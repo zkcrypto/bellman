@@ -382,6 +382,7 @@ fn my_fun_circuit_test() {
     use pairing::bls12_381::{Bls12, Fr};
     use super::*;
     use crate::sonic::cs::{Basic, ConstraintSystem, LinearCombination};
+    use rand::{thread_rng};
 
     struct MyCircuit;
 
@@ -414,7 +415,8 @@ fn my_fun_circuit_test() {
 
     use std::time::{Instant};
     let start = Instant::now();
-    let mut batch = MultiVerifier::<Bls12, _, Basic>::new(MyCircuit, &srs).unwrap();
+    let rng = thread_rng();
+    let mut batch = MultiVerifier::<Bls12, _, Basic, _>::new(MyCircuit, &srs, rng).unwrap();
 
     for _ in 0..1 {
         batch.add_proof(&proof, &[/*Fr::from_str("20").unwrap()*/], |_, _| None);

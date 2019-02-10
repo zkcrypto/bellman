@@ -28,7 +28,7 @@ use super::{
 use super::multicore::Worker;
 pub use super::group::*;
 
-#[feature(not(singlecore))]
+#[cfg(not(feature = "singlecore"))]
 use super::parallel_fft::*;
 
 pub struct EvaluationDomain<E: Engine, G: Group<E>> {

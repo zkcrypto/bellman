@@ -12,6 +12,7 @@ mod helper;
 mod parameters;
 mod generator;
 mod adapted_prover;
+mod adapted_verifier;
 
 pub mod prover;
 
@@ -35,4 +36,9 @@ pub use self::adapted_prover::{
     create_advice_on_information_and_srs, 
     create_proof, 
     create_proof_on_srs, 
+};
+
+pub use self::adapted_verifier::{
+    verify_proofs,
+    verify_aggregate
 };

@@ -499,7 +499,8 @@ fn test_sonic_mimc() {
         println!("done in {:?}", start.elapsed());
 
         {
-            let mut verifier = MultiVerifier::<Bls12, _, Basic>::new(AdaptorCircuit(circuit.clone()), &srs).unwrap();
+            let rng = thread_rng();
+            let mut verifier = MultiVerifier::<Bls12, _, Basic, _>::new(AdaptorCircuit(circuit.clone()), &srs, rng).unwrap();
             println!("verifying 1 proof without advice");
             let start = Instant::now();
             {
@@ -512,7 +513,8 @@ fn test_sonic_mimc() {
         }
 
         {
-            let mut verifier = MultiVerifier::<Bls12, _, Basic>::new(AdaptorCircuit(circuit.clone()), &srs).unwrap();
+            let rng = thread_rng();
+            let mut verifier = MultiVerifier::<Bls12, _, Basic, _>::new(AdaptorCircuit(circuit.clone()), &srs, rng).unwrap();
             println!("verifying {} proofs without advice", samples);
             let start = Instant::now();
             {
@@ -525,7 +527,8 @@ fn test_sonic_mimc() {
         }
         
         {
-            let mut verifier = MultiVerifier::<Bls12, _, Basic>::new(AdaptorCircuit(circuit.clone()), &srs).unwrap();
+            let rng = thread_rng();
+            let mut verifier = MultiVerifier::<Bls12, _, Basic, _>::new(AdaptorCircuit(circuit.clone()), &srs, rng).unwrap();
             println!("verifying 100 proofs with advice");
             let start = Instant::now();
             {
@@ -602,7 +605,8 @@ fn test_inputs_into_sonic_mimc() {
         println!("done in {:?}", start.elapsed());
 
         {
-            let mut verifier = MultiVerifier::<Bn256, _, Basic>::new(AdaptorCircuit(circuit.clone()), &srs).unwrap();
+            let rng = thread_rng();
+            let mut verifier = MultiVerifier::<Bn256, _, Basic, _>::new(AdaptorCircuit(circuit.clone()), &srs, rng).unwrap();
             println!("verifying 1 proof without advice");
             let start = Instant::now();
             {
@@ -615,7 +619,8 @@ fn test_inputs_into_sonic_mimc() {
         }
 
         {
-            let mut verifier = MultiVerifier::<Bn256, _, Basic>::new(AdaptorCircuit(circuit.clone()), &srs).unwrap();
+            let rng = thread_rng();
+            let mut verifier = MultiVerifier::<Bn256, _, Basic, _>::new(AdaptorCircuit(circuit.clone()), &srs, rng).unwrap();
             println!("verifying {} proofs without advice", samples);
             let start = Instant::now();
             {
@@ -628,7 +633,8 @@ fn test_inputs_into_sonic_mimc() {
         }
         
         {
-            let mut verifier = MultiVerifier::<Bn256, _, Basic>::new(AdaptorCircuit(circuit.clone()), &srs).unwrap();
+            let rng = thread_rng();
+            let mut verifier = MultiVerifier::<Bn256, _, Basic, _>::new(AdaptorCircuit(circuit.clone()), &srs, rng).unwrap();
             println!("verifying 100 proofs with advice and aggregate");
             let start = Instant::now();
             {
@@ -638,6 +644,87 @@ fn test_inputs_into_sonic_mimc() {
                 verifier.add_aggregate(&proofs, &aggregate);
                 assert_eq!(verifier.check_all(), true); // TODO
             }
+            println!("done in {:?}", start.elapsed());
+        }
+    }
+}
+
+#[test]
+fn test_high_level_sonic_api() {
+    use ff::{Field, PrimeField};
+    use pairing::{Engine, CurveAffine, CurveProjective};
+    use pairing::bn256::{Bn256, Fr};
+    use std::time::{Instant};
+    use bellman::sonic::helped::{generate_random_parameters, 
+        verify_aggregate, 
+        verify_proofs, 
+        create_proof, 
+        create_advice,
+        create_aggregate
+    };
+    use bellman::sonic::cs::Basic;
+    use bellman::sonic::sonic::AdaptorCircuit;
+
+    {
+        // This may not be cryptographically safe, use
+        // `OsRng` (for example) in production software.
+        let mut rng = &mut thread_rng();
+
+        // Generate the MiMC round constants
+        let constants = (0..MIMC_ROUNDS).map(|_| rng.gen()).collect::<Vec<_>>();
+        let samples: usize = 100;
+
+        let xl = rng.gen();
+        let xr = rng.gen();
+        let image = mimc::<Bn256>(xl, xr, &constants);
+
+        // Create an instance of our circuit (with the
+        // witness)
+        let circuit = MiMCDemo {
+            xl: Some(xl),
+            xr: Some(xr),
+            constants: &constants
+        };
+
+        let params = generate_random_parameters(circuit.clone(), &mut rng).unwrap();
+
+        println!("creating proof");
+        let start = Instant::now();
+        let proof = create_proof(circuit.clone(), &params).unwrap();
+        println!("done in {:?}", start.elapsed());
+
+        println!("creating advice");
+        let start = Instant::now();
+        let advice = create_advice(circuit.clone(), &proof, &params).unwrap();
+        println!("done in {:?}", start.elapsed());
+
+        println!("creating aggregate for {} proofs", samples);
+        let start = Instant::now();
+        let proofs: Vec<_> = (0..samples).map(|_| (proof.clone(), advice.clone())).collect();
+        let aggregate = create_aggregate::<Bn256, _, Basic>(&AdaptorCircuit(circuit.clone()), &proofs, &params.srs);
+        println!("done in {:?}", start.elapsed());
+
+        {
+            println!("verifying 1 proof without advice");
+            let rng = thread_rng();
+            let start = Instant::now();
+            assert_eq!(verify_proofs(&vec![proof.clone()], &vec![vec![image.clone()]], circuit.clone(), rng, &params).unwrap(), true);
+            println!("done in {:?}", start.elapsed());
+        }
+
+        {
+            println!("verifying {} proofs without advice", samples);
+            let rng = thread_rng();
+            let start = Instant::now();
+            assert_eq!(verify_proofs(&vec![proof.clone(); 100], &vec![vec![image.clone()]; 100], circuit.clone(), rng, &params).unwrap(), true);
+            println!("done in {:?}", start.elapsed());
+        }
+        
+        {
+            println!("verifying 100 proofs with advice and aggregate");
+            let rng = thread_rng();
+            let start = Instant::now();
+            assert_eq!(verify_aggregate(&vec![(proof.clone(), advice.clone()); 100], &aggregate, &vec![vec![image.clone()]; 100], circuit.clone(), rng, &params).unwrap(), true);
             println!("done in {:?}", start.elapsed());
         }
     }

@@ -482,7 +482,7 @@ pub fn generate_srs<E: Engine>(
     let mut x_powers_negative = vec![Scalar::<E>(E::Fr::zero()); d];
     {
         // Compute powers of tau
-        if verbose {eprintln!("computing powers of tau...")};
+        if verbose {eprintln!("computing powers of x...")};
 
         let start = std::time::Instant::now();
 
