@@ -211,15 +211,21 @@ fn dense_multiexp_inner<G: CurveAffine>(
     c: u32,
     handle_trivial: bool
 ) -> Result<<G as CurveAffine>::Projective, SynthesisError>
-{
+{   
+    use crossbeam::channel::{unbounded, RecvError};
     // Perform this region of the multiexp. We use a different strategy - go over region in parallel,
     // then over another region, etc. No Arc required
     let this = {
-        let this_region = pool.scope(bases.len(), |scope, chunk| {
-            let mut handles = vec![];
-            let mut this_acc = <G as CurveAffine>::Projective::zero();
+        // let mask = (1u64 << c) - 1u64;
+        let (s, r) = unbounded();
+        // let this_region = 
+        pool.scope(bases.len(), |scope, chunk| {
+            // let mut handles = vec![];
+            // let mut this_acc = <G as CurveAffine>::Projective::zero();
             for (base, exp) in bases.chunks(chunk).zip(exponents.chunks(chunk)) {
-                let handle = scope.spawn(move |_| {
+                let s = s.clone();
+                // let handle = 
+                scope.spawn(move |_| {
                     let mut buckets = vec![<G as CurveAffine>::Projective::zero(); (1 << c) - 1];
                     // Accumulate the result
                     let mut acc = G::Projective::zero();
@@ -227,6 +233,14 @@ fn dense_multiexp_inner<G: CurveAffine>(
                     let one = <G::Engine as ScalarEngine>::Fr::one().into_repr();
 
                     for (base, &exp) in base.iter().zip(exp.iter()) {
+                        // let index = (exp.as_ref()[0] & mask) as usize;
+
+                        // if index != 0 {
+                        //     buckets[index - 1].add_assign_mixed(base);
+                        // }
+
+                        // exp.shr(c as u32);
+
                         if exp != zero {
                             if exp == one {
                                 if handle_trivial {
@@ -251,20 +265,32 @@ fn dense_multiexp_inner<G: CurveAffine>(
                     }
 
                     // acc contains values over this region
-                    acc
+                    s.send(acc).expect("must send result");
+                    
+                    // acc
                 });
         
-                handles.push(handle);
+                // handles.push(handle);
             }
 
-            // wait for all threads to finish
-            for r in handles.into_iter().rev() {
-                let thread_result = r.join().unwrap();
-                this_acc.add_assign(&thread_result);
-            }
+            // // wait for all threads to finish
+            // for r in handles.into_iter() {
+            //     let thread_result = r.join().unwrap();
+            //     this_acc.add_assign(&thread_result);
+            // }
 
-            this_acc
+
+            // this_acc
         });
+
+        let mut this_region = <G as CurveAffine>::Projective::zero();
+        loop {
+            if r.is_empty() {
+                break;
+            }
+            let value = r.recv().expect("must have value");
+            this_region.add_assign(&value);
+        }
 
         this_region
     };
@@ -365,14 +391,14 @@ fn test_speed_with_bn256() {
 
 #[test]
 fn test_dense_multiexp() {
-    use rand::{self, Rand};
+    use rand::{XorShiftRng, SeedableRng, Rand, Rng};
     use pairing::bn256::Bn256;
     use num_cpus;
 
     const SAMPLES: usize = 1 << 22;
+    let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-    let rng = &mut rand::thread_rng();
-    let v = (0..SAMPLES).map(|_| <Bn256 as ScalarEngine>::Fr::rand(rng).into_repr()).collect::<Vec<_>>();
+    let mut v = (0..SAMPLES).map(|_| <Bn256 as ScalarEngine>::Fr::rand(rng).into_repr()).collect::<Vec<_>>();
     let g = (0..SAMPLES).map(|_| <Bn256 as Engine>::G1::rand(rng).into_affine()).collect::<Vec<_>>();
 
     let pool = Worker::new();
@@ -380,7 +406,7 @@ fn test_dense_multiexp() {
     let start = std::time::Instant::now();
 
     let dense = dense_multiexp(
-        &pool, &g, &v).unwrap();
+        &pool, &g, &mut v.clone()).unwrap();
 
     let duration_ns = start.elapsed().as_nanos() as f64;
     println!("{} ns for dense for {} samples", duration_ns, SAMPLES);

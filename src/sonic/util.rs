@@ -196,11 +196,6 @@ where
     IB::IntoIter: ExactSizeIterator + Clone,
     IS::IntoIter: ExactSizeIterator,
 {
-    use std::sync::Arc;
-    use futures::Future;
-    use ff::PrimeFieldRepr;
-    use pairing::CurveAffine;
-
     use crate::multicore::Worker;
     use crate::multiexp::dense_multiexp;
 

@@ -2,13 +2,15 @@
 
 extern crate pairing;
 extern crate rand;
+extern crate bit_vec;
+extern crate byteorder;
+extern crate ff;
+
+#[cfg(not(feature = "singlecore"))]
 extern crate num_cpus;
 extern crate futures;
 extern crate futures_cpupool;
-extern crate bit_vec;
 extern crate crossbeam;
-extern crate byteorder;
-extern crate ff;
 
 pub mod domain;
 pub mod groth16;
