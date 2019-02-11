@@ -46,6 +46,7 @@ use crate::sonic::cs::ConstraintSystem as SonicConstraintSystem;
 use crate::sonic::cs::Variable as SonicVariable;
 use crate::sonic::cs::Coeff;
 use crate::sonic::sonic::{AdaptorCircuit};
+use super::parameters::NUM_BLINDINGS;
 
 use crate::verbose_flag;
 
@@ -381,7 +382,7 @@ pub fn generate_parameters<E, C>(
     where E: Engine, C: Circuit<E> 
 {
     let circuit_parameters = get_circuit_parameters::<E, C>(circuit)?; 
-    let min_d = circuit_parameters.n * 4;
+    let min_d = circuit_parameters.n * 4 + NUM_BLINDINGS;
 
     let srs = generate_srs(alpha, x, min_d)?;
 
@@ -407,8 +408,8 @@ pub fn generate_parameters_on_srs_and_information<E: Engine>(
     information: CircuitParameters<E>
 ) -> Result<Parameters<E>, SynthesisError>
 {
-    assert!(srs.d >= information.n * 4);
-    let min_d = information.n * 4;
+    assert!(srs.d >= information.n * 4 + NUM_BLINDINGS);
+    let min_d = information.n * 4 + NUM_BLINDINGS;
 
     let trimmed_srs: SRS<E> = SRS {
         d: min_d,

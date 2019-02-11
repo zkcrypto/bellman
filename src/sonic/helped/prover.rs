@@ -210,79 +210,13 @@ pub fn create_proof_on_srs<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
     let rng = &mut thread_rng();
 
     // c_{n+1}, c_{n+2}, c_{n+3}, c_{n+4}
-    let blindings: Vec<E::Fr> = (0..NUM_BLINDINGS).into_iter().map(|_| E::Fr::rand(rng)).collect();
+    // let blindings: Vec<E::Fr> = (0..NUM_BLINDINGS).into_iter().map(|_| E::Fr::rand(rng)).collect();
 
-    // let blindings: Vec<E::Fr> = vec![E::Fr::zero(); NUM_BLINDINGS];
+    let blindings: Vec<E::Fr> = vec![E::Fr::zero(); NUM_BLINDINGS];
 
     // let max_n = 3*n + 1 + NUM_BLINDINGS;
 
     // let max_n = 3*n + 1;
-
-    fn polynomial_commitment<
-        'a,
-        EE: Engine,
-        IS: IntoIterator<Item = &'a EE::Fr>,
-    >(
-        max: usize,
-        largest_negative_power: usize,
-        largest_positive_power: usize,
-        srs: &'a SRS<EE>,
-        s: IS,
-    ) -> EE::G1Affine
-    where
-        IS::IntoIter: ExactSizeIterator,
-    {
-        // smallest power is d - max - largest_negative_power; It should either be 1 for use of positive powers only,
-        // of we should use part of the negative powers
-        let d = srs.d;
-        assert!(max >= largest_positive_power);
-        if d < max + largest_negative_power + 1 {
-            println!("Use negative powers for polynomial commitment");
-            let min_power = largest_negative_power + max - d;
-            let max_power = d + largest_positive_power - max;
-            println!("Min power = {}, max = {}", min_power, max_power);
-            // need to use negative powers to make a proper commitment
-            return multiexp(
-                srs.g_negative_x_alpha[0..min_power].iter().rev()
-                .chain_ext(srs.g_positive_x_alpha[..max_power].iter()),
-                s
-            ).into_affine();
-        } else {
-            println!("Use positive powers only for polynomial commitment");
-            return multiexp(
-            srs.g_positive_x_alpha[(srs.d - max - largest_negative_power - 1)..].iter(),
-            s
-            ).into_affine();
-        }
-    }
-
-    fn polynomial_commitment_opening<
-        'a,
-        EE: Engine,
-        I: IntoIterator<Item = &'a EE::Fr>
-    >(
-        largest_negative_power: usize,
-        largest_positive_power: usize,
-        polynomial_coefficients: I,
-        mut point: EE::Fr,
-        srs: &'a SRS<EE>,
-    ) -> EE::G1Affine
-        where I::IntoIter: DoubleEndedIterator + ExactSizeIterator,
-    {
-        let poly = kate_divison(
-            polynomial_coefficients,
-            point,
-        );
-
-        let negative_poly = poly[0..largest_negative_power].iter().rev();
-        let positive_poly = poly[largest_negative_power..].iter();
-        multiexp(
-            srs.g_negative_x[1..(negative_poly.len() + 1)].iter().chain_ext(
-                srs.g_positive_x[0..positive_poly.len()].iter()
-            ),
-            negative_poly.chain_ext(positive_poly)
-        ).into_affine()
-    }
 
     let r = polynomial_commitment::<E, _>(
         n, 

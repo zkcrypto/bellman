@@ -1,6 +1,7 @@
 use crate::SynthesisError;
 use ff::{Field, PrimeField, PrimeFieldRepr, ScalarEngine};
 use pairing::{CurveAffine, CurveProjective, Engine};
+use super::srs::SRS;
 
 pub trait ChainExt: Iterator {
     fn chain_ext<U>(self, other: U) -> Chain<Self, U::IntoIter>
@@ -71,8 +72,71 @@ where
     }
 }
 
+pub fn polynomial_commitment<
+        'a,
+        E: Engine,
+        IS: IntoIterator<Item = &'a E::Fr>,
+    >(
+        max: usize,
+        largest_negative_power: usize,
+        largest_positive_power: usize,
+        srs: &'a SRS<E>,
+        s: IS,
+    ) -> E::G1Affine
+    where
+        IS::IntoIter: ExactSizeIterator,
+    {
+        // smallest power is d - max - largest_negative_power; It should either be 1 for use of positive powers only,
+        // of we should use part of the negative powers
+        let d = srs.d;
+        assert!(max >= largest_positive_power);
+        if d < max + largest_negative_power + 1 {
+            let min_power = largest_negative_power + max - d;
+            let max_power = d + largest_positive_power - max;
+            // need to use negative powers to make a proper commitment
+            return multiexp(
+                srs.g_negative_x_alpha[0..min_power].iter().rev()
+                .chain_ext(srs.g_positive_x_alpha[..max_power].iter()),
+                s
+            ).into_affine();
+        } else {
+            return multiexp(
+            srs.g_positive_x_alpha[(srs.d - max - largest_negative_power - 1)..].iter(),
+            s
+            ).into_affine();
+        }
+    }
+
+pub fn polynomial_commitment_opening<
+        'a,
+        E: Engine,
+        I: IntoIterator<Item = &'a E::Fr>
+    >(
+        largest_negative_power: usize,
+        largest_positive_power: usize,
+        polynomial_coefficients: I,
+        mut point: E::Fr,
+        srs: &'a SRS<E>,
+    ) -> E::G1Affine
+        where I::IntoIter: DoubleEndedIterator + ExactSizeIterator,
+    {
+        let poly = kate_divison(
+            polynomial_coefficients,
+            point,
+        );
+
+        let negative_poly = poly[0..largest_negative_power].iter().rev();
+        let positive_poly = poly[largest_negative_power..].iter();
+        multiexp(
+            srs.g_negative_x[1..(negative_poly.len() + 1)].iter().chain_ext(
+                srs.g_positive_x[0..positive_poly.len()].iter()
+            ),
+            negative_poly.chain_ext(positive_poly)
+        ).into_affine()
+    }
+
 extern crate crossbeam;
-use self::crossbeam::channel::{unbounded, RecvError};
+use self::crossbeam::channel::{unbounded};
 
 pub fn evaluate_at_consequitive_powers<'a, F: Field> (
     coeffs: &[F],
@@ -115,15 +179,11 @@ pub fn evaluate_at_consequitive_powers<'a, F: Field> (
     let mut result = F::zero();
 
     loop {
-        let v = r.recv();
-        match v {
-            Ok(value) => {
-                result.add_assign(&value);
-            },
-            Err(RecvError) => {
-                break;
-            }
+        if r.is_empty() {
+            break;
         }
+        let value = r.recv().expect("must not be empty");
+        result.add_assign(&value);
     }
 
     result
