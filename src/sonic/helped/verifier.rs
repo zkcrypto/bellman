@@ -19,7 +19,7 @@ use crate::sonic::srs::SRS;
 
 pub struct MultiVerifier<E: Engine, C: Circuit<E>, S: SynthesisDriver, R: Rng> {
     circuit: C,
-    batch: Batch<E>,
+    pub(crate) batch: Batch<E>,
     k_map: Vec<usize>,
     n: usize,
     q: usize,

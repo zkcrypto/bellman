@@ -19,6 +19,9 @@ use std::io::{self, Read, Write};
 use std::sync::Arc;
 use byteorder::{BigEndian, WriteBytesExt, ReadBytesExt};
 
+pub const NUM_BLINDINGS: usize = 4;
+// pub const NUM_BLINDINGS: usize = 0;
+
 #[derive(Clone, Debug, Eq)]
 pub struct SxyAdvice<E: Engine> {
     pub s: E::G1Affine,
@@ -33,7 +36,6 @@ impl<E: Engine> PartialEq for SxyAdvice<E> {
         self.szy == other.szy
     }
 }
-
 
 #[derive(Clone, Debug, Eq)]
 pub struct Proof<E: Engine> {

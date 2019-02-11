@@ -183,6 +183,35 @@ pub fn mut_evaluate_at_consequitive_powers<'a, F: Field> (
     result
 }
 
+/// Multiply each coefficient by some power of the base in a form
+/// `first_power * base^{i}`
+pub fn mut_distribute_consequitive_powers<'a, F: Field> (
+    coeffs: &mut [F],
+    first_power: F,
+    base: F
+)
+    {
+    use crate::multicore::Worker;
+
+    let worker = Worker::new();
+
+    worker.scope(coeffs.len(), |scope, chunk| {
+        for (i, coeffs_chunk) in coeffs.chunks_mut(chunk).enumerate()
+        {
+            scope.spawn(move |_| {
+                let mut current_power = base.pow(&[(i*chunk) as u64]);
+                current_power.mul_assign(&first_power);
+
+                for mut p in coeffs_chunk {
+                    p.mul_assign(&current_power);
+
+                    current_power.mul_assign(&base);
+                }
+            });
+        }
+    });
+}
+
 pub fn multiexp<
     'a,
     G: CurveAffine,
@@ -201,6 +230,8 @@ where
 
     let s: Vec<<G::Scalar as PrimeField>::Repr> = s.into_iter().map(|e| e.into_repr()).collect::<Vec<_>>();
     let g: Vec<G> = g.into_iter().map(|e| *e).collect::<Vec<_>>();
+
+    assert_eq!(s.len(), g.len(), "scalars and exponents must have the same length");
 
     let pool = Worker::new();
 
@@ -588,5 +619,34 @@ fn test_mut_eval_at_powers() {
     let acc_parallel = mut_evaluate_at_consequitive_powers(&mut b[..], first_power, x);
 
     assert_eq!(acc_parallel, acc);
+    assert!(a == b);
+}
+
+#[test]
+fn test_mut_distribute_powers() {
+    use rand::{self, Rand, Rng};
+    use pairing::bls12_381::Bls12;
+    use pairing::bls12_381::Fr;
+
+    const SAMPLES: usize = 100000;
+
+    let rng = &mut rand::thread_rng();
+    let mut a = (0..SAMPLES).map(|_| Fr::rand(rng)).collect::<Vec<_>>();
+    let mut b = a.clone();
+    let x: Fr = rng.gen();
+    let n: u32 = rng.gen();
+
+    {
+        let mut tmp = x.pow(&[n as u64]);
+
+        for mut coeff in a.iter_mut() {
+            coeff.mul_assign(&tmp);
+            tmp.mul_assign(&x);
+        }
+    }
+
+    let first_power = x.pow(&[n as u64]);
+    mut_distribute_consequitive_powers(&mut b[..], first_power, x);
+
     assert!(a == b);
 }
