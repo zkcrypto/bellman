@@ -8,6 +8,7 @@ pub mod srs;
 pub mod util;
 pub mod helped;
 pub mod cs;
+pub mod unhelped;
 
 mod transcript;
 
