@@ -221,7 +221,7 @@ pub struct Parameters<E: Engine> {
     pub h: Arc<Vec<E::G1Affine>>,
 
     // Elements of the form (beta * u_i(tau) + alpha v_i(tau) + w_i(tau)) / delta
-    // for all auxillary inputs. Variables can never be unconstrained, so this
+    // for all auxiliary inputs. Variables can never be unconstrained, so this
     // never contains points at infinity.
     pub l: Arc<Vec<E::G1Affine>>,
 

@@ -51,7 +51,7 @@ impl Variable {
 }
 
 /// Represents the index of either an input variable or
-/// auxillary variable.
+/// auxiliary variable.
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum Index {
     Input(usize),
@@ -181,7 +181,7 @@ pub enum SynthesisError {
     IoError(io::Error),
     /// During verification, our verifying key was malformed.
     MalformedVerifyingKey,
-    /// During CRS generation, we observed an unconstrained auxillary variable
+    /// During CRS generation, we observed an unconstrained auxiliary variable
     UnconstrainedVariable
 }
 
@@ -201,7 +201,7 @@ impl Error for SynthesisError {
             SynthesisError::UnexpectedIdentity => "encountered an identity element in the CRS",
             SynthesisError::IoError(_) => "encountered an I/O error",
             SynthesisError::MalformedVerifyingKey => "malformed verifying key",
-            SynthesisError::UnconstrainedVariable => "auxillary variable was unconstrained"
+            SynthesisError::UnconstrainedVariable => "auxiliary variable was unconstrained"
         }
     }
 }
