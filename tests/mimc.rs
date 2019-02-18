@@ -661,7 +661,8 @@ fn test_high_level_sonic_api() {
         verify_proofs, 
         create_proof, 
         create_advice,
-        create_aggregate
+        create_aggregate,
+        get_circuit_parameters
     };
 
     {
@@ -685,6 +686,9 @@ fn test_high_level_sonic_api() {
             constants: &constants
         };
 
+        let info = get_circuit_parameters::<Bn256, _>(circuit.clone()).expect("Must get circuit info");
+        println!("{:?}", info);
+
         let params = generate_random_parameters(circuit.clone(), &mut rng).unwrap();
 
         println!("creating proof");
@@ -700,6 +704,7 @@ fn test_high_level_sonic_api() {
         println!("creating aggregate for {} proofs", samples);
         let start = Instant::now();
         let proofs: Vec<_> = (0..samples).map(|_| (proof.clone(), advice.clone())).collect();
+
         let aggregate = create_aggregate::<Bn256, _>(circuit.clone(), &proofs, &params);
         println!("done in {:?}", start.elapsed());
 

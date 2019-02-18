@@ -210,14 +210,9 @@ pub fn create_proof_on_srs<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
     let rng = &mut thread_rng();
 
     // c_{n+1}, c_{n+2}, c_{n+3}, c_{n+4}
-    // let blindings: Vec<E::Fr> = (0..NUM_BLINDINGS).into_iter().map(|_| E::Fr::rand(rng)).collect();
+    let blindings: Vec<E::Fr> = (0..NUM_BLINDINGS).into_iter().map(|_| E::Fr::rand(rng)).collect();
 
-    let blindings: Vec<E::Fr> = vec![E::Fr::zero(); NUM_BLINDINGS];
-
-    // let max_n = 3*n + 1 + NUM_BLINDINGS;
-
-    // let max_n = 3*n + 1;
-
+    // r is a commitment to r(X, 1)
     let r = polynomial_commitment::<E, _>(
         n, 
         2*n + NUM_BLINDINGS, 
@@ -225,24 +220,10 @@ pub fn create_proof_on_srs<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
         &srs,
         blindings.iter().rev()
             .chain_ext(wires.c.iter().rev())
-            // wires.c.iter().rev()
             .chain_ext(wires.b.iter().rev())
             .chain_ext(Some(E::Fr::zero()).iter())
             .chain_ext(wires.a.iter()),
     );
-
-    // let r = multiexp(
-    //     // F <- g^{alpha*x^{d-max}*f(x)} = g^{alpha*x^{d-n}*\sum_{i = -2n - 4}^{n} k_i*x^{i}} =
-    //     // = g^{alpha*\sum_{i = d - 3n - 4}^{n} k_i*x^{i}}
-    //     // g^{alpha*(x^{d - 3n - 4}*k_{-2n-4} + ... + x^{d - n}*k_{0} + ... + x^{d + n + 1}*k_{n})
-    //     srs.g_positive_x_alpha[(srs.d - max_n)..].iter(),
-    //     blindings.iter().rev()
-    //         .chain_ext(wires.c.iter().rev())
-    //         // wires.c.iter().rev()
-    //         .chain_ext(wires.b.iter().rev())
-    //         .chain_ext(Some(E::Fr::zero()).iter())
-    //         .chain_ext(wires.a.iter()),
-    // ).into_affine();
 
     transcript.commit_point(&r);
 
@@ -254,50 +235,23 @@ pub fn create_proof_on_srs<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
     // TODO: add blindings c_{n+1}*X^{-2n - 1}, c_{n+2}*X^{-2n - 2}, c_{n+3}*X^{-2n - 3}, c_{n+4}*X^{-2n - 4}
     let mut rx1 = wires.b;
     rx1.extend(wires.c);
+    rx1.extend(blindings.clone()); 
     rx1.reverse();
     rx1.push(E::Fr::zero());
     rx1.extend(wires.a);
 
 
-    // let mut rxy = rx1.clone();
-    // it's not yet blinded, so blind explicitly here
-    let mut rxy = rx1;
-    let mut rx1 = {
-        // c_{n+1}*X^{-2n - 1}, c_{n+2}*X^{-2n - 2}, c_{n+3}*X^{-2n - 3}, c_{n+4}*X^{-2n - 4}
-        let mut tmp = blindings.clone();
-        // c_{n+4}*X^{-2n - 4}, c_{n+3}*X^{-2n - 3}, c_{n+2}*X^{-2n - 2}, c_{n+1}*X^{-2n - 1}, 
-        tmp.reverse();
-        tmp.extend(rxy.clone());
-
-        tmp
-    };
+    let mut rxy = rx1.clone();
 
     let y_inv = y.inverse().ok_or(SynthesisError::DivisionByZero)?;
 
-    // y^{-2n}
-    let tmp = y_inv.pow(&[2*n as u64]);
+    // y^(-2n - num blindings)
+    let tmp = y_inv.pow(&[(2*n + NUM_BLINDINGS) as u64]);
     mut_distribute_consequitive_powers(
         &mut rxy,
         tmp,
         y,
     );
-
-    // let mut tmp = y.pow(&[n as u64]);
-    // // evaluate r(X, y)
-    // for rxy in rxy.iter_mut().rev() {
-    //     rxy.mul_assign(&tmp);
-    //     tmp.mul_assign(&y_inv);
-    // }
-
-    // Blindings are not affected by evaluation on Y cause blindings make constant term over Y
-    // We just add them here to have it now in a form of coefficients over X
-    let rxy = {
-        let mut tmp = blindings.clone();
-        tmp.reverse();
-        tmp.extend(rxy);
-
-        tmp
-    };
     
     // negative powers [-1, -2n], positive [1, n]
     let (s_poly_negative, s_poly_positive) = {
@@ -335,7 +289,6 @@ pub fn create_proof_on_srs<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
     txy[4 * n + 2 * NUM_BLINDINGS] = E::Fr::zero(); // -k(y)
 
     // commit to t(X, y) to later open at z
-
     let t = polynomial_commitment(
         srs.d, 
         (4 * n) + 2*NUM_BLINDINGS,
@@ -346,17 +299,7 @@ pub fn create_proof_on_srs<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
             .chain_ext(txy[(4 * n + 2*NUM_BLINDINGS + 1)..].iter()),
     );
 
-    // let t = multiexp(
-    //     srs.g_positive_x_alpha[0..(3 * n)]
-    //         .iter()
-    //         .chain_ext(srs.g_negative_x_alpha[0..(4 * n) + 2*NUM_BLINDINGS].iter()),
-    //     txy[(4 * n + 1 + 2*NUM_BLINDINGS)..]
-    //         .iter()
-    //         .chain_ext(txy[0..(4 * n + 2*NUM_BLINDINGS)].iter().rev()),
-    // ).into_affine();
-
     transcript.commit_point(&t);
-
 
     let z: E::Fr = transcript.get_challenge_scalar();
     let z_inv = z.inverse().ok_or(SynthesisError::DivisionByZero)?;
@@ -367,35 +310,30 @@ pub fn create_proof_on_srs<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
         evaluate_at_consequitive_powers(&rx1, tmp, z)
     };
 
-    // let mut rz = E::Fr::zero();
     // {
-    //     let mut tmp = z.pow(&[n as u64]);
+    //     rx1[(2 * n + NUM_BLINDINGS)].sub_assign(&rz);
 
-    //     for coeff in rx1.iter().rev() {
-    //         let mut coeff = *coeff;
-    //         coeff.mul_assign(&tmp);
-    //         rz.add_assign(&coeff);
-    //         tmp.mul_assign(&z_inv);
-    //     }
+    //     let opening = polynomial_commitment_opening(
+    //         2 * n + NUM_BLINDINGS,
+    //         n, 
+    //         rx1.iter(),
+    //         z,
+    //         srs
+    //     );
+
+    //     let valid_rz_commitment = check_polynomial_commitment(&r, &z, &rz, &opening, n, &srs);
+    //     assert!(valid_rz_commitment);
+
+    //     rx1[(2 * n + NUM_BLINDINGS)].add_assign(&rz);
     // }
 
+    // rzy is evaluation of r(X, Y) at z, y
     let rzy = {
         let tmp = z_inv.pow(&[(2*n + NUM_BLINDINGS) as u64]);
 
         evaluate_at_consequitive_powers(&rxy, tmp, z)
     };
     
-    // let mut rzy = E::Fr::zero();
-    // {
-    //     let mut tmp = z.pow(&[n as u64]);
-
-    //     for mut coeff in rxy.into_iter().rev() {
-    //         coeff.mul_assign(&tmp);
-    //         rzy.add_assign(&coeff);
-    //         tmp.mul_assign(&z_inv);
-    //     }
-    // }
-
     transcript.commit_scalar(&rz);
     transcript.commit_scalar(&rzy);
 
@@ -416,24 +354,11 @@ pub fn create_proof_on_srs<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
             point,
             srs
         )
-
-        // let poly = kate_divison(
-        //     rx1.iter(),
-        //     point,
-        // );
-
-        // let negative_poly = poly[0..(2*n + NUM_BLINDINGS)].iter().rev();
-        // let positive_poly = poly[(2*n + NUM_BLINDINGS)..].iter();
-        // multiexp(
-        //     srs.g_negative_x[1..(negative_poly.len() + 1)].iter().chain_ext(
-        //         srs.g_positive_x[0..positive_poly.len()].iter()
-        //     ),
-        //     negative_poly.chain_ext(positive_poly)
-        // ).into_affine()
     };
 
     assert_eq!(rx1.len(), 3*n + NUM_BLINDINGS + 1);
 
+    // it's an opening of t(X, y) at z
     let z_opening = {
         rx1[(2 * n + NUM_BLINDINGS)].add_assign(&rzy); // restore
 
@@ -450,19 +375,6 @@ pub fn create_proof_on_srs<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
             evaluate_at_consequitive_powers(&txy, tmp, z)
         };
 
-        // let mut val = E::Fr::zero();
-        // {
-        //     assert_eq!(txy.len(), 3*n + 1 + 4*n + 2*NUM_BLINDINGS);
-        //     let mut tmp = z.pow(&[(3*n) as u64]);
-
-        //     for coeff in txy.iter().rev() {
-        //         let mut coeff = *coeff;
-        //         coeff.mul_assign(&tmp);
-        //         val.add_assign(&coeff);
-        //         tmp.mul_assign(&z_inv);
-        //     }
-        // }
-
         txy[(4 * n + 2*NUM_BLINDINGS)].sub_assign(&val);
 
         polynomial_commitment_opening(
@@ -471,21 +383,12 @@ pub fn create_proof_on_srs<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
             &txy,
             z, 
             srs)
-
-        // let poly = kate_divison(
-        //     txy.iter(),
-        //     z,
-        // );
-
-        // let negative_poly = poly[0..(4*n + 2*NUM_BLINDINGS)].iter().rev();
-        // let positive_poly = poly[(4*n + 2*NUM_BLINDINGS)..].iter();
-        // multiexp(
-        //     srs.g_negative_x[1..(negative_poly.len() + 1)].iter().chain_ext(
-        //         srs.g_positive_x[0..positive_poly.len()].iter()
-        //     ),
-        //     negative_poly.chain_ext(positive_poly)
-        // ).into_affine()
     };
+
+    // let mut zy = z;
+    // zy.mul_assign(&y);
+    // let valid_rzy_commitment = check_polynomial_commitment(&r, &zy, &rzy, &zy_opening, n, &srs);
+    // assert!(valid_rzy_commitment);
 
     Ok(Proof {
         r, rz, rzy, t, z_opening, zy_opening
@@ -547,63 +450,56 @@ fn my_fun_circuit_test() {
 #[test]
 fn polynomial_commitment_test() {
     use ff::PrimeField;
+    use ff::PrimeFieldRepr;
     use pairing::bls12_381::{Bls12, Fr};
     use super::*;
     use crate::sonic::cs::{Basic, ConstraintSystem, LinearCombination};
-    use rand::{thread_rng};
-
-    struct MyCircuit;
-
-    impl<E: Engine> Circuit<E> for MyCircuit {
-        fn synthesize<CS: ConstraintSystem<E>>(&self, cs: &mut CS) -> Result<(), SynthesisError> {
-            let (a, b, _) = cs.multiply(|| {
-                Ok((
-                    E::Fr::from_str("10").unwrap(),
-                    E::Fr::from_str("20").unwrap(),
-                    E::Fr::from_str("200").unwrap(),
-                ))
-            })?;
-
-            cs.enforce_zero(LinearCombination::from(a) + a - b);
-
-            //let multiplier = cs.alloc_input(|| Ok(E::Fr::from_str("20").unwrap()))?;
-
-            //cs.enforce_zero(LinearCombination::from(b) - multiplier);
-
-            Ok(())
-        }
-    }
+    use rand::{thread_rng}; 
+    use pairing::{CurveAffine};
 
     let srs = SRS::<Bls12>::new(
         20,
         Fr::from_str("22222").unwrap(),
         Fr::from_str("33333333").unwrap(),
     );
-    let proof = self::create_proof_on_srs::<Bls12, _, Basic>(&MyCircuit, &srs).unwrap();
 
-    let z: Fr;
-    let y: Fr;
-    {
-        let mut transcript = Transcript::new(&[]);
-        transcript.commit_point(&proof.r);
-        y = transcript.get_challenge_scalar();
-        transcript.commit_point(&proof.t);
-        z = transcript.get_challenge_scalar();
-    }
+    let mut rng = thread_rng();
+    // x^-4 + x^-3 + x^-2 + x^-1 + x + x^2
+    let mut poly = vec![Fr::one(), Fr::one(), Fr::one(), Fr::one(), Fr::zero(), Fr::one(), Fr::one()];
+    // make commitment to the poly
+    let commitment = polynomial_commitment(2, 4, 2, &srs, poly.iter());
+    let point: Fr = rng.gen();
+    let mut tmp = point.inverse().unwrap();
+    tmp.square();
+    let value = evaluate_at_consequitive_powers(&poly, tmp, point);
+    // evaluate f(z)
+    poly[4] = value;
+    poly[4].negate();
+    // f(x) - f(z)
 
-    use std::time::{Instant};
+    let opening = polynomial_commitment_opening(4, 2, poly.iter(), point, &srs);
 
-    let rng = thread_rng();
-    let mut batch = MultiVerifier::<Bls12, _, Basic, _>::new(MyCircuit, &srs, rng).unwrap().batch;
+    // e(W , hα x )e(g^{v} * W{-z} , hα ) = e(F , h^{x^{−d +max}} )
 
-    // try to open commitment to r at r(z, 1);
+    let alpha_x_precomp = srs.h_positive_x_alpha[1].prepare();
+    let alpha_precomp = srs.h_positive_x_alpha[0].prepare();
+    let mut neg_x_n_minus_d_precomp = srs.h_negative_x[srs.d - 2];
+    neg_x_n_minus_d_precomp.negate();
+    let neg_x_n_minus_d_precomp = neg_x_n_minus_d_precomp.prepare();
+    // let neg_x_n_minus_d_precomp = srs.h_negative_x[0].prepare();
 
-    let mut random = Fr::one();
-    random.double();
+    let w = opening.prepare();
+    let mut gv = srs.g_positive_x[0].mul(value.into_repr());
+    let mut z_neg = point;
+    z_neg.negate();
+    let w_minus_z = opening.mul(z_neg.into_repr());
+    gv.add_assign(&w_minus_z);
 
-    batch.add_opening(proof.z_opening, random, z);
-    batch.add_commitment_max_n(proof.r, random);
-    batch.add_opening_value(proof.rz, random);
+    let gv = gv.into_affine().prepare();
 
-    assert!(batch.check_all());
+    assert!(Bls12::final_exponentiation(&Bls12::miller_loop(&[
+            (&w, &alpha_x_precomp),
+            (&gv, &alpha_precomp),
+            (&commitment.prepare(), &neg_x_n_minus_d_precomp),
+        ])).unwrap() == <Bls12 as Engine>::Fqk::one());
 }

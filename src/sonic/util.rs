@@ -86,7 +86,7 @@ pub fn polynomial_commitment<
     where
         IS::IntoIter: ExactSizeIterator,
     {
-        // smallest power is d - max - largest_negative_power; It should either be 1 for use of positive powers only,
+        // smallest power is d - max - largest_negative_power; It should either be 0 for use of positive powers only,
         // of we should use part of the negative powers
         let d = srs.d;
         assert!(max >= largest_positive_power);
@@ -107,6 +107,8 @@ pub fn polynomial_commitment<
         }
     }
 
+
+/// For now this function MUST take a polynomial in a form f(x) - f(z)
 pub fn polynomial_commitment_opening<
         'a,
         E: Engine,
@@ -115,7 +117,7 @@ pub fn polynomial_commitment_opening<
         largest_negative_power: usize,
         largest_positive_power: usize,
         polynomial_coefficients: I,
-        mut point: E::Fr,
+        point: E::Fr,
         srs: &'a SRS<E>,
     ) -> E::G1Affine
         where I::IntoIter: DoubleEndedIterator + ExactSizeIterator,
@@ -229,15 +231,11 @@ pub fn mut_evaluate_at_consequitive_powers<'a, F: Field> (
     let mut result = F::zero();
 
     loop {
-        let v = r.recv();
-        match v {
-            Ok(value) => {
-                result.add_assign(&value);
-            },
-            Err(RecvError) => {
-                break;
-            }
+        if r.is_empty() {
+            break;
         }
+        let value = r.recv().expect("must not be empty");
+        result.add_assign(&value);
     }
 
     result
@@ -399,6 +397,41 @@ where
     }
 
     q
+}
+
+/// Convenience function to check polynomail commitment
+pub fn check_polynomial_commitment<E: Engine>(
+    commitment: &E::G1Affine,
+    point: &E::Fr,
+    value: &E::Fr,
+    opening: &E::G1Affine,
+    max: usize,
+    srs: &SRS<E>
+) -> bool {
+    // e(W , hα x )e(g^{v} * W{-z} , hα ) = e(F , h^{x^{−d +max}} )
+    if srs.d < max {
+        return false;
+    }
+    let alpha_x_precomp = srs.h_positive_x_alpha[1].prepare();
+    let alpha_precomp = srs.h_positive_x_alpha[0].prepare();
+    let mut neg_x_n_minus_d_precomp = srs.h_negative_x[srs.d - max];
+    neg_x_n_minus_d_precomp.negate();
+    let neg_x_n_minus_d_precomp = neg_x_n_minus_d_precomp.prepare();
+
+    let w = opening.prepare();
+    let mut gv = srs.g_positive_x[0].mul(value.into_repr());
+    let mut z_neg = *point;
+    z_neg.negate();
+    let w_minus_z = opening.mul(z_neg.into_repr());
+    gv.add_assign(&w_minus_z);
+
+    let gv = gv.into_affine().prepare();
+
+    E::final_exponentiation(&E::miller_loop(&[
+            (&w, &alpha_x_precomp),
+            (&gv, &alpha_precomp),
+            (&commitment.prepare(), &neg_x_n_minus_d_precomp),
+        ])).unwrap() == E::Fqk::one()
 }
 
 #[test]

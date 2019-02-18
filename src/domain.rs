@@ -392,7 +392,7 @@ fn test_field_element_multiplication_bn256() {
     use num_cpus;
 
     let cpus = num_cpus::get();
-    const SAMPLES: usize = 1 << 27;
+    const SAMPLES: usize = 1 << 22;
 
     let rng = &mut rand::thread_rng();
     let v1 = (0..SAMPLES).map(|_| Scalar::<Bn256>(Fr::rand(rng))).collect::<Vec<_>>();

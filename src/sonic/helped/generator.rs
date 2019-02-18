@@ -382,7 +382,8 @@ pub fn generate_parameters<E, C>(
     where E: Engine, C: Circuit<E> 
 {
     let circuit_parameters = get_circuit_parameters::<E, C>(circuit)?; 
-    let min_d = circuit_parameters.n * 4 + NUM_BLINDINGS;
+    let min_d = circuit_parameters.n * 4 + 2*NUM_BLINDINGS;
+    println!{"Mid d = {}", min_d};
 
     let srs = generate_srs(alpha, x, min_d)?;
 
@@ -408,8 +409,8 @@ pub fn generate_parameters_on_srs_and_information<E: Engine>(
     information: CircuitParameters<E>
 ) -> Result<Parameters<E>, SynthesisError>
 {
-    assert!(srs.d >= information.n * 4 + NUM_BLINDINGS);
-    let min_d = information.n * 4 + NUM_BLINDINGS;
+    assert!(srs.d >= information.n * 4 + 2*NUM_BLINDINGS);
+    let min_d = information.n * 4 + 2*NUM_BLINDINGS;
 
     let trimmed_srs: SRS<E> = SRS {
         d: min_d,
@@ -612,7 +613,7 @@ pub fn generate_srs<E: Engine>(
         &worker
     );
 
-    // Evaluate for auxillary variables.
+    // Evaluate for negative powers
     eval(
         &g1_wnaf,
         &g2_wnaf,

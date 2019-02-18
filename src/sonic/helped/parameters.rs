@@ -19,7 +19,7 @@ use std::io::{self, Read, Write};
 use std::sync::Arc;
 use byteorder::{BigEndian, WriteBytesExt, ReadBytesExt};
 
-pub const NUM_BLINDINGS: usize = 4;
+pub const NUM_BLINDINGS: usize = 6;
 // pub const NUM_BLINDINGS: usize = 0;
 
 #[derive(Clone, Debug, Eq)]
