@@ -1,4 +1,4 @@
-use ff::{Field};
+use ff::{Field, PrimeField, PrimeFieldRepr};
 use pairing::{Engine, CurveProjective, CurveAffine};
 use std::marker::PhantomData;
 
@@ -21,6 +21,16 @@ pub struct S2Proof<E: Engine> {
 }
 
 impl<E: Engine> S2Eval<E> {
+    pub fn calculate_commitment_element(n: usize, srs: &SRS<E>) -> E::G1Affine {
+        // TODO: parallelize
+        let mut o = E::G1::zero();
+        for i in 0..n {
+            o.add_assign_mixed(&srs.g_positive_x_alpha[i]);
+        }
+
+        o.into_affine()
+    }
+
     pub fn new(n: usize) -> Self {
         S2Eval {
             n: n,
@@ -31,11 +41,7 @@ impl<E: Engine> S2Eval<E> {
     pub fn evaluate(&self, x: E::Fr, y: E::Fr, srs: &SRS<E>) -> S2Proof<E> {
         // create a reference element first
 
-        // TODO: parallelize
-        let mut o = E::G1::zero();
-        for i in 0..self.n {
-            o.add_assign_mixed(&srs.g_positive_x_alpha[i]);
-        }
+        let o = Self::calculate_commitment_element(self.n, &srs);
 
         let mut poly = vec![E::Fr::one(); self.n+1];
 
@@ -63,7 +69,7 @@ impl<E: Engine> S2Eval<E> {
 
 
         S2Proof {
-            o: o.into_affine(),
+            o: o,
             c_value: c,
             d_value: d,
             c_opening: c_opening,
@@ -71,9 +77,54 @@ impl<E: Engine> S2Eval<E> {
         }
     }
 
-    pub fn verify(proof: &S2Proof<E>, srs: &SRS<E>) -> bool {
+    pub fn verify(x: E::Fr, y: E::Fr, proof: &S2Proof<E>, srs: &SRS<E>) -> bool {
+
+        // e(C,hαx)e(C−yz,hα) = e(O,h)e(g−c,hα)
+
+        let alpha_x_precomp = srs.h_positive_x_alpha[1].prepare();
+        let alpha_precomp = srs.h_positive_x_alpha[0].prepare();
+        let mut h_prep = srs.h_positive_x[0];
+        h_prep.negate();
+        let h_prep = h_prep.prepare();
+
+        let mut c_minus_xy = proof.c_value;
+        let mut xy = x;
+        xy.mul_assign(&y);
+
+        c_minus_xy.sub_assign(&xy);
+
+        let mut c_in_c_minus_xy = proof.c_opening.mul(c_minus_xy.into_repr()).into_affine();
+
+        let valid = E::final_exponentiation(&E::miller_loop(&[
+                (&proof.c_opening.prepare(), &alpha_x_precomp),
+                (&c_in_c_minus_xy.prepare(), &alpha_precomp),
+                (&proof.o.prepare(), &h_prep),
+            ])).unwrap() == E::Fqk::one();
+
+        if !valid {
+            return false;
+        } 
+
+        // e(D,hαx)e(D−y−1z,hα) = e(O,h)e(g−d,hα)
+
+        let mut d_minus_x_y_inv = proof.d_value;
+        let mut x_y_inv = x;
+        x_y_inv.mul_assign(&y.inverse().unwrap());
+
+        d_minus_x_y_inv.sub_assign(&x_y_inv);
+
+        let mut d_in_d_minus_x_y_inv = proof.d_opening.mul(d_minus_x_y_inv.into_repr()).into_affine();
+
+        let valid = E::final_exponentiation(&E::miller_loop(&[
+                (&proof.d_opening.prepare(), &alpha_x_precomp),
+                (&d_in_d_minus_x_y_inv.prepare(), &alpha_precomp),
+                (&proof.o.prepare(), &h_prep),
+            ])).unwrap() == E::Fqk::one();
+
+        if !valid {
+            return false;
+        } 
+
         true
     }
-
-    
 }
