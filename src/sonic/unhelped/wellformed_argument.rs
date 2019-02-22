@@ -16,7 +16,6 @@ pub struct WellformednessArgument<E: Engine> {
 #[derive(Clone)]
 pub struct WellformednessProof<E: Engine> {
     commitments: Vec<E::G1Affine>,
-    challenges: Vec<E::Fr>,
     l: E::G1Affine,
     r: E::G1Affine
 }
@@ -79,81 +78,63 @@ impl<E: Engine> WellformednessArgument<E> {
 
         let d = srs.d;
 
-        // here the multiplier is x^-d, so largest negative power is -d + 1
-        let l = polynomial_commitment::<E, _>(
-            n, 
-            d - 1,
-            0, 
-            &srs,
-            p0.iter());
+        assert!(n < d);
 
-        // here the multiplier is x^d-n, so largest positive power is d
+        // here the multiplier is x^-d, so largest negative power is -(d - 1), smallest negative power is -(d - n)
+        let l = multiexp(
+                srs.g_negative_x[(d - n)..(d - 1)].iter().rev(),
+                p0.iter()
+            ).into_affine();
 
-        let r = polynomial_commitment::<E, _>(
-            n, 
-            0,
-            d, 
-            &srs,
-            p0.iter());
+        // here the multiplier is x^d-n, so largest positive power is d, smallest positive power is d - n + 1
+
+        let r = multiexp(
+                srs.g_positive_x[(d - n + 1)..].iter().rev(),
+                p0.iter()
+            ).into_affine();
 
         WellformednessProof {
             commitments: commitments,
-            challenges: challenges,
             l: l,
             r: r
         }
 
     }
 
+    pub fn verify(n: usize, challenges: Vec<E::Fr>, proof: &WellformednessProof<E>, srs: &SRS<E>) -> bool {
+        let d = srs.d;
 
-    // pub fn verify(challenges: Vec<E::Fr>, proof: &WellformednessProof<E>, srs: &SRS<E>) -> bool {
+        let alpha_x_d_precomp = srs.h_positive_x_alpha[d].prepare();
+        let alpha_x_n_minus_d_precomp = srs.h_negative_x_alpha[d - n].prepare();
+        let mut h_prep = srs.h_positive_x[0];
+        h_prep.negate();
+        let h_prep = h_prep.prepare();
 
-    //     // e(C,hαx)e(C−yz,hα) = e(O,h)e(g−c,hα)
+        let a = multiexp(
+            proof.commitments.iter(),
+            challenges.iter(),
+        ).into_affine();
 
-    //     let alpha_x_precomp = srs.h_positive_x_alpha[1].prepare();
-    //     let alpha_precomp = srs.h_positive_x_alpha[0].prepare();
-    //     let mut h_prep = srs.h_positive_x[0];
-    //     h_prep.negate();
-    //     let h_prep = h_prep.prepare();
+        let a = a.prepare();
 
-    //     let mut c_minus_xy = proof.c_value;
-    //     let mut xy = x;
-    //     xy.mul_assign(&y);
+        let valid = E::final_exponentiation(&E::miller_loop(&[
+                (&a, &h_prep),
+                (&proof.l.prepare(), &alpha_x_d_precomp)
+            ])).unwrap() == E::Fqk::one();
 
-    //     c_minus_xy.sub_assign(&xy);
+        if !valid {
+            return false;
+        } 
 
-    //     let mut c_in_c_minus_xy = proof.c_opening.mul(c_minus_xy.into_repr()).into_affine();
+        let valid = E::final_exponentiation(&E::miller_loop(&[
+                (&a, &h_prep),
+                (&proof.r.prepare(), &alpha_x_n_minus_d_precomp)
+            ])).unwrap() == E::Fqk::one();
 
-    //     let valid = E::final_exponentiation(&E::miller_loop(&[
-    //             (&proof.c_opening.prepare(), &alpha_x_precomp),
-    //             (&c_in_c_minus_xy.prepare(), &alpha_precomp),
-    //             (&proof.o.prepare(), &h_prep),
-    //         ])).unwrap() == E::Fqk::one();
+        if !valid {
+            return false;
+        } 
 
-    //     if !valid {
-    //         return false;
-    //     } 
-
-    //     // e(D,hαx)e(D−y−1z,hα) = e(O,h)e(g−d,hα)
-
-    //     let mut d_minus_x_y_inv = proof.d_value;
-    //     let mut x_y_inv = x;
-    //     x_y_inv.mul_assign(&y.inverse().unwrap());
-
-    //     d_minus_x_y_inv.sub_assign(&x_y_inv);
-
-    //     let mut d_in_d_minus_x_y_inv = proof.d_opening.mul(d_minus_x_y_inv.into_repr()).into_affine();
-
-    //     let valid = E::final_exponentiation(&E::miller_loop(&[
-    //             (&proof.d_opening.prepare(), &alpha_x_precomp),
-    //             (&d_in_d_minus_x_y_inv.prepare(), &alpha_precomp),
-    //             (&proof.o.prepare(), &h_prep),
-    //         ])).unwrap() == E::Fqk::one();
-
-    //     if !valid {
-    //         return false;
-    //     } 
-
-    //     true
-    // }
+        true
+    }
 }

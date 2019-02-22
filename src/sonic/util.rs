@@ -90,6 +90,7 @@ pub fn polynomial_commitment<
         // of we should use part of the negative powers
         let d = srs.d;
         assert!(max >= largest_positive_power);
+        // use both positive and negative powers for commitment
         if d < max + largest_negative_power + 1 {
             let min_power = largest_negative_power + max - d;
             let max_power = d + largest_positive_power - max;
@@ -101,8 +102,8 @@ pub fn polynomial_commitment<
             ).into_affine();
         } else {
             return multiexp(
-            srs.g_positive_x_alpha[(srs.d - max - largest_negative_power - 1)..].iter(),
-            s
+                srs.g_positive_x_alpha[(srs.d - max - largest_negative_power - 1)..].iter(),
+                s
             ).into_affine();
         }
     }
