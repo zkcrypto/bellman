@@ -4,3 +4,4 @@
 /// s1 part requires grand product and permutation arguments, that are also implemented
 
 pub mod s2_proof;
+mod wellformed_argument;

@@ -573,6 +573,67 @@ pub fn multiply_polynomials_serial<E: Engine>(mut a: Vec<E::Fr>, mut b: Vec<E::F
     a
 }
 
+pub fn add_polynomials<F: Field>(a: &mut [F], b: &[F]) {
+        use crate::multicore::Worker;
+        use crate::domain::{EvaluationDomain, Scalar};
+
+        let worker = Worker::new();
+
+        assert_eq!(a.len(), b.len());
+
+        worker.scope(a.len(), |scope, chunk| {
+            for (a, b) in a.chunks_mut(chunk).zip(b.chunks(chunk))
+            {
+                scope.spawn(move |_| {
+                    for (a, b) in a.iter_mut().zip(b.iter()) {
+                        a.add_assign(b);
+                    }
+                });
+            }
+        });
+}
+
+pub fn mul_polynomial_by_scalar<F: Field>(a: &mut [F], b: F) {
+        use crate::multicore::Worker;
+        use crate::domain::{EvaluationDomain, Scalar};
+
+        let worker = Worker::new();
+
+        worker.scope(a.len(), |scope, chunk| {
+            for a in a.chunks_mut(chunk)
+            {
+                scope.spawn(move |_| {
+                    for a in a.iter_mut() {
+                        a.mul_assign(&b);
+                    }
+                });
+            }
+        });
+}
+
+pub fn mul_add_polynomials<F: Field>(a: &mut [F], b: &[F], c: F) {
+        use crate::multicore::Worker;
+        use crate::domain::{EvaluationDomain, Scalar};
+
+        let worker = Worker::new();
+
+        assert_eq!(a.len(), b.len());
+
+        worker.scope(a.len(), |scope, chunk| {
+            for (a, b) in a.chunks_mut(chunk).zip(b.chunks(chunk))
+            {
+                scope.spawn(move |_| {
+                    for (a, b) in a.iter_mut().zip(b.iter()) {
+                        let mut r = *b;
+                        r.mul_assign(&c);
+
+                        a.add_assign(&r);
+                    }
+                });
+            }
+        });
+}
+
 fn serial_fft<E: Engine>(a: &mut [E::Fr], omega: &E::Fr, log_n: u32) {
     fn bitreverse(mut n: u32, l: u32) -> u32 {
         let mut r = 0;
