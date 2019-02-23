@@ -59,7 +59,7 @@ impl<E: Engine> S2Eval<E> {
         let (d, d_opening) = {
             let mut point = y.inverse().unwrap();
             point.mul_assign(&x);
-                        let val = evaluate_at_consequitive_powers(&poly[1..], E::Fr::one(), point);
+            let val = evaluate_at_consequitive_powers(&poly[1..], E::Fr::one(), point);
             poly[0] = val;
             poly[0].negate();
             let opening = polynomial_commitment_opening(0, self.n, poly.iter(), point, &srs);

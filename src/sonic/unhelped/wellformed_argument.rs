@@ -15,7 +15,6 @@ pub struct WellformednessArgument<E: Engine> {
 
 #[derive(Clone)]
 pub struct WellformednessProof<E: Engine> {
-    commitments: Vec<E::G1Affine>,
     l: E::G1Affine,
     r: E::G1Affine
 }
@@ -54,14 +53,8 @@ impl<E: Engine> WellformednessArgument<E> {
     }
 
     pub fn make_argument(self, challenges: Vec<E::Fr>, srs: &SRS<E>) -> WellformednessProof<E> {
-        let commitments = self.commit(&srs);
-
-        assert_eq!(commitments.len(), challenges.len());
-
         let mut polynomials = self.polynomials;
         let mut challenges = challenges;
-
-
 
         let mut p0 = polynomials.pop().unwrap();
         let r0 = challenges.pop().unwrap();
@@ -82,7 +75,7 @@ impl<E: Engine> WellformednessArgument<E> {
 
         // here the multiplier is x^-d, so largest negative power is -(d - 1), smallest negative power is -(d - n)
         let l = multiexp(
-                srs.g_negative_x[(d - n)..(d - 1)].iter().rev(),
+                srs.g_negative_x[(d - n)..d].iter().rev(),
                 p0.iter()
             ).into_affine();
 
@@ -94,14 +87,12 @@ impl<E: Engine> WellformednessArgument<E> {
             ).into_affine();
 
         WellformednessProof {
-            commitments: commitments,
             l: l,
             r: r
         }
-
     }
 
-    pub fn verify(n: usize, challenges: Vec<E::Fr>, proof: &WellformednessProof<E>, srs: &SRS<E>) -> bool {
+    pub fn verify(n: usize, challenges: &Vec<E::Fr>, commitments: &Vec<E::G1Affine>, proof: &WellformednessProof<E>, srs: &SRS<E>) -> bool {
         let d = srs.d;
 
         let alpha_x_d_precomp = srs.h_positive_x_alpha[d].prepare();
@@ -111,7 +102,7 @@ impl<E: Engine> WellformednessArgument<E> {
         let h_prep = h_prep.prepare();
 
         let a = multiexp(
-            proof.commitments.iter(),
+            commitments.iter(),
             challenges.iter(),
         ).into_affine();
 
@@ -137,4 +128,58 @@ impl<E: Engine> WellformednessArgument<E> {
 
         true
     }
+}
+
+#[test]
+fn test_argument() {
+    use pairing::bls12_381::{Fr, G1Affine, G1, Bls12};
+    use rand::{XorShiftRng, SeedableRng, Rand, Rng};
+    use crate::sonic::srs::SRS;
+
+    let srs_x = Fr::from_str("23923").unwrap();
+    let srs_alpha = Fr::from_str("23728792").unwrap();
+    let srs = SRS::<Bls12>::dummy(830564, srs_x, srs_alpha);
+
+    let n: usize = 1 << 16;
+    let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+    let coeffs = (0..n).map(|_| Fr::rand(rng)).collect::<Vec<_>>();
+
+    let argument = WellformednessArgument::new(vec![coeffs]);
+    let challenges = (0..1).map(|_| Fr::rand(rng)).collect::<Vec<_>>();
+
+    let commitments = argument.commit(&srs);
+
+    let proof = argument.make_argument(challenges.clone(), &srs);
+
+    let valid = WellformednessArgument::verify(n, &challenges, &commitments,  &proof, &srs);
+
+    assert!(valid);
+}
+
+#[test]
+fn test_argument_soundness() {
+    use pairing::bls12_381::{Fr, G1Affine, G1, Bls12};
+    use rand::{XorShiftRng, SeedableRng, Rand, Rng};
+    use crate::sonic::srs::SRS;
+
+    let srs_x = Fr::from_str("23923").unwrap();
+    let srs_alpha = Fr::from_str("23728792").unwrap();
+    let srs = SRS::<Bls12>::dummy(830564, srs_x, srs_alpha);
+
+    let n: usize = 1 << 16;
+    let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+    let coeffs = (0..n).map(|_| Fr::rand(rng)).collect::<Vec<_>>();
+
+    let argument = WellformednessArgument::new(vec![coeffs]);
+    let commitments = argument.commit(&srs);
+
+    let coeffs = (0..n).map(|_| Fr::rand(rng)).collect::<Vec<_>>();
+    let argument = WellformednessArgument::new(vec![coeffs]);
+    let challenges = (0..1).map(|_| Fr::rand(rng)).collect::<Vec<_>>();
+
+    let proof = argument.make_argument(challenges.clone(), &srs);
+
+    let valid = WellformednessArgument::verify(n, &challenges, &commitments,  &proof, &srs);
+
+    assert!(!valid);
 }
