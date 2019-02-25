@@ -11,8 +11,10 @@ use crate::sonic::util::*;
 
 #[derive(Clone)]
 pub struct GrandProductArgument<E: Engine> {
+    a_polynomials: Vec<Vec<E::Fr>>,
     c_polynomials: Vec<Vec<E::Fr>>,
-    v_elements: Vec<E::Fr>
+    v_elements: Vec<E::Fr>,
+    n: usize
 }
 
 #[derive(Clone)]
@@ -25,7 +27,8 @@ impl<E: Engine> GrandProductArgument<E> {
     pub fn new(polynomials: Vec<(Vec<E::Fr>, Vec<E::Fr>)>) -> Self {
         assert!(polynomials.len() > 0);
 
-        let length = polynomials[0].0.len();
+        let n = polynomials[0].0.len();
+        let mut a_polynomials = vec![];
         let mut c_polynomials = vec![];
         let mut v_elements = vec![];
 
@@ -46,95 +49,158 @@ impl<E: Engine> GrandProductArgument<E> {
 
         // calculate c, serially for now
 
-        for p in polynomials.iter() {
-            assert!(p.0.len() == p.1.len());
-            assert!(p.0.len() == length);
-            let mut c_poly: Vec<E::Fr> = Vec::with_capacity(2*length + 1);
+        for p in polynomials.into_iter() {
+            let (p0, p1) = p;
+            assert!(p0.len() == p1.len());
+            assert!(p0.len() == n);
+            let mut c_poly: Vec<E::Fr> = Vec::with_capacity(2*n + 1);
+            let mut a_poly: Vec<E::Fr> = Vec::with_capacity(2*n + 1);
             let mut c_coeff = E::Fr::one();
             // add a
-            for a in p.0.iter() {
+            for a in p0.iter() {
                 c_coeff.mul_assign(a);
                 c_poly.push(c_coeff);
             }
+            assert_eq!(c_poly.len(), n);
+            a_poly.extend(p0);
+            a_poly.push(c_poly[n - 2].inverse().unwrap());
+            // a_{n+1} = c_{n-1}^-1
             let v = c_coeff.inverse().unwrap();
             // add c_{n+1}
             let mut c_coeff = E::Fr::one();
             c_poly.push(c_coeff);
             // add b
-            for b in p.1.iter() {
+            for b in p1.iter() {
                 c_coeff.mul_assign(b);
                 c_poly.push(c_coeff);
             }
-
-            assert_eq!(c_poly.len(), 2*length + 1);
+            assert_eq!(c_poly.len(), 2*n + 1);
+            a_poly.extend(p1);
+            a_polynomials.push(a_poly);
             c_polynomials.push(c_poly);
             v_elements.push(v);
         }
 
         GrandProductArgument {
+            a_polynomials: a_polynomials,
             c_polynomials: c_polynomials,
-            v_elements: v_elements
+            v_elements: v_elements,
+            n: n
         }
     }
 
-    // // Make a commitment to polynomial in a form \sum_{i=1}^{N} a_{i} X^{i} Y^{i}
-    // pub fn commit(&self, srs: &SRS<E>) -> Vec<E::G1Affine> {
+    // Make a commitment for the begining of the protocol, returns commitment and `v` scalar
+    pub fn commit(&self, srs: &SRS<E>) -> Vec<(E::G1Affine, E::Fr)> {
 
-    //     let mut results = vec![];
+        let mut results = vec![];
 
-    //     let n = self.polynomials[0].len();
+        let n = self.c_polynomials[0].len();
 
-    //     for p in self.polynomials.iter() {
-    //         let c = multiexp(
-    //             srs.g_positive_x_alpha[0..n].iter(),
-    //             p.iter()
-    //         ).into_affine();
+        for (p, v) in self.c_polynomials.iter().zip(self.v_elements.iter()) {
+            let c = multiexp(
+                srs.g_positive_x_alpha[0..n].iter(),
+                p.iter()
+            ).into_affine();
             
-    //         results.push(c);
-    //     }
+            results.push((c, *v));
+        }
 
-    //     results
-    // }
+        results
+    }
 
-    // pub fn make_argument(self, challenges: Vec<E::Fr>, srs: &SRS<E>) -> WellformednessProof<E> {
-    //     let mut polynomials = self.polynomials;
-    //     let mut challenges = challenges;
+    // Argument is based on an approach of main SONIC construction, but with a custom S(X,Y) polynomial of a simple form
+    pub fn evaluate_t_polynomial(&self, challenges: Vec<E::Fr>, y: E::Fr, srs: &SRS<E>) -> E::G1Affine {
+        assert_eq!(challenges.len(), self.a_polynomials.len());
 
-    //     let mut p0 = polynomials.pop().unwrap();
-    //     let r0 = challenges.pop().unwrap();
-    //     let n = p0.len();
-    //     mul_polynomial_by_scalar(&mut p0[..], r0);
+        let n = self.n;
 
-    //     let m = polynomials.len();
+        let mut t_polynomial: Option<Vec<E::Fr>> = None;
 
-    //     for _ in 0..m {
-    //         let p = polynomials.pop().unwrap();
-    //         let r = challenges.pop().unwrap();
-    //         mul_add_polynomials(&mut p0[..], & p[..], r);
-    //     }
+        for (((a, c), v), challenge) in self.a_polynomials.iter()
+                                        .zip(self.c_polynomials.iter())
+                                        .zip(self.v_elements.iter())
+                                        .zip(challenges.into_iter())
+        {
+            let mut a_xy = a.clone();
+            let mut c_xy = c.clone();
+            let v = *v;
 
-    //     let d = srs.d;
+            assert_eq!(a_xy.len(), 2*n + 1);
 
-    //     assert!(n < d);
+            // make a T polynomial
 
-    //     // here the multiplier is x^-d, so largest negative power is -(d - 1), smallest negative power is -(d - n)
-    //     let l = multiexp(
-    //             srs.g_negative_x[(d - n)..d].iter().rev(),
-    //             p0.iter()
-    //         ).into_affine();
+            let r: Vec<E::Fr> = {
+                // p_a(X,Y)*Y
+                let mut tmp = y;
+                tmp.square();
+                mut_distribute_consequitive_powers(&mut a_xy[..], tmp, y);
 
-    //     // here the multiplier is x^d-n, so largest positive power is d, smallest positive power is d - n + 1
+                // add extra terms 
+                //v*(XY)^{n+1}*Y + X^{n+2} + X^{n+1}Y − X^{2n+2}*Y
 
-    //     let r = multiexp(
-    //             srs.g_positive_x[(d - n + 1)..].iter().rev(),
-    //             p0.iter()
-    //         ).into_affine();
+                // n+1 term v*(XY)^{n+1}*Y + X^{n+1}Y 
+                let tmp = y.pow(&[(n+2) as u64]);
+                let mut x_n_plus_one_term = v;
+                x_n_plus_one_term.mul_assign(&tmp);
+                x_n_plus_one_term.add_assign(&y);
+                a_xy[n].add_assign(&x_n_plus_one_term);
 
-    //     WellformednessProof {
-    //         l: l,
-    //         r: r
-    //     }
-    // }
+                // n+2 term 
+                a_xy[n+1].add_assign(&E::Fr::one());
+
+                // 2n+2 term 
+                let mut tmp = y;
+                tmp.negate();
+                a_xy.push(tmp);
+
+                assert_eq!(a_xy.len(), 2*n + 2);
+
+                let mut r = vec![E::Fr::zero(); 2*n+3];
+                r.extend(a_xy);
+
+                r
+            };
+
+            // calculate product of the full term made of `a` poly with c(X^{-1}, 1) + X^-1
+            let r_prime: Vec<E::Fr> = {
+                let mut c_prime: Vec<E::Fr> = c_xy.iter().rev().map(|el| *el).collect();
+                c_prime.push(E::Fr::one());
+                c_prime.push(E::Fr::zero());
+
+                c_prime
+            };
+
+            let mut t: Vec<E::Fr> = multiply_polynomials::<E>(r, r_prime);
+
+            let mut val = {
+                let mut tmp = y;
+                tmp.square();
+                evaluate_at_consequitive_powers(&c_xy, tmp, y)
+            };
+
+            val.add_assign(&E::Fr::one());
+
+            t[2*n+2].sub_assign(&val);
+            if t_polynomial.is_some() {
+                if let Some(t_poly) = t_polynomial.as_mut() {
+                    mul_add_polynomials(&mut t_poly[..], &t, challenge);
+                } 
+            } else {
+                mul_polynomial_by_scalar(&mut t, challenge);
+                t_polynomial = Some(t);
+            }
+        }
+
+        let t_polynomial = t_polynomial.unwrap();
+
+        polynomial_commitment(
+            srs.d,
+            2*n + 2, 
+            2*n + 2, 
+            srs, 
+            t_polynomial.iter()
+        )
+    }
 
     // pub fn verify(n: usize, challenges: &Vec<E::Fr>, commitments: &Vec<E::G1Affine>, proof: &WellformednessProof<E>, srs: &SRS<E>) -> bool {
     //     let d = srs.d;

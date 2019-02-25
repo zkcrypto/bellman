@@ -5,6 +5,6 @@
 
 mod s2_proof;
 mod wellformed_argument;
-mod coefficient_product_argument;
+mod grand_product_argument;
 
 pub use self::wellformed_argument::{WellformednessArgument, WellformednessProof};

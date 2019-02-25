@@ -33,7 +33,6 @@ impl<E: Engine> WellformednessArgument<E> {
         }
     }
 
-    // Make a commitment to polynomial in a form \sum_{i=1}^{N} a_{i} X^{i} Y^{i}
     pub fn commit(&self, srs: &SRS<E>) -> Vec<E::G1Affine> {
 
         let mut results = vec![];
