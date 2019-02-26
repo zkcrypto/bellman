@@ -296,7 +296,7 @@ impl<E: Engine> GrandProductArgument<E> {
 
         let n = self.n;
 
-        let mut c_polynomials = self.c_polynomials;
+        let c_polynomials = self.c_polynomials;
         let mut e_polynomial: Option<Vec<E::Fr>> = None;
         let mut f_polynomial: Option<Vec<E::Fr>> = None;
 
@@ -335,6 +335,7 @@ impl<E: Engine> GrandProductArgument<E> {
 
             let mut rc = c_zy;
             rc.mul_assign(challenge);
+
             let mut ry = y;
             ry.mul_assign(challenge);
 
@@ -386,17 +387,19 @@ impl<E: Engine> GrandProductArgument<E> {
         f_val.negate();
 
         let mut t_poly = self.t_polynomial.unwrap();
+        assert_eq!(t_poly.len(), 4*n + 3);
 
+        // largest negative power of t is -2n-1
         let t_zy = {
-            let tmp = z_inv.pow([(2*n+2) as u64]);
+            let tmp = z_inv.pow([(2*n+1) as u64]);
             evaluate_at_consequitive_powers(&t_poly, tmp, z)
         };
 
-        t_poly[2*n + 2].sub_assign(&t_zy);
+        t_poly[2*n + 1].sub_assign(&t_zy);
 
         let t_opening = polynomial_commitment_opening(
-            2*n + 2, 
-            2*n + 2,
+            2*n + 1, 
+            2*n + 1,
             t_poly.iter(), 
             z, 
             srs);
@@ -409,7 +412,6 @@ impl<E: Engine> GrandProductArgument<E> {
             f_opening: f_opening,
         }
     }
-
 
     pub fn verify_ab_commitment(n: usize, 
         randomness: & Vec<E::Fr>, 
@@ -492,44 +494,149 @@ impl<E: Engine> GrandProductArgument<E> {
             ])).unwrap() == E::Fqk::one()
     }
 
+    pub fn verify(
+        n: usize, 
+        randomness: & Vec<E::Fr>, 
+        a_zy: & Vec<E::Fr>,
+        challenges: &Vec<E::Fr>, 
+        t_commitment: E::G1Affine, 
+        commitments: &Vec<(E::G1Affine, E::Fr)>, 
+        proof: &GrandProductProof<E>, 
+        y: E::Fr, 
+        z: E::Fr,
+        srs: &SRS<E>
+    ) -> bool {
+        assert_eq!(randomness.len(), 3);
+        assert_eq!(a_zy.len(), challenges.len());
+        assert_eq!(commitments.len(), challenges.len());
+
+        let d = srs.d;
+
+        let g = srs.g_positive_x[0];
+
+        let h_alpha_x_precomp = srs.h_positive_x_alpha[1].prepare();
+
+        let h_alpha_precomp = srs.h_positive_x_alpha[0].prepare();
+
+        let mut h_prep = srs.h_positive_x[0];
+        h_prep.negate();
+        let h_prep = h_prep.prepare();
+
+        // first re-calculate cj and t(z,y)
+
+        let mut yz = y;
+        yz.mul_assign(&z);
+
+        let z_inv = z.inverse().unwrap();
+
+        let mut t_zy = E::Fr::zero();
+        t_zy.add_assign(&proof.e_zinv);
+        t_zy.sub_assign(&proof.f_y);
+
+        let mut commitments_points = vec![];
+        let mut rc_vec = vec![];
+        let mut ry_vec = vec![];
+
+        for ((r, commitment), a) in challenges.iter()
+                                        .zip(commitments.iter())
+                                        .zip(a_zy.iter()) {
+            let (c, v) = commitment;
+            commitments_points.push(c.clone());
+            
+            // cj = ((aj + vj(yz)n+1)y + zn+2 + zn+1y − z2n+2y)z−1
+            let mut c_zy = yz.pow([(n + 1) as u64]);
+            c_zy.mul_assign(v);
+            c_zy.add_assign(a);
+            c_zy.mul_assign(&y);
+
+            let mut z_n_plus_1 = z.pow([(n + 1) as u64]);
+
+            let mut z_n_plus_2 = z_n_plus_1;
+            z_n_plus_2.mul_assign(&z);
+
+            let mut z_2n_plus_2 = z_n_plus_1;
+            z_2n_plus_2.square();
+            z_2n_plus_2.mul_assign(&y);
+
+            z_n_plus_1.mul_assign(&y);
+
+            c_zy.add_assign(&z_n_plus_1);
+            c_zy.add_assign(&z_n_plus_2);
+            c_zy.sub_assign(&z_2n_plus_2);
+
+            c_zy.mul_assign(&z_inv);
+
+            let mut rc = c_zy;
+            rc.mul_assign(&r);
+            rc_vec.push(rc);
+
+            let mut ry = y;
+            ry.mul_assign(&r);
+            ry_vec.push(ry);
+
+            let mut val = rc;
+            val.sub_assign(r);
+            t_zy.add_assign(&val);
+        }
+
+        let c_rc = multiexp(
+            commitments_points.iter(),
+            rc_vec.iter(),
+        ).into_affine();
+
+        let c_ry = multiexp(
+            commitments_points.iter(),
+            ry_vec.iter(),
+        ).into_affine();
+
+        let mut minus_y = y;
+        minus_y.negate();
+
+        let mut f_y = proof.f_opening.mul(minus_y.into_repr());
+        let g_f = g.mul(proof.f_y.into_repr());
+        f_y.add_assign(&g_f);
+
+        let mut minus_z = z;
+        minus_z.negate();
+
+        let mut t_z = proof.t_opening.mul(minus_z.into_repr());
+        let g_tzy = g.mul(t_zy.into_repr());
+        t_z.add_assign(&g_tzy);
+
+        let mut minus_z_inv = z_inv;
+        minus_z_inv.negate();
+
+        let mut e_z_inv = proof.e_opening.mul(minus_z_inv.into_repr());
+        let g_e = g.mul(proof.e_zinv.into_repr());
+        e_z_inv.add_assign(&g_e);
+
+        let h_alpha_term = multiexp(
+            vec![e_z_inv.into_affine(), f_y.into_affine(), t_z.into_affine()].iter(),
+            randomness.iter(),
+        ).into_affine();
+
+        let h_alpha_x_term = multiexp(
+            Some(proof.e_opening).iter()
+                .chain_ext(Some(proof.f_opening).iter())
+                .chain_ext(Some(proof.t_opening).iter()),
+            randomness.iter(),
+        ).into_affine();
 
 
-    // pub fn verify(n: usize, challenges: &Vec<E::Fr>, commitments: &Vec<E::G1Affine>, proof: &WellformednessProof<E>, srs: &SRS<E>) -> bool {
-    //     let d = srs.d;
+        let h_term = multiexp(
+            Some(c_rc).iter()
+                .chain_ext(Some(c_ry).iter())
+                .chain_ext(Some(t_commitment).iter()),
+            randomness.iter(),
+        ).into_affine();
 
-    //     let alpha_x_d_precomp = srs.h_positive_x_alpha[d].prepare();
-    //     let alpha_x_n_minus_d_precomp = srs.h_negative_x_alpha[d - n].prepare();
-    //     let mut h_prep = srs.h_positive_x[0];
-    //     h_prep.negate();
-    //     let h_prep = h_prep.prepare();
+        E::final_exponentiation(&E::miller_loop(&[
+                (&h_alpha_x_term.prepare(), &h_alpha_x_precomp),
+                (&h_alpha_term.prepare(), &h_alpha_precomp),
+                (&h_term.prepare(), &h_prep),
+            ])).unwrap() == E::Fqk::one()
 
-    //     let a = multiexp(
-    //         commitments.iter(),
-    //         challenges.iter(),
-    //     ).into_affine();
-
-    //     let a = a.prepare();
-
-    //     let valid = E::final_exponentiation(&E::miller_loop(&[
-    //             (&a, &h_prep),
-    //             (&proof.l.prepare(), &alpha_x_d_precomp)
-    //         ])).unwrap() == E::Fqk::one();
-
-    //     if !valid {
-    //         return false;
-    //     } 
-
-    //     let valid = E::final_exponentiation(&E::miller_loop(&[
-    //             (&a, &h_prep),
-    //             (&proof.r.prepare(), &alpha_x_n_minus_d_precomp)
-    //         ])).unwrap() == E::Fqk::one();
-
-    //     if !valid {
-    //         return false;
-    //     } 
-
-    //     true
-    // }
+    }
 }
 
 #[test]
@@ -542,10 +649,9 @@ fn test_grand_product_argument() {
     let srs_alpha = Fr::from_str("23728792").unwrap();
     let srs = SRS::<Bls12>::dummy(830564, srs_x, srs_alpha);
 
-    let n: usize = 1 << 1;
+    let n: usize = 1 << 8;
     let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
-    // let coeffs = (0..n).map(|_| Fr::rand(rng)).collect::<Vec<_>>();
-    let coeffs = vec![Fr::from_str("1").unwrap(), Fr::from_str("2").unwrap()];
+    let coeffs = (0..n).map(|_| Fr::rand(rng)).collect::<Vec<_>>();
     let mut permutation = coeffs.clone();
     rng.shuffle(&mut permutation);
 
@@ -558,9 +664,7 @@ fn test_grand_product_argument() {
 
     assert_eq!(commitments_and_v_values.len(), 1);
 
-    // let y : Fr = rng.gen();
-
-    let y = Fr::one();
+    let y : Fr = rng.gen();
 
     let challenges = (0..1).map(|_| Fr::rand(rng)).collect::<Vec<_>>();
 
@@ -581,6 +685,26 @@ fn test_grand_product_argument() {
         z,
         &srs);
 
-    assert!(valid);
+    assert!(valid, "grand product commitments should be valid");
+
+    let a_zy: Vec<Fr> = grand_product_openings.iter().map(|el| el.0.clone()).collect();
+
+    let proof = argument.make_argument(&a_zy, &challenges, y, z, &srs);
+
+    let randomness = (0..3).map(|_| Fr::rand(rng)).collect::<Vec<_>>();
+
+    let valid = GrandProductArgument::verify(
+        n, 
+        &randomness, 
+        &a_zy, 
+        &challenges, 
+        t_commitment,
+        &commitments_and_v_values, 
+        &proof,
+        y,
+        z, 
+        &srs);
+
+    assert!(valid, "t commitment should be valid");
 }
 
