@@ -22,6 +22,6 @@ Initial SONIC proof system integration using the code from the [original impleme
 - [ ] Implement unhelped version
   - [x] Implement a part of S poly precomputation (S2)
   - [x] Implement a "well formed" argument 
-  - [ ] Implement a coefficients product argument
+  - [x] Implement a coefficients product argument
   - [ ] Implement a premutation argument
   - [ ] Implement synthesizer for proper form of S polynomial
