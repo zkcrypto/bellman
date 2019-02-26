@@ -1,4 +1,5 @@
 extern crate bellman;
+extern crate ff;
 extern crate pairing;
 extern crate rand;
 
@@ -9,10 +10,8 @@ use rand::{thread_rng, Rng};
 use std::time::{Duration, Instant};
 
 // Bring in some tools for using pairing-friendly curves
-use pairing::{
-    Engine,
-    Field
-};
+use ff::Field;
+use pairing::Engine;
 
 // We're going to use the BLS12-381 pairing-friendly elliptic curve.
 use pairing::bls12_381::{

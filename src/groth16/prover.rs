@@ -4,13 +4,9 @@ use std::sync::Arc;
 
 use futures::Future;
 
-use pairing::{
-    Engine,
-    PrimeField,
-    Field,
-    CurveProjective,
-    CurveAffine
-};
+use ff::{Field, PrimeField};
+use group::{CurveAffine, CurveProjective};
+use pairing::Engine;
 
 use super::{
     ParameterSource,

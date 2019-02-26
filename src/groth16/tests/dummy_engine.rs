@@ -1,16 +1,8 @@
-use pairing::{
-    Engine,
-    PrimeField,
-    PrimeFieldRepr,
-    Field,
-    SqrtField,
-    LegendreSymbol,
-    CurveProjective,
-    CurveAffine,
-    PrimeFieldDecodingError,
-    GroupDecodingError,
-    EncodedPoint
-};
+use ff::{
+    Field, LegendreSymbol, PrimeField, PrimeFieldDecodingError,
+    PrimeFieldRepr, ScalarEngine, SqrtField};
+use group::{CurveAffine, CurveProjective, EncodedPoint, GroupDecodingError};
+use pairing::{Engine, PairingCurveAffine};
 
 use std::cmp::Ordering;
 use std::fmt;
@@ -263,8 +255,11 @@ impl PrimeField for Fr {
 #[derive(Clone)]
 pub struct DummyEngine;
 
-impl Engine for DummyEngine {
+impl ScalarEngine for DummyEngine {
     type Fr = Fr;
+}
+
+impl Engine for DummyEngine {
     type G1 = Fr;
     type G1Affine = Fr;
     type G2 = Fr;
@@ -277,8 +272,8 @@ impl Engine for DummyEngine {
 
     fn miller_loop<'a, I>(i: I) -> Self::Fqk
         where I: IntoIterator<Item=&'a (
-                                    &'a <Self::G1Affine as CurveAffine>::Prepared,
-                                    &'a <Self::G2Affine as CurveAffine>::Prepared
+                                    &'a <Self::G1Affine as PairingCurveAffine>::Prepared,
+                                    &'a <Self::G2Affine as PairingCurveAffine>::Prepared
                                )>
     {
         let mut acc = <Fr as Field>::zero();
@@ -401,11 +396,8 @@ impl EncodedPoint for FakePoint {
 }
 
 impl CurveAffine for Fr {
-    type Pair = Fr;
-    type PairingResult = Fr;
     type Compressed = FakePoint;
     type Uncompressed = FakePoint;
-    type Prepared = Fr;
     type Projective = Fr;
     type Base = Fr;
     type Scalar = Fr;
@@ -437,15 +429,21 @@ impl CurveAffine for Fr {
         res
     }
 
+    fn into_projective(&self) -> Self::Projective {
+        *self
+    }
+}
+
+impl PairingCurveAffine for Fr {
+    type Prepared = Fr;
+    type Pair = Fr;
+    type PairingResult = Fr;
+
     fn prepare(&self) -> Self::Prepared {
         *self
     }
 
     fn pairing_with(&self, other: &Self::Pair) -> Self::PairingResult {
         self.mul(*other)
-    }
-
-    fn into_projective(&self) -> Self::Projective {
-        *self
     }
 }

@@ -10,12 +10,8 @@
 //! This allows us to perform polynomial operations in O(n)
 //! by performing an O(n log n) FFT over such a domain.
 
-use pairing::{
-    Engine,
-    Field,
-    PrimeField,
-    CurveProjective
-};
+use ff::{Field, PrimeField, ScalarEngine};
+use group::CurveProjective;
 
 use super::{
     SynthesisError
@@ -23,7 +19,7 @@ use super::{
 
 use super::multicore::Worker;
 
-pub struct EvaluationDomain<E: Engine, G: Group<E>> {
+pub struct EvaluationDomain<E: ScalarEngine, G: Group<E>> {
     coeffs: Vec<G>,
     exp: u32,
     omega: E::Fr,
@@ -32,7 +28,7 @@ pub struct EvaluationDomain<E: Engine, G: Group<E>> {
     minv: E::Fr
 }
 
-impl<E: Engine, G: Group<E>> EvaluationDomain<E, G> {
+impl<E: ScalarEngine, G: Group<E>> EvaluationDomain<E, G> {
     pub fn as_ref(&self) -> &[G] {
         &self.coeffs
     }
@@ -189,7 +185,7 @@ impl<E: Engine, G: Group<E>> EvaluationDomain<E, G> {
     }
 }
 
-pub trait Group<E: Engine>: Sized + Copy + Clone + Send + Sync {
+pub trait Group<E: ScalarEngine>: Sized + Copy + Clone + Send + Sync {
     fn group_zero() -> Self;
     fn group_mul_assign(&mut self, by: &E::Fr);
     fn group_add_assign(&mut self, other: &Self);
@@ -227,23 +223,23 @@ impl<G: CurveProjective> Group<G::Engine> for Point<G> {
     }
 }
 
-pub struct Scalar<E: Engine>(pub E::Fr);
+pub struct Scalar<E: ScalarEngine>(pub E::Fr);
 
-impl<E: Engine> PartialEq for Scalar<E> {
+impl<E: ScalarEngine> PartialEq for Scalar<E> {
     fn eq(&self, other: &Scalar<E>) -> bool {
         self.0 == other.0
     }
 }
 
-impl<E: Engine> Copy for Scalar<E> { }
+impl<E: ScalarEngine> Copy for Scalar<E> { }
 
-impl<E: Engine> Clone for Scalar<E> {
+impl<E: ScalarEngine> Clone for Scalar<E> {
     fn clone(&self) -> Scalar<E> {
         *self
     }
 }
 
-impl<E: Engine> Group<E> for Scalar<E> {
+impl<E: ScalarEngine> Group<E> for Scalar<E> {
     fn group_zero() -> Self {
         Scalar(E::Fr::zero())
     }
@@ -258,7 +254,7 @@ impl<E: Engine> Group<E> for Scalar<E> {
     }
 }
 
-fn best_fft<E: Engine, T: Group<E>>(a: &mut [T], worker: &Worker, omega: &E::Fr, log_n: u32)
+fn best_fft<E: ScalarEngine, T: Group<E>>(a: &mut [T], worker: &Worker, omega: &E::Fr, log_n: u32)
 {
     let log_cpus = worker.log_num_cpus();
 
@@ -269,7 +265,7 @@ fn best_fft<E: Engine, T: Group<E>>(a: &mut [T], worker: &Worker, omega: &E::Fr,
     }
 }
 
-fn serial_fft<E: Engine, T: Group<E>>(a: &mut [T], omega: &E::Fr, log_n: u32)
+fn serial_fft<E: ScalarEngine, T: Group<E>>(a: &mut [T], omega: &E::Fr, log_n: u32)
 {
     fn bitreverse(mut n: u32, l: u32) -> u32 {
         let mut r = 0;
@@ -314,7 +310,7 @@ fn serial_fft<E: Engine, T: Group<E>>(a: &mut [T], omega: &E::Fr, log_n: u32)
     }
 }
 
-fn parallel_fft<E: Engine, T: Group<E>>(
+fn parallel_fft<E: ScalarEngine, T: Group<E>>(
     a: &mut [T],
     worker: &Worker,
     omega: &E::Fr,
@@ -375,12 +371,13 @@ fn parallel_fft<E: Engine, T: Group<E>>(
 
 // Test multiplying various (low degree) polynomials together and
 // comparing with naive evaluations.
+#[cfg(feature = "pairing")]
 #[test]
 fn polynomial_arith() {
     use pairing::bls12_381::Bls12;
     use rand::{self, Rand};
 
-    fn test_mul<E: Engine, R: rand::Rng>(rng: &mut R)
+    fn test_mul<E: ScalarEngine, R: rand::Rng>(rng: &mut R)
     {
         let worker = Worker::new();
 
@@ -422,12 +419,13 @@ fn polynomial_arith() {
     test_mul::<Bls12, _>(rng);
 }
 
+#[cfg(feature = "pairing")]
 #[test]
 fn fft_composition() {
     use pairing::bls12_381::Bls12;
     use rand;
 
-    fn test_comp<E: Engine, R: rand::Rng>(rng: &mut R)
+    fn test_comp<E: ScalarEngine, R: rand::Rng>(rng: &mut R)
     {
         let worker = Worker::new();
 
@@ -460,13 +458,14 @@ fn fft_composition() {
     test_comp::<Bls12, _>(rng);
 }
 
+#[cfg(feature = "pairing")]
 #[test]
 fn parallel_fft_consistency() {
     use pairing::bls12_381::Bls12;
     use rand::{self, Rand};
     use std::cmp::min;
 
-    fn test_consistency<E: Engine, R: rand::Rng>(rng: &mut R)
+    fn test_consistency<E: ScalarEngine, R: rand::Rng>(rng: &mut R)
     {
         let worker = Worker::new();
 
