@@ -18,20 +18,18 @@ pub struct SpecializedSRS<E: Engine> {
     n: usize
 }
 
-
 #[derive(Clone)]
 pub struct PermutationArgument<E: Engine> {
-    coefficients: Vec<Vec<E::Fr>>,
+    non_permuted_coefficients: Vec<Vec<E::Fr>>,
+    permuted_coefficients: Vec<Vec<E::Fr>>,
     permutations: Vec<Vec<usize>>,
     n: usize
 }
 
 #[derive(Clone)]
 pub struct PermutationProof<E: Engine> {
-    t_opening: E::G1Affine,
-    e_zinv: E::Fr,
+    v_zy: E::Fr,
     e_opening: E::G1Affine,
-    f_y: E::Fr,
     f_opening: E::G1Affine,
 }
 
@@ -58,17 +56,18 @@ impl<E: Engine> PermutationArgument<E> {
         }
 
         PermutationArgument {
-            coefficients: coefficients,
+            non_permuted_coefficients: coefficients,
+            permuted_coefficients: vec![vec![]],
             permutations: permutations,
             n: n
         }
     }
 
-    pub fn make_specialized_srs(coefficients: &Vec<Vec<E::Fr>>, permutations: &Vec<Vec<usize>>, srs: &SRS<E>) -> SpecializedSRS<E> {
-        assert!(coefficients.len() > 0);
-        assert_eq!(coefficients.len(), permutations.len());
+    pub fn make_specialized_srs(non_permuted_coefficients: &Vec<Vec<E::Fr>>, permutations: &Vec<Vec<usize>>, srs: &SRS<E>) -> SpecializedSRS<E> {
+        assert!(non_permuted_coefficients.len() > 0);
+        assert_eq!(non_permuted_coefficients.len(), permutations.len());
 
-        let n = coefficients[0].len();
+        let n = non_permuted_coefficients[0].len();
 
         // p1 is just a commitment to the powers of x
         let p_1 = multiexp(srs.g_positive_x_alpha[0..n].iter(), vec![E::Fr::one(); n].iter()).into_affine();
@@ -89,14 +88,16 @@ impl<E: Engine> PermutationArgument<E> {
 
         let mut p_4 = vec![];
 
-        for (c, p) in coefficients.iter().zip(permutations.iter()) {
+        for (c, p) in non_permuted_coefficients.iter().zip(permutations.iter()) {
             assert!(c.len() == p.len());
             assert!(c.len() == n);
 
             // p2 is a commitment to the s^{perm}_i * x^i
-            let permuted_coeffs = permute(&c[..], &p[..]);
-            let p2 = multiexp(srs.g_positive_x_alpha[0..n].iter(), permuted_coeffs.iter()).into_affine();
-            p_2.push(p2);
+            {
+                // let permuted_coeffs = permute(&c[..], &p[..]);
+                let p2 = multiexp(srs.g_positive_x_alpha[0..n].iter(), c.iter()).into_affine();
+                p_2.push(p2);
+            }
 
             {
                 let values: Vec<E::Fr> = p.iter().map(|el| {
@@ -120,59 +121,87 @@ impl<E: Engine> PermutationArgument<E> {
         }
     }
 
-    // // Make a commitment to a polynomial in a form A*B^{x+1} = [a_1...a_{n}, 0, b_1...b_{n}]
-    // pub fn commit_for_grand_product(a: &[E::Fr], b: &[E::Fr], srs: &SRS<E>) -> E::G1Affine {
-    //     assert_eq!(a.len(), b.len());
+    // commit to s and s' at y. Mutates the state
+    pub fn commit(&mut self, y: E::Fr, srs: &SRS<E>) -> Vec<(E::G1Affine, E::G1Affine)> {
+        let mut result = vec![];
 
-    //     let n = a.len();
+        let n = self.non_permuted_coefficients[0].len();
 
-    //     multiexp(
-    //             srs.g_positive_x_alpha[0..(2*n+1)].iter(),
-    //             a.iter()
-    //                 .chain_ext(Some(E::Fr::zero()).iter())
-    //                 .chain_ext(b.iter())
-    //     ).into_affine()
-    // }
+        let mut permuted_coefficients = vec![];
 
-    // pub fn open_commitments_for_grand_product(&self, y: E::Fr, z: E::Fr, srs: &SRS<E>) -> Vec<(E::Fr, E::G1Affine)> {
-    //     let n = self.n;
+        for (c, p) in self.non_permuted_coefficients.iter().zip(self.permutations.iter()) {
+            let mut non_permuted = c.clone();
+            let permuted = permute(&non_permuted[..], &p[..]);
 
-    //     let mut yz = y;
-    //     yz.mul_assign(&z);
+            mut_distribute_consequitive_powers(&mut non_permuted[..], y, y);
+            let s_prime = multiexp(srs.g_positive_x_alpha[0..n].iter(), non_permuted.iter()).into_affine();
 
-    //     let mut results = vec![];
+            let mut permuted_at_y = permute(&non_permuted[..], &p[..]);
+            drop(non_permuted);
 
-    //     for a_poly in self.a_polynomials.iter() {
-    //         let a = & a_poly[0..n];
-    //         let b = & a_poly[(n+1)..];
-    //         assert_eq!(a.len(), n);
-    //         assert_eq!(b.len(), n);
-    //         let mut val = evaluate_at_consequitive_powers(a, yz, yz);
-    //         {
-    //             let tmp = yz.pow([(n+2) as u64]);
-    //             let v = evaluate_at_consequitive_powers(b, tmp, yz);
-    //             val.add_assign(&v);
-    //         }
+            let s = multiexp(srs.g_positive_x_alpha[0..n].iter(), permuted_at_y.iter()).into_affine();
 
-    //         let mut constant_term = val;
-    //         constant_term.negate();
+            result.push((s, s_prime));
 
-    //         let opening = polynomial_commitment_opening(
-    //             0,
-    //             2*n + 1,
-    //             Some(constant_term).iter()
-    //                 .chain_ext(a.iter())
-    //                 .chain_ext(Some(E::Fr::zero()).iter())
-    //                 .chain_ext(b.iter()),
-    //             yz, 
-    //             &srs);
+            permuted_coefficients.push(permuted);
+        }
 
-    //         results.push((val, opening));
+        self.permuted_coefficients = permuted_coefficients;
 
-    //     }
+        result
+    }
 
-    //     results
-    // }  
+    pub fn open_commitments_to_s(&self, challenges: &Vec<E::Fr>, y: E::Fr, z_prime: E::Fr, srs: &SRS<E>) -> PermutationProof<E> {
+        let n = self.non_permuted_coefficients[0].len();
+
+        let mut yz = y;
+        yz.mul_assign(&z_prime);
+
+        let mut polynomial: Option<Vec<E::Fr>> = None;
+
+        for (p, r) in self.non_permuted_coefficients.iter()
+                    .zip(challenges.iter()) {
+            if polynomial.is_some() {
+                if let Some(poly) = polynomial.as_mut() {
+                    mul_add_polynomials(&mut poly[..], &p[..], *r);
+                }
+            } else {
+                let mut poly = p.clone();
+                mul_polynomial_by_scalar(&mut poly[..], *r);
+
+            }
+        }
+
+        let mut polynomial = polynomial.unwrap();
+        let v = evaluate_at_consequitive_powers(&polynomial[..], yz, yz);
+
+        let mut v_neg = v;
+        v_neg.negate();
+
+        let e = polynomial_commitment_opening(
+            0, 
+            n, 
+            Some(v_neg).iter().chain_ext(polynomial.iter()), 
+            yz, 
+            &srs
+        );
+
+        mut_distribute_consequitive_powers(&mut polynomial[..], y, y);
+
+        let f = polynomial_commitment_opening(
+            0, 
+            n, 
+            Some(v_neg).iter().chain_ext(polynomial.iter()), 
+            z_prime, 
+            &srs
+        );
+
+        PermutationProof {
+            v_zy: v,
+            e_opening: e,
+            f_opening: f
+        }
+    }  
 
     // // Make a commitment for the begining of the protocol, returns commitment and `v` scalar
     // pub fn commit_to_individual_c_polynomials(&self, srs: &SRS<E>) -> Vec<(E::G1Affine, E::Fr)> {
@@ -435,86 +464,86 @@ impl<E: Engine> PermutationArgument<E> {
     //     }
     // }
 
-    // pub fn verify_ab_commitment(n: usize, 
-    //     randomness: & Vec<E::Fr>, 
-    //     a_commitments: &Vec<E::G1Affine>,
-    //     b_commitments: &Vec<E::G1Affine>, 
-    //     openings: &Vec<(E::Fr, E::G1Affine)>,
-    //     y: E::Fr,
-    //     z: E::Fr,
-    //     srs: &SRS<E>
-    //     ) -> bool {
-    //     assert_eq!(randomness.len(), a_commitments.len());
-    //     assert_eq!(openings.len(), a_commitments.len());
-    //     assert_eq!(b_commitments.len(), a_commitments.len());
-    //     let d = srs.d;
+    pub fn verify_s_prime_commitment(n: usize, 
+        randomness: & Vec<E::Fr>, 
+        challenges: & Vec<E::Fr>,
+        commitments: &Vec<E::G1Affine>,
+        proof: &PermutationProof<E>,
+        y: E::Fr,
+        z_prime: E::Fr,
+        specialized_srs: &SpecializedSRS<E>,
+        srs: &SRS<E>
+    ) -> bool {
+        assert_eq!(randomness.len(), 2);
+        assert_eq!(challenges.len(), commitments.len());
 
-    //     // e(Dj,hαx)e(D−yz,hα) = e(Aj,h)e(Bj,hxn+1)e(g−aj ,hα)
+        // e(E,hαx)e(E−z′,hα) = e(􏰗Mj=1Sj′rj,h)e(g−v,hα)
+        // e(F,hαx)e(F−yz′,hα) = e(􏰗Mj=1P2jrj,h)e(g−v,hα)
 
-    //     let g = srs.g_positive_x[0];
+        let g = srs.g_positive_x[0];
 
-    //     let h_alpha_x_precomp = srs.h_positive_x_alpha[1].prepare();
+        let h_alpha_x_precomp = srs.h_positive_x_alpha[1].prepare();
 
-    //     let h_alpha_precomp = srs.h_positive_x_alpha[0].prepare();
+        let h_alpha_precomp = srs.h_positive_x_alpha[0].prepare();
 
-    //     let mut h_x_n_plus_one_precomp = srs.h_positive_x[n];
-    //     h_x_n_plus_one_precomp.negate();
-    //     let h_x_n_plus_one_precomp = h_x_n_plus_one_precomp.prepare();
+        let mut h_prep = srs.h_positive_x[0];
+        h_prep.negate();
+        let h_prep = h_prep.prepare();
 
-    //     let mut h_prep = srs.h_positive_x[0];
-    //     h_prep.negate();
-    //     let h_prep = h_prep.prepare();
+        let mut value = E::Fr::zero();
 
-    //     let a = multiexp(
-    //         a_commitments.iter(),
-    //         randomness.iter(),
-    //     ).into_affine();
+        for r in randomness.iter() {
+            value.add_assign(&r);
+        }
+        value.mul_assign(&proof.v_zy);
 
-    //     let a = a.prepare();
+        let mut minus_yz = z_prime;
+        minus_yz.mul_assign(&y);
+        minus_yz.negate();
 
-    //     let b = multiexp(
-    //         b_commitments.iter(),
-    //         randomness.iter(),
-    //     ).into_affine();
+        let mut minus_z_prime = z_prime;
+        minus_z_prime.negate();
 
-    //     let b = b.prepare();
+        let f_yz = proof.f_opening.mul(minus_yz.into_repr());
+        let e_z = proof.e_opening.mul(minus_z_prime.into_repr());
 
-    //     let mut yz_neg = y;
-    //     yz_neg.mul_assign(&z);
-    //     yz_neg.negate();
+        let mut h_alpha_term = multiexp(
+            vec![e_z.into_affine(), f_yz.into_affine()].iter(),
+            randomness.iter(),
+        );
 
-    //     let mut ops = vec![];
-    //     let mut value = E::Fr::zero();
+        let g_v = g.mul(value.into_repr());
 
-    //     for (el, r) in openings.iter().zip(randomness.iter()) {
-    //         let (v, o) = el;
-    //         ops.push(o.clone());
-    //         let mut val = *v;
-    //         val.mul_assign(&r);
-    //         value.add_assign(&val);
-    //     }
+        h_alpha_term.add_assign(&g_v);
 
-    //     let value = g.mul(value.into_repr()).into_affine().prepare();
+        let h_alpha_x_term = multiexp(
+            Some(proof.e_opening).iter()
+                .chain_ext(Some(proof.f_opening).iter()),
+            randomness.iter(),
+        ).into_affine();
 
-    //     let openings = multiexp(
-    //         ops.iter(),
-    //         randomness.iter(),
-    //     ).into_affine();
+        let s_r = multiexp(
+                commitments.iter(), 
+                challenges.iter()
+            ).into_affine();
 
-    //     let openings_zy = openings.mul(yz_neg.into_repr()).into_affine().prepare();
-    //     let openings = openings.prepare();
+        let p2_r = multiexp(
+                specialized_srs.p_2.iter(),
+                challenges.iter()
+            ).into_affine();
 
+        let h_term = multiexp(
+            Some(s_r).iter()
+                .chain_ext(Some(p2_r).iter()),
+            randomness.iter()
+        ).into_affine();
 
-    //     // e(Dj,hαx)e(D−yz,hα) = e(Aj,h)e(Bj,hxn+1)e(g−aj ,hα)
-
-    //     E::final_exponentiation(&E::miller_loop(&[
-    //             (&openings, &h_alpha_x_precomp),
-    //             (&openings_zy, &h_alpha_precomp),
-    //             (&a, &h_prep),
-    //             (&b, &h_x_n_plus_one_precomp),
-    //             (&value, &h_alpha_precomp)
-    //         ])).unwrap() == E::Fqk::one()
-    // }
+        E::final_exponentiation(&E::miller_loop(&[
+                (&h_alpha_x_term.prepare(), &h_alpha_x_precomp),
+                (&h_alpha_term.into_affine().prepare(), &h_alpha_precomp),
+                (&h_term.prepare(), &h_prep),
+            ])).unwrap() == E::Fqk::one()
+    }
 
     // pub fn verify(
     //     n: usize, 
