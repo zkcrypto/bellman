@@ -52,6 +52,7 @@ impl<E: Engine> WellformednessArgument<E> {
     }
 
     pub fn make_argument(self, challenges: Vec<E::Fr>, srs: &SRS<E>) -> WellformednessProof<E> {
+        assert_eq!(challenges.len(), self.polynomials.len());
         let mut polynomials = self.polynomials;
         let mut challenges = challenges;
 
@@ -165,7 +166,7 @@ fn test_argument_soundness() {
     let srs_alpha = Fr::from_str("23728792").unwrap();
     let srs = SRS::<Bls12>::dummy(830564, srs_x, srs_alpha);
 
-    let n: usize = 1 << 16;
+    let n: usize = 1 << 8;
     let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
     let coeffs = (0..n).map(|_| Fr::rand(rng)).collect::<Vec<_>>();
 

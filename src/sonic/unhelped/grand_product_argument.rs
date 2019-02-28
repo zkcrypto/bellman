@@ -112,6 +112,24 @@ impl<E: Engine> GrandProductArgument<E> {
         ).into_affine()
     }
 
+    // Make a commitment to a polynomial in a form A*B^{x+1} = [a_1...a_{n}, 0, b_1...b_{n}]
+    pub fn commit_for_individual_products(a: &[E::Fr], b: &[E::Fr], srs: &SRS<E>) -> (E::G1Affine, E::G1Affine) {
+        assert_eq!(a.len(), b.len());
+
+        let n = a.len();
+
+        let a = multiexp(
+                srs.g_positive_x_alpha[0..n].iter(),
+                a.iter()).into_affine();
+
+
+        let b = multiexp(
+                srs.g_positive_x_alpha[0..n].iter(),
+                b.iter()).into_affine();
+
+        (a, b)
+    }
+
     pub fn open_commitments_for_grand_product(&self, y: E::Fr, z: E::Fr, srs: &SRS<E>) -> Vec<(E::Fr, E::G1Affine)> {
         let n = self.n;
 
@@ -287,7 +305,6 @@ impl<E: Engine> GrandProductArgument<E> {
 
         c
     }
-
 
     // Argument is based on an approach of main SONIC construction, but with a custom S(X,Y) polynomial of a simple form
     pub fn make_argument(self, a_zy: & Vec<E::Fr>, challenges: & Vec<E::Fr>, y: E::Fr, z: E::Fr, srs: &SRS<E>) -> GrandProductProof<E> {
