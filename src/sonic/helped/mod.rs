@@ -1,7 +1,6 @@
-extern crate ff;
 extern crate pairing;
 
-use ff::{Field};
+use pairing::ff::{Field};
 use pairing::{Engine, CurveProjective};
 use std::marker::PhantomData;
 

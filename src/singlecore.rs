@@ -1,17 +1,12 @@
-//! This is an interface for dealing with the kinds of
-//! parallel computations involved in bellman. It's
-//! currently just a thin wrapper around CpuPool and
-//! crossbeam but may be extended in the future to
-//! allow for various parallelism strategies.
-
-extern crate num_cpus;
+//! This is a dummy interface to substitute multicore worker
+//! in environments like WASM
 extern crate futures;
 extern crate futures_cpupool;
-extern crate crossbeam;
+
+use std::marker::PhantomData;
 
 use self::futures::{Future, IntoFuture, Poll};
-use self::futures_cpupool::{CpuPool, CpuFuture};
-use self::crossbeam::thread::{Scope};
+use self::futures_cpupool::{CpuFuture, CpuPool};
 
 #[derive(Clone)]
 pub struct Worker {
@@ -25,17 +20,17 @@ impl Worker {
     // CPUs configured.
     pub(crate) fn new_with_cpus(cpus: usize) -> Worker {
         Worker {
-            cpus: cpus,
-            pool: CpuPool::new(cpus)
+            cpus: 1,
+            pool: CpuPool::new(1)
         }
     }
 
     pub fn new() -> Worker {
-        Self::new_with_cpus(num_cpus::get())
+        Self::new_with_cpus(1)
     }
 
     pub fn log_num_cpus(&self) -> u32 {
-        log2_floor(self.cpus)
+        0u32
     }
 
     pub fn compute<F, R>(
@@ -59,15 +54,28 @@ impl Worker {
     ) -> R
         where F: FnOnce(&Scope<'a>, usize) -> R
     {
-        let chunk_size = if elements < self.cpus {
-            1
-        } else {
-            elements / self.cpus
+        let chunk_size = elements;
+
+        let scope = Scope{
+            _marker: PhantomData
         };
 
-        crossbeam::scope(|scope| {
-            f(scope, chunk_size)
-        }).expect("must run")
+        f(&scope, chunk_size)
+    }
+}
+#[derive(Clone)]
+pub struct Scope<'a> {
+    _marker: PhantomData<& 'a usize>
+}
+
+impl<'a> Scope<'a> {
+    pub fn spawn<F, R>(
+        &self,
+        f: F
+    ) -> R
+        where F: FnOnce(&Scope<'a>) -> R
+    {
+        f(&self)
     }
 }
 
@@ -83,28 +91,4 @@ impl<T: Send + 'static, E: Send + 'static> Future for WorkerFuture<T, E> {
     {
         self.future.poll()
     }
-}
-
-fn log2_floor(num: usize) -> u32 {
-    assert!(num > 0);
-
-    let mut pow = 0;
-
-    while (1 << (pow+1)) <= num {
-        pow += 1;
-    }
-
-    pow
-}
-
-#[test]
-fn test_log2_floor() {
-    assert_eq!(log2_floor(1), 0);
-    assert_eq!(log2_floor(2), 1);
-    assert_eq!(log2_floor(3), 1);
-    assert_eq!(log2_floor(4), 2);
-    assert_eq!(log2_floor(5), 2);
-    assert_eq!(log2_floor(6), 2);
-    assert_eq!(log2_floor(7), 2);
-    assert_eq!(log2_floor(8), 3);
 }

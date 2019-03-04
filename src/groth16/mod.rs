@@ -4,11 +4,11 @@ use pairing::{
     EncodedPoint
 };
 
-use ::{
+use crate::{
     SynthesisError
 };
 
-use multiexp::SourceBuilder;
+use crate::source::SourceBuilder;
 use std::io::{self, Read, Write};
 use std::sync::Arc;
 use byteorder::{BigEndian, WriteBytesExt, ReadBytesExt};
@@ -484,10 +484,10 @@ impl<'a, E: Engine> ParameterSource<E> for &'a Parameters<E> {
 #[cfg(test)]
 mod test_with_bls12_381 {
     use super::*;
-    use {Circuit, SynthesisError, ConstraintSystem};
+    use crate::{Circuit, SynthesisError, ConstraintSystem};
 
     use rand::{Rand, thread_rng};
-    use ff::{Field};
+    use pairing::ff::{Field};
     use pairing::bls12_381::{Bls12, Fr};
 
     #[test]

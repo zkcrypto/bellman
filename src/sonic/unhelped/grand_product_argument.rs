@@ -2,7 +2,7 @@
 /// in those two polynomials are equal (part of the permutation argument) with additional assumption that
 /// those coefficients are never equal to zero
 
-use ff::{Field, PrimeField, PrimeFieldRepr};
+use pairing::ff::{Field, PrimeField, PrimeFieldRepr};
 use pairing::{Engine, CurveProjective, CurveAffine};
 use std::marker::PhantomData;
 

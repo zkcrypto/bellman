@@ -4,7 +4,7 @@ use pairing::{
     Engine
 };
 
-use ff::{
+use pairing::ff::{
     PrimeField,
     Field,
     PrimeFieldRepr,

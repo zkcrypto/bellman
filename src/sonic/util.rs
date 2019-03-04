@@ -1,5 +1,5 @@
 use crate::SynthesisError;
-use ff::{Field, PrimeField, PrimeFieldRepr, ScalarEngine};
+use pairing::ff::{Field, PrimeField, PrimeFieldRepr, ScalarEngine};
 use pairing::{CurveAffine, CurveProjective, Engine};
 use super::srs::SRS;
 
@@ -437,7 +437,7 @@ pub fn check_polynomial_commitment<E: Engine>(
 
 #[test]
 fn laurent_division() {
-    use ff::PrimeField;
+    use pairing::ff::PrimeField;
     use pairing::bls12_381::{Fr};
 
     let mut poly = vec![

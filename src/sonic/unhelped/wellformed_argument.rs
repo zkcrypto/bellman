@@ -1,7 +1,7 @@
 /// Wellformedness argument allows to verify that some committment was to multivariate polynomial of degree n, 
 /// with no constant term and negative powers
 
-use ff::{Field, PrimeField, PrimeFieldRepr};
+use pairing::ff::{Field, PrimeField, PrimeFieldRepr};
 use pairing::{Engine, CurveProjective, CurveAffine};
 use std::marker::PhantomData;
 

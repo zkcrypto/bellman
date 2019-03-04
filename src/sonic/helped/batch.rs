@@ -8,7 +8,7 @@
 //! This submodule contains the `Batch` abstraction for creating a
 //! context for batch verification.
 
-use ff::{Field};
+use pairing::ff::{Field};
 use pairing::{Engine, CurveAffine, CurveProjective};
 
 use crate::SynthesisError;

@@ -12,7 +12,7 @@ use pairing::{
     CurveAffine
 };
 
-use ff::{
+use pairing::ff::{
     PrimeField,
     Field
 };
@@ -22,7 +22,7 @@ use super::{
     Proof
 };
 
-use ::{
+use crate::{
     SynthesisError,
     Circuit,
     ConstraintSystem,
@@ -31,18 +31,19 @@ use ::{
     Index
 };
 
-use ::domain::{
+use crate::domain::{
     EvaluationDomain,
     Scalar
 };
 
-use ::multiexp::{
+use crate::source::{
     DensityTracker,
-    FullDensity,
-    multiexp
+    FullDensity
 };
 
-use ::multicore::{
+use crate::multiexp::*;
+
+use crate::worker::{
     Worker
 };
 

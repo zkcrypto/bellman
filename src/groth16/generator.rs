@@ -11,7 +11,7 @@ use pairing::{
     CurveAffine
 };
 
-use ff::{    
+use pairing::ff::{    
     PrimeField,
     Field
 };
@@ -21,7 +21,7 @@ use super::{
     VerifyingKey
 };
 
-use ::{
+use crate::{
     SynthesisError,
     Circuit,
     ConstraintSystem,
@@ -30,12 +30,12 @@ use ::{
     Index
 };
 
-use ::domain::{
+use crate::domain::{
     EvaluationDomain,
     Scalar
 };
 
-use ::multicore::{
+use crate::worker::{
     Worker
 };
 

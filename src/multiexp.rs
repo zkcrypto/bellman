@@ -4,7 +4,7 @@ use pairing::{
     Engine
 };
 
-use ff::{
+use pairing::ff::{
     PrimeField,
     Field,
     PrimeFieldRepr,
@@ -13,7 +13,7 @@ use ff::{
 use std::sync::Arc;
 use super::source::*;
 use futures::{Future};
-use super::multicore::Worker;
+use super::worker::Worker;
 
 use super::SynthesisError;
 
@@ -212,19 +212,16 @@ fn dense_multiexp_inner<G: CurveAffine>(
     handle_trivial: bool
 ) -> Result<<G as CurveAffine>::Projective, SynthesisError>
 {   
-    use crossbeam::channel::{unbounded, RecvError};
     // Perform this region of the multiexp. We use a different strategy - go over region in parallel,
     // then over another region, etc. No Arc required
     let this = {
         // let mask = (1u64 << c) - 1u64;
-        let (s, r) = unbounded();
-        // let this_region = 
+        let this_region = 
         pool.scope(bases.len(), |scope, chunk| {
-            // let mut handles = vec![];
-            // let mut this_acc = <G as CurveAffine>::Projective::zero();
+            let mut handles = vec![];
+            let mut this_acc = <G as CurveAffine>::Projective::zero();
             for (base, exp) in bases.chunks(chunk).zip(exponents.chunks(chunk)) {
-                let s = s.clone();
-                // let handle = 
+                let handle = 
                 scope.spawn(move |_| {
                     let mut buckets = vec![<G as CurveAffine>::Projective::zero(); (1 << c) - 1];
                     // Accumulate the result
@@ -265,32 +262,32 @@ fn dense_multiexp_inner<G: CurveAffine>(
                     }
 
                     // acc contains values over this region
-                    s.send(acc).expect("must send result");
+                    // s.send(acc).expect("must send result");
                     
-                    // acc
+                    acc
                 });
         
-                // handles.push(handle);
+                handles.push(handle);
             }
 
-            // // wait for all threads to finish
-            // for r in handles.into_iter() {
-            //     let thread_result = r.join().unwrap();
-            //     this_acc.add_assign(&thread_result);
-            // }
+            // wait for all threads to finish
+            for r in handles.into_iter() {
+                let thread_result = r.join().unwrap();
+                this_acc.add_assign(&thread_result);
+            }
 
 
-            // this_acc
+            this_acc
         });
 
-        let mut this_region = <G as CurveAffine>::Projective::zero();
-        loop {
-            if r.is_empty() {
-                break;
-            }
-            let value = r.recv().expect("must have value");
-            this_region.add_assign(&value);
-        }
+        // let mut this_region = <G as CurveAffine>::Projective::zero();
+        // loop {
+        //     if r.is_empty() {
+        //         break;
+        //     }
+        //     let value = r.recv().expect("must have value");
+        //     this_region.add_assign(&value);
+        // }
 
         this_region
     };

@@ -2,7 +2,7 @@ use pairing::{
     Engine
 };
 
-use ff:: {
+use pairing::ff:: {
     Field,
     PrimeField,
 };
@@ -12,7 +12,7 @@ use self::dummy_engine::*;
 
 use std::marker::PhantomData;
 
-use ::{
+use crate::{
     Circuit,
     ConstraintSystem,
     SynthesisError

@@ -1,8 +1,7 @@
-extern crate ff;
 extern crate pairing;
 extern crate rand;
 
-use ff::{Field, PrimeField};
+use pairing::ff::{Field, PrimeField};
 use pairing::{Engine, CurveProjective};
 
 // this one is for all external interfaces

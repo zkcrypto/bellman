@@ -2,7 +2,7 @@
 /// actually a commitment to a vector of values that are equal to `(s^{perm})_i * y^{perm(i)}`
 /// for some fixed permutation `perm`
 
-use ff::{Field, PrimeField, PrimeFieldRepr, ScalarEngine};
+use pairing::ff::{Field, PrimeField, PrimeFieldRepr, ScalarEngine};
 use pairing::{Engine, CurveProjective, CurveAffine};
 use std::marker::PhantomData;
 

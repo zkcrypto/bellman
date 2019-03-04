@@ -1,7 +1,6 @@
 extern crate bellman;
 extern crate pairing;
 extern crate rand;
-extern crate ff;
 
 // For randomness (during paramgen and proof generation)
 use rand::{thread_rng, Rng};
@@ -14,7 +13,7 @@ use pairing::{
     Engine  
 };
 
-use ff::{
+use pairing::ff::{
     Field,
 };
 
@@ -442,7 +441,7 @@ impl<'a, E: Engine> Circuit<E> for MiMCDemoNoInputs<'a, E> {
 
 #[test]
 fn test_sonic_mimc() {
-    use ff::{Field, PrimeField};
+    use pairing::ff::{Field, PrimeField};
     use pairing::{Engine, CurveAffine, CurveProjective};
     use pairing::bls12_381::{Bls12, Fr};
     use std::time::{Instant};
@@ -546,7 +545,7 @@ fn test_sonic_mimc() {
 
 #[test]
 fn test_inputs_into_sonic_mimc() {
-    use ff::{Field, PrimeField};
+    use pairing::ff::{Field, PrimeField};
     use pairing::{Engine, CurveAffine, CurveProjective};
     use pairing::bn256::{Bn256, Fr};
     // use pairing::bls12_381::{Bls12, Fr};

@@ -1,4 +1,4 @@
-use ff::{Field, PrimeField};
+use pairing::ff::{Field, PrimeField};
 use pairing::{CurveAffine, CurveProjective, Engine, Wnaf};
 
 use std::io::{self, Read, Write};

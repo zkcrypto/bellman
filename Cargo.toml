@@ -6,7 +6,8 @@ homepage = "https://github.com/matterinc/bellman"
 license = "MIT/Apache-2.0"
 name = "bellman"
 repository = "https://github.com/matterinc/bellman"
-version = "0.1.3"
+version = "0.2.0"
+edition = "2018"
 
 [lib]
 crate-type = ["cdylib", "lib", "staticlib"]
@@ -15,20 +16,25 @@ crate-type = ["cdylib", "lib", "staticlib"]
 rand = "0.4"
 bit-vec = "0.4.4"
 futures = "0.1"
-futures-cpupool = "0.1"
-num_cpus = "1"
-crossbeam = "0.7.1"
-pairing = { git = 'https://github.com/matterinc/pairing' }
-byteorder = "1"
-ff = { git = 'https://github.com/matterinc/ff', features = ["derive"] }
 
-tiny-keccak = "1.4.2"
+#pairing = { git = 'https://github.com/matterinc/pairing', tag = "0.16.2" }
+pairing = { path = "../pairing" }
+byteorder = "1"
+
+futures-cpupool = {version = "0.1", optional = true}
+num_cpus = {version = "1", optional = true}
+crossbeam = {version = "0.7.1", optional = true}
+
+tiny-keccak = {version = "1.4.2", optional = true}
 
 [dependencies.blake2-rfc]
 git = "https://github.com/gtank/blake2-rfc"
 rev = "7a5b5fc99ae483a0043db7547fb79a6fa44b88a9"
 
 [features]
-default = []
-
-singlecore = []
+default = ["multicore", "gm17", "sonic"]
+#default = ["singlecore"]
+multicore = ["futures-cpupool", "num_cpus", "crossbeam"]
+sonic = ["tiny-keccak"]
+gm17 = []
+singlecore = ["futures-cpupool"]

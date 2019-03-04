@@ -1,4 +1,4 @@
-use ff::{Field, PrimeField, PrimeFieldRepr};
+use pairing::ff::{Field, PrimeField, PrimeFieldRepr};
 use pairing::{Engine, CurveProjective, CurveAffine};
 use std::marker::PhantomData;
 

@@ -1,4 +1,4 @@
-use ff::{Field};
+use pairing::ff::{Field};
 use pairing::{Engine};
 use std::ops::{Add, Sub, Neg};
 

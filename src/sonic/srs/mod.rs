@@ -1,4 +1,3 @@
-extern crate ff;
 extern crate pairing;
 
 mod srs;

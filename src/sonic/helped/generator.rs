@@ -9,7 +9,7 @@ use pairing::{
     CurveAffine
 };
 
-use ff::{    
+use pairing::ff::{    
     PrimeField,
     Field
 };
@@ -19,7 +19,7 @@ use super::{
     VerifyingKey
 };
 
-use ::{
+use crate::{
     SynthesisError,
     Circuit,
     ConstraintSystem,
@@ -32,7 +32,7 @@ use crate::domain::{
     Scalar
 };
 
-use ::multicore::{
+use crate::multicore::{
     Worker
 };
 

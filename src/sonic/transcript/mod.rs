@@ -1,7 +1,6 @@
-extern crate ff;
 extern crate pairing;
 
-use ff::{Field, PrimeField, PrimeFieldRepr};
+use pairing::ff::{Field, PrimeField, PrimeFieldRepr};
 use pairing::{CurveAffine, CurveProjective, Engine};
 use std::io;
 

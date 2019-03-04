@@ -1,4 +1,4 @@
-use ff::{Field};
+use pairing::ff::{Field};
 use pairing::{Engine, CurveProjective};
 use std::marker::PhantomData;
 
@@ -53,7 +53,7 @@ pub fn verify_aggregate<E: Engine, C: Circuit<E> + Clone, R: Rng>(
 
 // #[test]
 // fn my_fun_circuit_test() {
-//     use ff::PrimeField;
+//     use pairing::ff::PrimeField;
 //     use pairing::bls12_381::{Bls12, Fr};
 //     use super::*;
 //     use crate::sonic::cs::{Basic, ConstraintSystem, LinearCombination};

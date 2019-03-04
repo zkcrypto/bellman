@@ -4,11 +4,11 @@ use pairing::{
     EncodedPoint
 };
 
-use ::{
+use crate::{
     SynthesisError
 };
 
-use multiexp::SourceBuilder;
+use crate::source::SourceBuilder;
 use std::io::{self, Read, Write};
 use std::sync::Arc;
 use byteorder::{BigEndian, WriteBytesExt, ReadBytesExt};
@@ -474,7 +474,7 @@ impl<E: Engine> PartialEq for Parameters<E> {
 //     use {Circuit, SynthesisError, ConstraintSystem};
 
 //     use rand::{Rand, thread_rng};
-//     use ff::{Field};
+//     use pairing::ff::{Field};
 //     use pairing::bls12_381::{Bls12, Fr};
 
 //     #[test]

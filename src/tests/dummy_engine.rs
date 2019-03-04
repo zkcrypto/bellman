@@ -6,7 +6,7 @@ use pairing::{
     EncodedPoint
 };
 
-use ff::{
+use pairing::ff::{
     PrimeField,
     PrimeFieldRepr,
     Field,

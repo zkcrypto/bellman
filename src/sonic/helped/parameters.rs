@@ -1,4 +1,4 @@
-use ff::{
+use pairing::ff::{
     Field,
     PrimeField, 
     PrimeFieldRepr
@@ -10,11 +10,11 @@ use pairing::{
     EncodedPoint
 };
 
-use ::{
+use crate::{
     SynthesisError
 };
 
-use multiexp::SourceBuilder;
+use crate::source::SourceBuilder;
 use std::io::{self, Read, Write};
 use std::sync::Arc;
 use byteorder::{BigEndian, WriteBytesExt, ReadBytesExt};
@@ -64,7 +64,7 @@ impl<E: Engine> Proof<E> {
         mut writer: W
     ) -> io::Result<()>
     {
-        use ff::{PrimeField, PrimeFieldRepr};
+        use pairing::ff::{PrimeField, PrimeFieldRepr};
         writer.write_all(self.r.into_compressed().as_ref())?;
         writer.write_all(self.t.into_compressed().as_ref())?;
         let mut buffer = vec![];

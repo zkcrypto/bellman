@@ -3,7 +3,7 @@ use pairing::{
     CurveProjective
 };
 
-use ff::{
+use pairing::ff::{
     Field, 
     PrimeField
 };
