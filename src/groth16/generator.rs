@@ -11,7 +11,7 @@ use pairing::{
     CurveAffine
 };
 
-use ff::{    
+use pairing::ff::{    
     PrimeField,
     Field
 };
@@ -21,7 +21,7 @@ use super::{
     VerifyingKey
 };
 
-use ::{
+use crate::{
     SynthesisError,
     Circuit,
     ConstraintSystem,
@@ -30,12 +30,12 @@ use ::{
     Index
 };
 
-use ::domain::{
+use crate::domain::{
     EvaluationDomain,
     Scalar
 };
 
-use ::multicore::{
+use crate::worker::{
     Worker
 };
 
@@ -259,7 +259,7 @@ pub fn generate_parameters<E, C>(
             worker.scope(powers_of_tau.len(), |scope, chunk| {
                 for (i, powers_of_tau) in powers_of_tau.chunks_mut(chunk).enumerate()
                 {
-                    scope.spawn(move || {
+                    scope.spawn(move |_| {
                         let mut current_tau_power = tau.pow(&[(i*chunk) as u64]);
 
                         for p in powers_of_tau {
@@ -285,7 +285,7 @@ pub fn generate_parameters<E, C>(
             for (h, p) in h.chunks_mut(chunk).zip(powers_of_tau.as_ref().chunks(chunk))
             {
                 let mut g1_wnaf = g1_wnaf.shared();
-                scope.spawn(move || {
+                scope.spawn(move |_| {
                     // Set values of the H query to g1^{(tau^i * t(tau)) / delta}
                     for (h, p) in h.iter_mut().zip(p.iter())
                     {
@@ -376,7 +376,7 @@ pub fn generate_parameters<E, C>(
                 let mut g1_wnaf = g1_wnaf.shared();
                 let mut g2_wnaf = g2_wnaf.shared();
 
-                scope.spawn(move || {
+                scope.spawn(move |_| {
                     for ((((((a, b_g1), b_g2), ext), at), bt), ct) in a.iter_mut()
                                                                        .zip(b_g1.iter_mut())
                                                                        .zip(b_g2.iter_mut())

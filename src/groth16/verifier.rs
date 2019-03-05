@@ -4,7 +4,7 @@ use pairing::{
     CurveAffine
 };
 
-use ff::{PrimeField};
+use pairing::ff::{PrimeField};
 
 use super::{
     Proof,
@@ -12,7 +12,7 @@ use super::{
     PreparedVerifyingKey
 };
 
-use ::{
+use crate::{
     SynthesisError
 };
 

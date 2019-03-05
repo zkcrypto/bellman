@@ -12,7 +12,7 @@ use pairing::{
     CurveAffine
 };
 
-use ff::{
+use pairing::ff::{
     PrimeField,
     Field
 };
@@ -22,7 +22,7 @@ use super::{
     Proof
 };
 
-use ::{
+use crate::{
     SynthesisError,
     Circuit,
     ConstraintSystem,
@@ -31,18 +31,19 @@ use ::{
     Index
 };
 
-use ::domain::{
+use crate::domain::{
     EvaluationDomain,
     Scalar
 };
 
-use ::multiexp::{
+use crate::source::{
     DensityTracker,
-    FullDensity,
-    multiexp
+    FullDensity
 };
 
-use ::multicore::{
+use crate::multiexp::*;
+
+use crate::worker::{
     Worker
 };
 
@@ -176,6 +177,8 @@ impl<E:Engine> PreparedProver<E> {
             let mut a = EvaluationDomain::from_coeffs(prover.a)?;
             let mut b = EvaluationDomain::from_coeffs(prover.b)?;
             let mut c = EvaluationDomain::from_coeffs(prover.c)?;
+            if verbose {eprintln!("H query domain size is {}", a.as_ref().len())};
+
             // here a coset is a domain where denominator (z) does not vanish
             // inverse FFT is an interpolation
             a.ifft(&worker);
@@ -206,17 +209,22 @@ impl<E:Engine> PreparedProver<E> {
             multiexp(&worker, params.get_h(a.len())?, FullDensity, a)
         };
 
-        if verbose {eprintln!("{} seconds for prover for H evaluation", start.elapsed().as_secs())};
+        if verbose {eprintln!("{} seconds for prover for H evaluation (mostly FFT)", start.elapsed().as_millis() as f64 / 1000.0)};
 
         let start = std::time::Instant::now();
 
         // TODO: Check that difference in operations for different chunks is small
 
-
         // TODO: parallelize if it's even helpful
         // TODO: in large settings it may worth to parallelize
         let input_assignment = Arc::new(prover.input_assignment.into_iter().map(|s| s.into_repr()).collect::<Vec<_>>());
         let aux_assignment = Arc::new(prover.aux_assignment.into_iter().map(|s| s.into_repr()).collect::<Vec<_>>());
+
+        let input_len = input_assignment.len();
+        let aux_len = aux_assignment.len();
+        if verbose {eprintln!("H query is dense in G1,\nOther queries are {} elements in G1 and {} elements in G2",
+            2*(input_len + aux_len) + aux_len, input_len + aux_len)
+        };
 
         // Run a dedicated process for dense vector
         let l = multiexp(&worker, params.get_l(aux_assignment.len())?, FullDensity, aux_assignment.clone());
@@ -279,7 +287,7 @@ impl<E:Engine> PreparedProver<E> {
         g_c.add_assign(&h.wait()?);
         g_c.add_assign(&l.wait()?);
 
-        if verbose {eprintln!("{} seconds for prover for point multiplication", start.elapsed().as_secs())};
+        if verbose {eprintln!("{} seconds for prover for point multiplication", start.elapsed().as_millis() as f64 / 1000.0)};
 
         Ok(Proof {
             a: g_a.into_affine(),
@@ -438,6 +446,7 @@ pub fn create_proof<E, C, P: ParameterSource<E>>(
         let mut a = EvaluationDomain::from_coeffs(prover.a)?;
         let mut b = EvaluationDomain::from_coeffs(prover.b)?;
         let mut c = EvaluationDomain::from_coeffs(prover.c)?;
+        if verbose {eprintln!("H query domain size is {}", a.as_ref().len())};
         // here a coset is a domain where denominator (z) does not vanish
         // inverse FFT is an interpolation
         a.ifft(&worker);
@@ -468,12 +477,11 @@ pub fn create_proof<E, C, P: ParameterSource<E>>(
         multiexp(&worker, params.get_h(a.len())?, FullDensity, a)
     };
 
-    if verbose {eprintln!("{} seconds for prover for H evaluation", start.elapsed().as_secs())};
+    if verbose {eprintln!("{} seconds for prover for H evaluation (mostly FFT)", start.elapsed().as_millis() as f64 / 1000.0)};
 
     let start = std::time::Instant::now();
 
     // TODO: Check that difference in operations for different chunks is small
-
 
     // TODO: parallelize if it's even helpful
     // TODO: in large settings it may worth to parallelize
@@ -541,7 +549,7 @@ pub fn create_proof<E, C, P: ParameterSource<E>>(
     g_c.add_assign(&h.wait()?);
     g_c.add_assign(&l.wait()?);
 
-    if verbose {eprintln!("{} seconds for prover for point multiplication", start.elapsed().as_secs())};
+    if verbose {eprintln!("{} seconds for prover for point multiplication", start.elapsed().as_millis() as f64 / 1000.0)};
 
     Ok(Proof {
         a: g_a.into_affine(),

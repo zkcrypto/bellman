@@ -1,7 +1,6 @@
 extern crate bellman;
 extern crate pairing;
 extern crate rand;
-extern crate ff;
 
 // For randomness (during paramgen and proof generation)
 use rand::{thread_rng, Rng};
@@ -14,7 +13,7 @@ use pairing::{
     Engine  
 };
 
-use ff::{
+use pairing::ff::{
     Field,
 };
 
@@ -82,6 +81,7 @@ fn mimc<E: Engine>(
 
 /// This is our demo circuit for proving knowledge of the
 /// preimage of a MiMC hash invocation.
+#[derive(Clone)]
 struct MiMCDemo<'a, E: Engine> {
     xl: Option<E::Fr>,
     xr: Option<E::Fr>,
@@ -116,12 +116,12 @@ impl<'a, E: Engine> Circuit<E> for MiMCDemo<'a, E> {
             let cs = &mut cs.namespace(|| format!("round {}", i));
 
             // tmp = (xL + Ci)^2
-            let mut tmp_value = xl_value.map(|mut e| {
+            let tmp_value = xl_value.map(|mut e| {
                 e.add_assign(&self.constants[i]);
                 e.square();
                 e
             });
-            let mut tmp = cs.alloc(|| "tmp", || {
+            let tmp = cs.alloc(|| "tmp", || {
                 tmp_value.ok_or(SynthesisError::AssignmentMissing)
             })?;
 
@@ -135,14 +135,14 @@ impl<'a, E: Engine> Circuit<E> for MiMCDemo<'a, E> {
             // new_xL = xR + (xL + Ci)^3
             // new_xL = xR + tmp * (xL + Ci)
             // new_xL - xR = tmp * (xL + Ci)
-            let mut new_xl_value = xl_value.map(|mut e| {
+            let new_xl_value = xl_value.map(|mut e| {
                 e.add_assign(&self.constants[i]);
                 e.mul_assign(&tmp_value.unwrap());
                 e.add_assign(&xr_value.unwrap());
                 e
             });
 
-            let mut new_xl = if i == (MIMC_ROUNDS-1) {
+            let new_xl = if i == (MIMC_ROUNDS-1) {
                 // This is the last round, xL is our image and so
                 // we allocate a public input.
                 cs.alloc_input(|| "image", || {
@@ -341,4 +341,3 @@ fn test_mimc_bn256() {
     println!("Average proving time: {:?} seconds", proving_avg);
     println!("Average verifying time: {:?} seconds", verifying_avg);
 }
-

@@ -4,10 +4,14 @@
 //! crossbeam but may be extended in the future to
 //! allow for various parallelism strategies.
 
-use num_cpus;
-use futures::{Future, IntoFuture, Poll};
-use futures_cpupool::{CpuPool, CpuFuture};
-use crossbeam::{self, Scope};
+extern crate num_cpus;
+extern crate futures;
+extern crate futures_cpupool;
+extern crate crossbeam;
+
+use self::futures::{Future, IntoFuture, Poll};
+use self::futures_cpupool::{CpuPool, CpuFuture};
+use self::crossbeam::thread::{Scope};
 
 #[derive(Clone)]
 pub struct Worker {
@@ -63,7 +67,7 @@ impl Worker {
 
         crossbeam::scope(|scope| {
             f(scope, chunk_size)
-        })
+        }).expect("must run")
     }
 }
 
