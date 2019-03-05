@@ -212,16 +212,18 @@ fn dense_multiexp_inner<G: CurveAffine>(
     handle_trivial: bool
 ) -> Result<<G as CurveAffine>::Projective, SynthesisError>
 {   
+    use std::sync::{Mutex};
     // Perform this region of the multiexp. We use a different strategy - go over region in parallel,
     // then over another region, etc. No Arc required
     let this = {
         // let mask = (1u64 << c) - 1u64;
-        let this_region = 
+        let this_region = Mutex::new(<G as CurveAffine>::Projective::zero());
+        let arc = Arc::new(this_region);
         pool.scope(bases.len(), |scope, chunk| {
-            let mut handles = vec![];
             let mut this_acc = <G as CurveAffine>::Projective::zero();
             for (base, exp) in bases.chunks(chunk).zip(exponents.chunks(chunk)) {
-                let handle = 
+                let this_region_rwlock = arc.clone();
+                // let handle = 
                 scope.spawn(move |_| {
                     let mut buckets = vec![<G as CurveAffine>::Projective::zero(); (1 << c) - 1];
                     // Accumulate the result
@@ -261,33 +263,22 @@ fn dense_multiexp_inner<G: CurveAffine>(
                         acc.add_assign(&running_sum);
                     }
 
-                    // acc contains values over this region
-                    // s.send(acc).expect("must send result");
-                    
-                    acc
+                    let mut guard = match this_region_rwlock.lock() {
+                        Ok(guard) => guard,
+                        Err(poisoned) => {
+                            panic!("poisoned!"); 
+                            // poisoned.into_inner()
+                        }
+                    };
+
+                    (*guard).add_assign(&acc);
                 });
         
-                handles.push(handle);
             }
-
-            // wait for all threads to finish
-            for r in handles.into_iter() {
-                let thread_result = r.join().unwrap();
-                this_acc.add_assign(&thread_result);
-            }
-
-
-            this_acc
         });
 
-        // let mut this_region = <G as CurveAffine>::Projective::zero();
-        // loop {
-        //     if r.is_empty() {
-        //         break;
-        //     }
-        //     let value = r.recv().expect("must have value");
-        //     this_region.add_assign(&value);
-        // }
+        let this_region = Arc::try_unwrap(arc).unwrap();
+        let this_region = this_region.into_inner().unwrap();
 
         this_region
     };
@@ -392,11 +383,14 @@ fn test_dense_multiexp() {
     use pairing::bn256::Bn256;
     use num_cpus;
 
-    const SAMPLES: usize = 1 << 22;
+    // const SAMPLES: usize = 1 << 22;
+    const SAMPLES: usize = 1 << 16;
     let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
     let mut v = (0..SAMPLES).map(|_| <Bn256 as ScalarEngine>::Fr::rand(rng).into_repr()).collect::<Vec<_>>();
     let g = (0..SAMPLES).map(|_| <Bn256 as Engine>::G1::rand(rng).into_affine()).collect::<Vec<_>>();
+
+    println!("Done generating test points and scalars");
 
     let pool = Worker::new();
 

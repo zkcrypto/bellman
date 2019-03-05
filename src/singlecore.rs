@@ -1,17 +1,15 @@
 //! This is a dummy interface to substitute multicore worker
 //! in environments like WASM
 extern crate futures;
-extern crate futures_cpupool;
 
 use std::marker::PhantomData;
 
 use self::futures::{Future, IntoFuture, Poll};
-use self::futures_cpupool::{CpuFuture, CpuPool};
+use self::futures::future::{result, FutureResult};
 
 #[derive(Clone)]
 pub struct Worker {
     cpus: usize,
-    pool: CpuPool
 }
 
 impl Worker {
@@ -21,7 +19,6 @@ impl Worker {
     pub(crate) fn new_with_cpus(cpus: usize) -> Worker {
         Worker {
             cpus: 1,
-            pool: CpuPool::new(1)
         }
     }
 
@@ -42,8 +39,10 @@ impl Worker {
               R::Item: Send + 'static,
               R::Error: Send + 'static
     {
+        let future = f().into_future();
+
         WorkerFuture {
-            future: self.pool.spawn_fn(f)
+            future: result(future.wait())
         }
     }
 
@@ -80,7 +79,7 @@ impl<'a> Scope<'a> {
 }
 
 pub struct WorkerFuture<T, E> {
-    future: CpuFuture<T, E>
+    future: FutureResult<T, E>
 }
 
 impl<T: Send + 'static, E: Send + 'static> Future for WorkerFuture<T, E> {
