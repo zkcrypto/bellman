@@ -185,6 +185,7 @@ pub fn multiexp<Q, D, G, S>(
 
 /// Perform multi-exponentiation. The caller is responsible for ensuring that
 /// the number of bases is the same as the number of exponents.
+#[allow(dead_code)]
 pub fn dense_multiexp<G: CurveAffine>(
     pool: &Worker,
     bases: & [G],
@@ -220,7 +221,6 @@ fn dense_multiexp_inner<G: CurveAffine>(
         let this_region = Mutex::new(<G as CurveAffine>::Projective::zero());
         let arc = Arc::new(this_region);
         pool.scope(bases.len(), |scope, chunk| {
-            let mut this_acc = <G as CurveAffine>::Projective::zero();
             for (base, exp) in bases.chunks(chunk).zip(exponents.chunks(chunk)) {
                 let this_region_rwlock = arc.clone();
                 // let handle = 
@@ -265,7 +265,7 @@ fn dense_multiexp_inner<G: CurveAffine>(
 
                     let mut guard = match this_region_rwlock.lock() {
                         Ok(guard) => guard,
-                        Err(poisoned) => {
+                        Err(_) => {
                             panic!("poisoned!"); 
                             // poisoned.into_inner()
                         }
@@ -387,7 +387,7 @@ fn test_dense_multiexp() {
     const SAMPLES: usize = 1 << 16;
     let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
-    let mut v = (0..SAMPLES).map(|_| <Bn256 as ScalarEngine>::Fr::rand(rng).into_repr()).collect::<Vec<_>>();
+    let v = (0..SAMPLES).map(|_| <Bn256 as ScalarEngine>::Fr::rand(rng).into_repr()).collect::<Vec<_>>();
     let g = (0..SAMPLES).map(|_| <Bn256 as Engine>::G1::rand(rng).into_affine()).collect::<Vec<_>>();
 
     println!("Done generating test points and scalars");
@@ -397,7 +397,7 @@ fn test_dense_multiexp() {
     let start = std::time::Instant::now();
 
     let dense = dense_multiexp(
-        &pool, &g, &mut v.clone()).unwrap();
+        &pool, &g, &v.clone()).unwrap();
 
     let duration_ns = start.elapsed().as_nanos() as f64;
     println!("{} ns for dense for {} samples", duration_ns, SAMPLES);

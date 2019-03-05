@@ -11,5 +11,7 @@ pub mod unhelped;
 
 mod transcript;
 
+#[cfg(test)]
+mod tests;
 
 
