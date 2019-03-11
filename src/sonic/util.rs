@@ -123,10 +123,12 @@ pub fn polynomial_commitment_opening<
     ) -> E::G1Affine
         where I::IntoIter: DoubleEndedIterator + ExactSizeIterator,
     {
-        let poly = kate_divison(
-            polynomial_coefficients,
-            point,
-        );
+        let poly = parallel_kate_divison::<E, _>(polynomial_coefficients, point);
+
+        // let poly = kate_divison(
+        //     polynomial_coefficients,
+        //     point,
+        // );
 
         let negative_poly = poly[0..largest_negative_power].iter().rev();
         let positive_poly = poly[largest_negative_power..].iter();
@@ -400,6 +402,75 @@ where
     q
 }
 
+/// Divides polynomial `a` in `x` by `x - b` with
+/// no remainder using fft.
+pub fn parallel_kate_divison<'a, E: Engine, I: IntoIterator<Item = &'a E::Fr>>(a: I, mut b: E::Fr) -> Vec<E::Fr>
+where
+    I::IntoIter: DoubleEndedIterator + ExactSizeIterator,
+{
+    // this implementation is only for division by `x - b` form polynomail,
+    // so we can manuall calculate the reciproical poly of the form `x^2/(x-b)`
+    // and the reminder
+
+    // x^2 /(x - b) = x + b*x/(x - b) = (x + b) + b^2/(x - b)
+
+    let reciproical = vec![b, E::Fr::one()]; // x + b
+
+    // and remainder b^2
+    let mut b_squared = b;
+    b_squared.square();
+
+    let mut b_neg = b;
+    b_neg.negate();
+
+    let divisor = vec![b_neg, E::Fr::one()];
+
+    let poly: Vec<E::Fr> = a.into_iter().map(|el| el.clone()).collect();
+
+    let (q, _) = kate_divison_inner::<E>(poly, divisor, reciproical, b_squared);
+
+    // assert_eq!(r.len(), 0);
+
+    q
+}
+
+fn kate_divison_inner<E: Engine>(
+        poly: Vec<E::Fr>, 
+        divisor: Vec<E::Fr>, 
+        reciproical: Vec<E::Fr>, 
+        remainder: E::Fr
+    ) -> (Vec<E::Fr>, Vec<E::Fr>) {
+    if poly.len() == 1 {
+        return (vec![], poly);
+    }
+    // TODO: Change generic multiplications by multiplications by degree 1 polynomial
+    let poly_degree = poly.len() - 1;
+    let mut q = multiply_polynomials::<E>(poly.clone(), reciproical.clone());
+    q.drain(0..2);
+    // recursion step
+    if poly_degree > 2 {
+        let mut rec_step = poly.clone();
+        mul_polynomial_by_scalar(&mut rec_step[..], remainder);
+        // truncate low order terms 
+        rec_step.drain(0..2);
+        let (q2, _) = kate_divison_inner::<E>(rec_step, divisor.clone(), reciproical, remainder);
+        // length of q2 is smaller
+        add_polynomials(&mut q[..q2.len()], &q2[..]);
+    }        
+
+    // although r must be zero, calculate it for now
+    if q.len() == 0 {
+        return (q, poly);
+    }
+
+    // r = u - v*q
+    let mut poly = poly;
+    let tmp = multiply_polynomials::<E>(divisor, q.clone());
+    sub_polynomials(&mut poly[..], &tmp[..]);
+
+    return (q, poly);
+}
+
 /// Convenience function to check polynomail commitment
 pub fn check_polynomial_commitment<E: Engine>(
     commitment: &E::G1Affine,
@@ -524,6 +595,90 @@ pub fn multiply_polynomials<E: Engine>(a: Vec<E::Fr>, b: Vec<E::Fr>) -> Vec<E::F
     mul_result
 }
 
+
+// alternative implementation that does not require an `Evaluation domain` struct
+pub fn multiply_polynomials_fft<E: Engine>(a: Vec<E::Fr>, b: Vec<E::Fr>) -> Vec<E::Fr> {
+    use crate::multicore::Worker;
+    use crate::domain::{best_fft, Scalar};
+    use crate::group::Group;
+
+    let result_len = a.len() + b.len() - 1;
+
+    // m is a size of domain where Z polynomial does NOT vanish
+    // in normal domain Z is in a form of (X-1)(X-2)...(X-N)
+    let mut m = 1;
+    let mut exp = 0;
+    let mut omega = E::Fr::root_of_unity();
+    let max_degree = (1 << E::Fr::S) - 1;
+
+    if result_len > max_degree {
+        panic!("multiplication result degree is too large");
+    }
+
+    while m < result_len {
+        m *= 2;
+        exp += 1;
+
+        // The pairing-friendly curve may not be able to support
+        // large enough (radix2) evaluation domains.
+        if exp > E::Fr::S {
+            panic!("multiplication result degree is too large");
+        }
+    }
+
+    // If full domain is not needed - limit it,
+    // e.g. if (2^N)th power is not required, just double omega and get 2^(N-1)th
+    // Compute omega, the 2^exp primitive root of unity
+    for _ in exp..E::Fr::S {
+        omega.square();
+    }
+
+    let omegainv = omega.inverse().unwrap();
+    let minv = E::Fr::from_str(&format!("{}", m)).unwrap().inverse().unwrap();
+
+    let worker = Worker::new();
+
+    let mut scalars_a: Vec<Scalar<E>> = a.into_iter().map(|e| Scalar::<E>(e)).collect();
+    let mut scalars_b: Vec<Scalar<E>> = b.into_iter().map(|e| Scalar::<E>(e)).collect();
+    scalars_a.resize(m, Scalar::<E>(E::Fr::zero()));
+    scalars_b.resize(m, Scalar::<E>(E::Fr::zero()));
+
+
+    best_fft(&mut scalars_a[..], &worker, &omega, exp);
+    best_fft(&mut scalars_b[..], &worker, &omega, exp);
+
+    // do the convolution
+    worker.scope(scalars_a.len(), |scope, chunk| {
+        for (a, b) in scalars_a.chunks_mut(chunk).zip(scalars_b.chunks(chunk)) {
+            scope.spawn(move |_| {
+                for (a, b) in a.iter_mut().zip(b.iter()) {
+                    a.group_mul_assign(&b.0);
+                }
+            });
+        }
+    });
+
+    // no longer need it
+    drop(scalars_b);
+
+    best_fft(&mut scalars_a[..], &worker, &omegainv, exp);
+    worker.scope(scalars_a.len(), |scope, chunk| {
+        for v in scalars_a.chunks_mut(chunk) {
+            scope.spawn(move |_| {
+                for v in v {
+                    v.group_mul_assign(&minv);
+                }
+            });
+        }
+    });
+
+    let mut mul_result: Vec<E::Fr> = scalars_a.into_iter().map(|e| e.0).collect();
+
+    mul_result.truncate(result_len);
+
+    mul_result
+}
+
 pub fn multiply_polynomials_serial<E: Engine>(mut a: Vec<E::Fr>, mut b: Vec<E::Fr>) -> Vec<E::Fr> {
     let result_len = a.len() + b.len() - 1;
 
@@ -574,6 +729,7 @@ pub fn multiply_polynomials_serial<E: Engine>(mut a: Vec<E::Fr>, mut b: Vec<E::F
     a
 }
 
+// add polynomails in coefficient form
 pub fn add_polynomials<F: Field>(a: &mut [F], b: &[F]) {
         use crate::multicore::Worker;
         use crate::domain::{EvaluationDomain, Scalar};
@@ -594,6 +750,28 @@ pub fn add_polynomials<F: Field>(a: &mut [F], b: &[F]) {
         });
 }
 
+// subtract polynomails in coefficient form
+pub fn sub_polynomials<F: Field>(a: &mut [F], b: &[F]) {
+    use crate::multicore::Worker;
+    use crate::domain::{EvaluationDomain, Scalar};
+
+    let worker = Worker::new();
+
+    assert_eq!(a.len(), b.len());
+
+    worker.scope(a.len(), |scope, chunk| {
+        for (a, b) in a.chunks_mut(chunk).zip(b.chunks(chunk))
+        {
+            scope.spawn(move |_| {
+                for (a, b) in a.iter_mut().zip(b.iter()) {
+                    a.sub_assign(b);
+                }
+            });
+        }
+    });
+}
+
+// multiply coefficients of the polynomial by the scalar
 pub fn mul_polynomial_by_scalar<F: Field>(a: &mut [F], b: F) {
         use crate::multicore::Worker;
         use crate::domain::{EvaluationDomain, Scalar};
@@ -612,6 +790,8 @@ pub fn mul_polynomial_by_scalar<F: Field>(a: &mut [F], b: F) {
         });
 }
 
+// elementwise add coeffs of one polynomial with coeffs of other, that are 
+// first multiplied by a scalar 
 pub fn mul_add_polynomials<F: Field>(a: &mut [F], b: &[F], c: F) {
         use crate::multicore::Worker;
         use crate::domain::{EvaluationDomain, Scalar};
@@ -693,7 +873,6 @@ impl<T> OptionExt<T> for Option<T> {
 }
 
 #[test]
-
 fn test_mul() {
     use rand::{self, Rand};
     use crate::pairing::bls12_381::Bls12;
@@ -804,4 +983,119 @@ fn test_mut_distribute_powers() {
     mut_distribute_consequitive_powers(&mut b[..], first_power, x);
 
     assert!(a == b);
+}
+
+
+#[test]
+fn test_trivial_parallel_kate_division() {
+    use pairing::ff::PrimeField;
+    use pairing::bls12_381::{Bls12, Fr};
+
+    let mut minus_one = Fr::one();
+    minus_one.negate();
+
+    let z = Fr::one();
+
+    // this is x^2 - 1
+    let poly = vec![
+        minus_one,
+        Fr::from_str("0").unwrap(),
+        Fr::from_str("1").unwrap(),
+    ];
+
+    let quotient_poly = kate_divison(&poly, z);
+
+    let parallel_q_poly = parallel_kate_divison::<Bls12, _>(&poly, z);
+
+    assert_eq!(quotient_poly, parallel_q_poly);
+}
+
+#[test]
+fn test_less_trivial_parallel_kate_division() {
+    use pairing::ff::PrimeField;
+    use pairing::bls12_381::{Bls12, Fr};
+
+    let z = Fr::one();
+
+    let mut poly = vec![
+        Fr::from_str("328947234").unwrap(),
+        Fr::from_str("3545623451111").unwrap(),
+        Fr::from_str("5").unwrap(),
+        Fr::from_str("55555").unwrap(),
+        Fr::from_str("1235685").unwrap(),
+    ];
+
+    fn eval(poly: &[Fr], point: Fr) -> Fr {
+        let mut acc = Fr::zero();
+        let mut tmp = Fr::one();
+        for p in &poly[..] {
+            let mut t = *p;
+            t.mul_assign(&tmp);
+            acc.add_assign(&t);
+            tmp.mul_assign(&point);
+        }
+    
+        acc
+    }
+
+    let p_at_z = eval(&poly, z);
+
+    // poly = poly(X) - poly(z)
+    poly[0].sub_assign(&p_at_z);
+
+    let quotient_poly = kate_divison(&poly, z);
+
+    let parallel_q_poly = parallel_kate_divison::<Bls12, _>(&poly, z);
+
+    assert_eq!(quotient_poly, parallel_q_poly);
+}
+
+
+#[test]
+fn test_parallel_kate_division() {
+    use pairing::ff::PrimeField;
+    use pairing::bls12_381::{Bls12, Fr};
+
+    let mut poly = vec![
+        Fr::from_str("328947234").unwrap(),
+        Fr::from_str("3545623451111").unwrap(),
+        Fr::from_str("0").unwrap(),
+        Fr::from_str("55555").unwrap(),
+        Fr::from_str("1235685").unwrap(),
+    ];
+
+    fn eval(poly: &[Fr], point: Fr) -> Fr {
+        let point_inv = point.inverse().unwrap();
+
+        let mut acc = Fr::zero();
+        let mut tmp = Fr::one();
+        for p in &poly[2..] {
+            let mut t = *p;
+            t.mul_assign(&tmp);
+            acc.add_assign(&t);
+            tmp.mul_assign(&point);
+        }
+        let mut tmp = point_inv;
+        for p in poly[0..2].iter().rev() {
+            let mut t = *p;
+            t.mul_assign(&tmp);
+            acc.add_assign(&t);
+            tmp.mul_assign(&point_inv);
+        }
+
+        acc
+    }
+
+    let z = Fr::from_str("2000").unwrap();
+
+    let p_at_z = eval(&poly, z);
+
+    // poly = poly(X) - poly(z)
+    poly[2].sub_assign(&p_at_z);
+
+    let quotient_poly = kate_divison(&poly, z);
+
+    let parallel_q_poly = parallel_kate_divison::<Bls12, _>(&poly, z);
+
+    assert_eq!(quotient_poly, parallel_q_poly);
 }

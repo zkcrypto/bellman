@@ -4,6 +4,7 @@ use std::marker::PhantomData;
 
 use crate::sonic::cs::{Backend};
 use crate::sonic::cs::{Coeff, Variable, LinearCombination};
+use crate::sonic::util::*;
 
 /*
 s(X, Y) =   \sum\limits_{i=1}^N u_i(Y) X^{-i}
@@ -71,26 +72,33 @@ impl<E: Engine> SxEval<E> {
     pub fn finalize(self, x: E::Fr) -> E::Fr {
         let x_inv = x.inverse().unwrap(); // TODO
 
-        let mut tmp = x_inv;
-
         let mut acc = E::Fr::zero();
-        for mut u in self.u {
-            u.mul_assign(&tmp);
-            acc.add_assign(&u);
-            tmp.mul_assign(&x_inv);
-        }
 
+        let mut tmp = x_inv;
+        acc.add_assign(&evaluate_at_consequitive_powers(& self.u[..], tmp, tmp));
         let mut tmp = x;
-        for mut v in self.v {
-            v.mul_assign(&tmp);
-            acc.add_assign(&v);
-            tmp.mul_assign(&x);
-        }
-        for mut w in self.w {
-            w.mul_assign(&tmp);
-            acc.add_assign(&w);
-            tmp.mul_assign(&x);
-        }
+        acc.add_assign(&evaluate_at_consequitive_powers(& self.v[..], tmp, tmp));
+        let mut tmp = x.pow(&[(self.v.len()+1) as u64]);
+        acc.add_assign(&evaluate_at_consequitive_powers(& self.w[..], tmp, x));
+
+        // let mut tmp = x_inv;
+        // for mut u in self.u {
+        //     u.mul_assign(&tmp);
+        //     acc.add_assign(&u);
+        //     tmp.mul_assign(&x_inv);
+        // }
+
+        // let mut tmp = x;
+        // for mut v in self.v {
+        //     v.mul_assign(&tmp);
+        //     acc.add_assign(&v);
+        //     tmp.mul_assign(&x);
+        // }
+        // for mut w in self.w {
+        //     w.mul_assign(&tmp);
+        //     acc.add_assign(&w);
+        //     tmp.mul_assign(&x);
+        // }
 
         acc
     }
@@ -209,20 +217,26 @@ impl<E: Engine> SyEval<E> {
 
     pub fn finalize(self, y: E::Fr) -> E::Fr {
         let mut acc = E::Fr::zero();
-
-        let mut tmp = y;
-        for mut coeff in self.positive_coeffs {
-            coeff.mul_assign(&tmp);
-            acc.add_assign(&coeff);
-            tmp.mul_assign(&y);
-        }
         let yinv = y.inverse().unwrap(); // TODO
-        let mut tmp = yinv;
-        for mut coeff in self.negative_coeffs {
-            coeff.mul_assign(&tmp);
-            acc.add_assign(&coeff);
-            tmp.mul_assign(&yinv);
-        }
+
+        let positive_powers_contrib = evaluate_at_consequitive_powers(& self.positive_coeffs[..], y, y);
+        let negative_powers_contrib = evaluate_at_consequitive_powers(& self.negative_coeffs[..], yinv, yinv);
+        acc.add_assign(&positive_powers_contrib);
+        acc.add_assign(&negative_powers_contrib);
+
+        // let mut tmp = y;
+        // for mut coeff in self.positive_coeffs {
+        //     coeff.mul_assign(&tmp);
+        //     acc.add_assign(&coeff);
+        //     tmp.mul_assign(&y);
+        // }
+
+        // let mut tmp = yinv;
+        // for mut coeff in self.negative_coeffs {
+        //     coeff.mul_assign(&tmp);
+        //     acc.add_assign(&coeff);
+        //     tmp.mul_assign(&yinv);
+        // }
 
         acc
     }

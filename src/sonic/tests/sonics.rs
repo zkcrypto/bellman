@@ -23,22 +23,130 @@ use crate::pairing::bn256::{
 };
 
 // We'll use these interfaces to construct our circuit.
-use bellman::{
+use crate::{
     Circuit,
     ConstraintSystem,
     SynthesisError
 };
 
-// We're going to use the Groth16 proving system.
-use bellman::groth16::{
-    Proof,
-    generate_random_parameters,
-    prepare_verifying_key,
-    create_random_proof,
-    verify_proof,
-};
-
 const MIMC_ROUNDS: usize = 322;
+
+fn mimc<E: Engine>(
+    mut xl: E::Fr,
+    mut xr: E::Fr,
+    constants: &[E::Fr]
+) -> E::Fr
+{
+    assert_eq!(constants.len(), MIMC_ROUNDS);
+
+    for i in 0..MIMC_ROUNDS {
+        let mut tmp1 = xl;
+        tmp1.add_assign(&constants[i]);
+        let mut tmp2 = tmp1;
+        tmp2.square();
+        tmp2.mul_assign(&tmp1);
+        tmp2.add_assign(&xr);
+        xr = xl;
+        xl = tmp2;
+    }
+
+    xl
+}
+
+/// This is our demo circuit for proving knowledge of the
+/// preimage of a MiMC hash invocation.
+#[derive(Clone)]
+struct MiMCDemo<'a, E: Engine> {
+    xl: Option<E::Fr>,
+    xr: Option<E::Fr>,
+    constants: &'a [E::Fr]
+}
+
+/// Our demo circuit implements this `Circuit` trait which
+/// is used during paramgen and proving in order to
+/// synthesize the constraint system.
+impl<'a, E: Engine> Circuit<E> for MiMCDemo<'a, E> {
+    fn synthesize<CS: ConstraintSystem<E>>(
+        self,
+        cs: &mut CS
+    ) -> Result<(), SynthesisError>
+    {
+        assert_eq!(self.constants.len(), MIMC_ROUNDS);
+
+        // Allocate the first component of the preimage.
+        let mut xl_value = self.xl;
+        let mut xl = cs.alloc(|| "preimage xl", || {
+            xl_value.ok_or(SynthesisError::AssignmentMissing)
+        })?;
+
+        // Allocate the second component of the preimage.
+        let mut xr_value = self.xr;
+        let mut xr = cs.alloc(|| "preimage xr", || {
+            xr_value.ok_or(SynthesisError::AssignmentMissing)
+        })?;
+
+        for i in 0..MIMC_ROUNDS {
+            // xL, xR := xR + (xL + Ci)^3, xL
+            let cs = &mut cs.namespace(|| format!("round {}", i));
+
+            // tmp = (xL + Ci)^2
+            let tmp_value = xl_value.map(|mut e| {
+                e.add_assign(&self.constants[i]);
+                e.square();
+                e
+            });
+            let tmp = cs.alloc(|| "tmp", || {
+                tmp_value.ok_or(SynthesisError::AssignmentMissing)
+            })?;
+
+            cs.enforce(
+                || "tmp = (xL + Ci)^2",
+                |lc| lc + xl + (self.constants[i], CS::one()),
+                |lc| lc + xl + (self.constants[i], CS::one()),
+                |lc| lc + tmp
+            );
+
+            // new_xL = xR + (xL + Ci)^3
+            // new_xL = xR + tmp * (xL + Ci)
+            // new_xL - xR = tmp * (xL + Ci)
+            let new_xl_value = xl_value.map(|mut e| {
+                e.add_assign(&self.constants[i]);
+                e.mul_assign(&tmp_value.unwrap());
+                e.add_assign(&xr_value.unwrap());
+                e
+            });
+
+            let new_xl = if i == (MIMC_ROUNDS-1) {
+                // This is the last round, xL is our image and so
+                // we allocate a public input.
+                cs.alloc_input(|| "image", || {
+                    new_xl_value.ok_or(SynthesisError::AssignmentMissing)
+                })?
+            } else {
+                cs.alloc(|| "new_xl", || {
+                    new_xl_value.ok_or(SynthesisError::AssignmentMissing)
+                })?
+            };
+
+            cs.enforce(
+                || "new_xL = xR + (xL + Ci)^3",
+                |lc| lc + tmp,
+                |lc| lc + xl + (self.constants[i], CS::one()),
+                |lc| lc + new_xl - xr
+            );
+
+            // xR = xL
+            xr = xl;
+            xr_value = xl_value;
+
+            // xL = new_xL
+            xl = new_xl;
+            xl_value = new_xl_value;
+        }
+
+        Ok(())
+    }
+}
 
 /// This is our demo circuit for proving knowledge of the
 /// preimage of a MiMC hash invocation.
@@ -143,7 +251,7 @@ fn test_sonic_mimc() {
     use crate::pairing::{Engine, CurveAffine, CurveProjective};
     use crate::pairing::bls12_381::{Bls12, Fr};
     use std::time::{Instant};
-    use bellman::sonic::srs::SRS;
+    use crate::sonic::srs::SRS;
 
     let srs_x = Fr::from_str("23923").unwrap();
     let srs_alpha = Fr::from_str("23728792").unwrap();
@@ -174,11 +282,11 @@ fn test_sonic_mimc() {
             constants: &constants
         };
 
-        use bellman::sonic::cs::Basic;
-        use bellman::sonic::sonic::AdaptorCircuit;
-        use bellman::sonic::helped::prover::{create_advice_on_srs, create_proof_on_srs};
-        use bellman::sonic::helped::{MultiVerifier, get_circuit_parameters};
-        use bellman::sonic::helped::helper::{create_aggregate_on_srs};
+        use crate::sonic::cs::Basic;
+        use crate::sonic::sonic::AdaptorCircuit;
+        use crate::sonic::helped::prover::{create_advice_on_srs, create_proof_on_srs};
+        use crate::sonic::helped::{MultiVerifier, get_circuit_parameters};
+        use crate::sonic::helped::helper::{create_aggregate_on_srs};
 
         println!("creating proof");
         let start = Instant::now();
@@ -248,7 +356,7 @@ fn test_inputs_into_sonic_mimc() {
     use crate::pairing::bn256::{Bn256, Fr};
     // use crate::pairing::bls12_381::{Bls12, Fr};
     use std::time::{Instant};
-    use bellman::sonic::srs::SRS;
+    use crate::sonic::srs::SRS;
 
     let srs_x = Fr::from_str("23923").unwrap();
     let srs_alpha = Fr::from_str("23728792").unwrap();
@@ -278,11 +386,11 @@ fn test_inputs_into_sonic_mimc() {
             constants: &constants
         };
 
-        use bellman::sonic::cs::Basic;
-        use bellman::sonic::sonic::AdaptorCircuit;
-        use bellman::sonic::helped::prover::{create_advice_on_srs, create_proof_on_srs};
-        use bellman::sonic::helped::{MultiVerifier, get_circuit_parameters};
-        use bellman::sonic::helped::helper::{create_aggregate_on_srs};
+        use crate::sonic::cs::Basic;
+        use crate::sonic::sonic::AdaptorCircuit;
+        use crate::sonic::helped::prover::{create_advice_on_srs, create_proof_on_srs};
+        use crate::sonic::helped::{MultiVerifier, get_circuit_parameters};
+        use crate::sonic::helped::helper::{create_aggregate_on_srs};
 
         let info = get_circuit_parameters::<Bn256, _>(circuit.clone()).expect("Must get circuit info");
         println!("{:?}", info);
@@ -352,7 +460,7 @@ fn test_inputs_into_sonic_mimc() {
 fn test_high_level_sonic_api() {
     use crate::pairing::bn256::{Bn256};
     use std::time::{Instant};
-    use bellman::sonic::helped::{
+    use crate::sonic::helped::{
         generate_random_parameters, 
         verify_aggregate, 
         verify_proofs, 

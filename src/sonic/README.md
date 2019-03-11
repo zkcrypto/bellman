@@ -20,8 +20,14 @@ Initial SONIC proof system integration using the code from the [original impleme
 - [x] Basic Ethereum smart-contract
 - [x] Add blinding factors
 - [ ] Implement unhelped version
-  - [x] Implement a part of S poly precomputation (S2)
+  - [x] Implement a part of S poly precomputation (S_2)
   - [x] Implement a "well formed" argument 
   - [x] Implement a coefficients product argument
-  - [ ] Implement a premutation argument
+  - [x] Implement a premutation argument
   - [ ] Implement synthesizer for proper form of S polynomial
+- [ ] Finer tuning
+  - [x] Parallelized evaluation of S polynomial
+  - [ ] Parallelize some polynomial operations in the protocol itself
+  - [x] Parallelized kate division  
+  - [ ] Implement specialized version of polynomial multiplication by degree 1 polynomial
+  - [ ] Non-assigning variant of the "adaptor" (may require a change of SONIC CS trait)
