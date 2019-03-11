@@ -32,8 +32,8 @@ git = "https://github.com/gtank/blake2-rfc"
 rev = "7a5b5fc99ae483a0043db7547fb79a6fa44b88a9"
 
 [features]
-default = ["multicore"]
-#default = ["multicore", "gm17", "sonic"]
+#default = ["multicore"]
+default = ["multicore", "gm17", "sonic"]
 #default = ["singlecore"]
 multicore = ["futures-cpupool", "num_cpus", "crossbeam"]
 sonic = ["tiny-keccak"]

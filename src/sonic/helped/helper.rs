@@ -62,7 +62,7 @@ pub fn create_aggregate_on_srs<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
             }
         }
 
-        let mut tmp = CountN{n:0,q:0};
+        let mut tmp = CountN{n:0, q:0};
         S::synthesize(&mut tmp, circuit).unwrap(); // TODO
 
         (tmp.n, tmp.q)
@@ -139,23 +139,28 @@ pub fn create_aggregate_on_srs_using_information<E: Engine, C: Circuit<E>, S: Sy
     // Let's open up C to every y.
     fn compute_value<E: Engine>(y: &E::Fr, poly_positive: &[E::Fr], poly_negative: &[E::Fr]) -> E::Fr {
         let mut value = E::Fr::zero();
-
         let yinv = y.inverse().unwrap(); // TODO
-        let mut tmp = yinv;
-        for &coeff in poly_negative {
-            let mut coeff = coeff;
-            coeff.mul_assign(&tmp);
-            value.add_assign(&coeff);
-            tmp.mul_assign(&yinv);
-        }
 
-        let mut tmp = *y;
-        for &coeff in poly_positive {
-            let mut coeff = coeff;
-            coeff.mul_assign(&tmp);
-            value.add_assign(&coeff);
-            tmp.mul_assign(&y);
-        }
+        let positive_powers_contrib = evaluate_at_consequitive_powers(poly_positive, *y, *y);
+        let negative_powers_contrib = evaluate_at_consequitive_powers(poly_negative, yinv, yinv);
+        value.add_assign(&positive_powers_contrib);
+        value.add_assign(&negative_powers_contrib);
+
+        // let mut tmp = yinv;
+        // for &coeff in poly_negative {
+        //     let mut coeff = coeff;
+        //     coeff.mul_assign(&tmp);
+        //     value.add_assign(&coeff);
+        //     tmp.mul_assign(&yinv);
+        // }
+
+        // let mut tmp = *y;
+        // for &coeff in poly_positive {
+        //     let mut coeff = coeff;
+        //     coeff.mul_assign(&tmp);
+        //     value.add_assign(&coeff);
+        //     tmp.mul_assign(&y);
+        // }
 
         value
     }

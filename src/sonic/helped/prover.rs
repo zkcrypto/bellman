@@ -310,23 +310,6 @@ pub fn create_proof_on_srs<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
         evaluate_at_consequitive_powers(&rx1, tmp, z)
     };
 
-    // {
-    //     rx1[(2 * n + NUM_BLINDINGS)].sub_assign(&rz);
-
-    //     let opening = polynomial_commitment_opening(
-    //         2 * n + NUM_BLINDINGS,
-    //         n, 
-    //         rx1.iter(),
-    //         z,
-    //         srs
-    //     );
-
-    //     let valid_rz_commitment = check_polynomial_commitment(&r, &z, &rz, &opening, n, &srs);
-    //     assert!(valid_rz_commitment);
-
-    //     rx1[(2 * n + NUM_BLINDINGS)].add_assign(&rz);
-    // }
-
     // rzy is evaluation of r(X, Y) at z, y
     let rzy = {
         let tmp = z_inv.pow(&[(2*n + NUM_BLINDINGS) as u64]);
@@ -384,11 +367,6 @@ pub fn create_proof_on_srs<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
             z, 
             srs)
     };
-
-    // let mut zy = z;
-    // zy.mul_assign(&y);
-    // let valid_rzy_commitment = check_polynomial_commitment(&r, &zy, &rzy, &zy_opening, n, &srs);
-    // assert!(valid_rzy_commitment);
 
     Ok(Proof {
         r, rz, rzy, t, z_opening, zy_opening

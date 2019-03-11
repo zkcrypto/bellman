@@ -383,7 +383,6 @@ pub fn generate_parameters<E, C>(
 {
     let circuit_parameters = get_circuit_parameters::<E, C>(circuit)?; 
     let min_d = circuit_parameters.n * 4 + 2*NUM_BLINDINGS;
-    println!{"Mid d = {}", min_d};
 
     let srs = generate_srs(alpha, x, min_d)?;
 

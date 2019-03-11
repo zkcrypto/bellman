@@ -209,50 +209,6 @@ impl SynthesisDriver for Basic {
 
         circuit.synthesize(&mut tmp)?;
 
-        // let blindings_to_add = 6;
-
-        // for i in 0..blindings_to_add {
-
-        //     match tmp.current_variable.take() {
-        //         Some(index) => {
-        //             let var_a = Variable::A(index);
-        //             let var_b = Variable::B(index);
-        //             let var_c = Variable::C(index);
-
-        //             let mut product = None;
-
-        //             let value_a = tmp.backend.get_var(var_a);
-
-        //             tmp.backend.set_var(var_b, || {
-        //                 let value_b = E::Fr::one();
-        //                 product = Some(value_a.ok_or(SynthesisError::AssignmentMissing)?);
-        //                 product.as_mut().map(|product| product.mul_assign(&value_b));
-
-        //                 Ok(value_b)
-        //             })?;
-
-        //             tmp.backend.set_var(var_c, || {
-        //                 product.ok_or(SynthesisError::AssignmentMissing)
-        //             })?;
-
-        //             tmp.current_variable = None;
-        //         },
-        //         None => {
-        //             self.n += 1;
-        //             let index = self.n ;
-        //             tmp.backend.new_multiplication_gate();
-
-        //             let var_a = Variable::A(index);
-
-        //             tmp.backend.set_var(var_a, value)?;
-
-        //             tmp.current_variable = Some(index);
-        //         }
-        //     }
-        // }
-
-        // TODO: add blinding factors so we actually get zero-knowledge
-
         Ok(())
     }
 }
@@ -356,10 +312,6 @@ impl SynthesisDriver for Nonassigning {
             }
 
             circuit.synthesize(&mut tmp)?;
-
-            // TODO: add blinding factors so we actually get zero-knowledge
-
-            // println!("n = {}", tmp.n);
 
             Ok(())
     }
