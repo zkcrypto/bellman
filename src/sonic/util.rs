@@ -125,10 +125,15 @@ pub fn polynomial_commitment_opening<
     {
         // let poly = parallel_kate_divison::<E, _>(polynomial_coefficients, point);
 
+        use std::time::Instant;
+        let start = Instant::now();
+
         let poly = kate_divison(
             polynomial_coefficients,
             point,
         );
+
+        println!("Kate division of size {} taken {:?}", poly.len(), start.elapsed());
 
         let negative_poly = poly[0..largest_negative_power].iter().rev();
         let positive_poly = poly[largest_negative_power..].iter();

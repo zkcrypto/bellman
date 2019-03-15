@@ -507,9 +507,9 @@ fn test_high_level_sonic_api() {
         println!("done in {:?}", start.elapsed());
 
         println!("creating aggregate for {} proofs", samples);
-        let start = Instant::now();
         let proofs: Vec<_> = (0..samples).map(|_| (proof.clone(), advice.clone())).collect();
 
+        let start = Instant::now();
         let aggregate = create_aggregate::<Bn256, _>(circuit.clone(), &proofs, &params);
         println!("done in {:?}", start.elapsed());
 
