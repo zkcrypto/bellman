@@ -123,12 +123,12 @@ pub fn polynomial_commitment_opening<
     ) -> E::G1Affine
         where I::IntoIter: DoubleEndedIterator + ExactSizeIterator,
     {
-        let poly = parallel_kate_divison::<E, _>(polynomial_coefficients, point);
+        // let poly = parallel_kate_divison::<E, _>(polynomial_coefficients, point);
 
-        // let poly = kate_divison(
-        //     polynomial_coefficients,
-        //     point,
-        // );
+        let poly = kate_divison(
+            polynomial_coefficients,
+            point,
+        );
 
         let negative_poly = poly[0..largest_negative_power].iter().rev();
         let positive_poly = poly[largest_negative_power..].iter();
