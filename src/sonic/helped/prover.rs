@@ -253,7 +253,7 @@ pub fn create_proof_on_srs<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
     );
     
     // negative powers [-1, -2n], positive [1, n]
-    let (s_poly_negative, s_poly_positive) = {
+    let (mut s_poly_negative, s_poly_positive) = {
         let mut tmp = SxEval::new(y, n);
         S::synthesize(&mut tmp, circuit)?;
 
@@ -266,18 +266,26 @@ pub fn create_proof_on_srs<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
     {
         // extend to have powers [n+1, 2n]
         rxy_prime.resize(4 * n + 1 + NUM_BLINDINGS, E::Fr::zero());
-        // add coefficients in front of X^{-2n}...X^{-n-1}, X^{-n}...X^{-1}
-        for (r, s) in rxy_prime[NUM_BLINDINGS..(2 * n + NUM_BLINDINGS)]
-            .iter_mut()
-            .rev()
-            .zip(s_poly_negative)
-        {
-            r.add_assign(&s);
-        }
-        // add coefficients in front of X^{1}...X^{n}, X^{n+1}...X^{2*n}
-        for (r, s) in rxy_prime[(2 * n + 1 + NUM_BLINDINGS)..].iter_mut().zip(s_poly_positive) {
-            r.add_assign(&s);
-        }
+        s_poly_negative.reverse();
+
+        let neg_poly_len = s_poly_negative.len();
+        add_polynomials(&mut rxy_prime[(NUM_BLINDINGS+neg_poly_len)..(2 * n + NUM_BLINDINGS)], &s_poly_negative[..]);
+        s_poly_negative.reverse();
+
+        add_polynomials(&mut rxy_prime[(2 * n + 1 + NUM_BLINDINGS)..], &s_poly_positive[..])
+        
+        // // add coefficients in front of X^{-2n}...X^{-n-1}, X^{-n}...X^{-1}
+        // for (r, s) in rxy_prime[NUM_BLINDINGS..(2 * n + NUM_BLINDINGS)]
+        //     .iter_mut()
+        //     .rev()
+        //     .zip(s_poly_negative)
+        // {
+        //     r.add_assign(&s);
+        // }
+        // // add coefficients in front of X^{1}...X^{n}, X^{n+1}...X^{2*n}
+        // for (r, s) in rxy_prime[(2 * n + 1 + NUM_BLINDINGS)..].iter_mut().zip(s_poly_positive) {
+        //     r.add_assign(&s);
+        // }
     }
 
     // by this point all R related polynomials are blinded and evaluated for Y variable
@@ -344,12 +352,15 @@ pub fn create_proof_on_srs<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
     let z_opening = {
         rx1[(2 * n + NUM_BLINDINGS)].add_assign(&rzy); // restore
 
-        // skip powers from until reach -2n - NUM_BLINDINGS
-        for (t, &r) in txy[(2 * n + NUM_BLINDINGS)..].iter_mut().zip(rx1.iter()) {
-            let mut r = r;
-            r.mul_assign(&r1);
-            t.add_assign(&r);
-        }
+        let rx1_len = rx1.len();
+        mul_add_polynomials(&mut txy[(2 * n + NUM_BLINDINGS)..(2 * n + NUM_BLINDINGS + rx1_len)], &rx1[..], r1);
+
+        // // skip powers from until reach -2n - NUM_BLINDINGS
+        // for (t, &r) in txy[(2 * n + NUM_BLINDINGS)..].iter_mut().zip(rx1.iter()) {
+        //     let mut r = r;
+        //     r.mul_assign(&r1);
+        //     t.add_assign(&r);
+        // }
 
         let val = {
             let tmp = z_inv.pow(&[(4*n + 2*NUM_BLINDINGS) as u64]);

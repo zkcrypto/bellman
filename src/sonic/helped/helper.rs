@@ -120,22 +120,29 @@ pub fn create_aggregate_on_srs_using_information<E: Engine, C: Circuit<E>, S: Sy
         let mut value = value;
         value.negate();
 
-        let poly = kate_divison(
+        polynomial_commitment_opening(
+            n,
+            0,
             s_poly_negative.iter().rev().chain_ext(Some(value).iter()).chain_ext(s_poly_positive.iter()),
             w,
-        );
+            &srs
+        )
 
-        let negative_poly = poly[0..n].iter().rev();
-        let positive_poly = poly[n..].iter();
-        multiexp(
-            srs.g_negative_x[1..(negative_poly.len() + 1)].iter().chain_ext(
-                srs.g_positive_x[0..positive_poly.len()].iter()
-            ),
-            negative_poly.chain_ext(positive_poly)
-        ).into_affine()
+        // let poly = kate_divison(
+        //     s_poly_negative.iter().rev().chain_ext(Some(value).iter()).chain_ext(s_poly_positive.iter()),
+        //     w,
+        // );
+
+        // let negative_poly = poly[0..n].iter().rev();
+        // let positive_poly = poly[n..].iter();
+        // multiexp(
+        //     srs.g_negative_x[1..(negative_poly.len() + 1)].iter().chain_ext(
+        //         srs.g_positive_x[0..positive_poly.len()].iter()
+        //     ),
+        //     negative_poly.chain_ext(positive_poly)
+        // ).into_affine()
     };
 
-    // TODO: parallelize
     // Let's open up C to every y.
     fn compute_value<E: Engine>(y: &E::Fr, poly_positive: &[E::Fr], poly_negative: &[E::Fr]) -> E::Fr {
         let mut value = E::Fr::zero();
@@ -173,19 +180,27 @@ pub fn create_aggregate_on_srs_using_information<E: Engine, C: Circuit<E>, S: Sy
             let mut value = value;
             value.negate();
 
-            let poly = kate_divison(
+            polynomial_commitment_opening(
+                n,
+                0,
                 s_poly_negative.iter().rev().chain_ext(Some(value).iter()).chain_ext(s_poly_positive.iter()),
                 *y,
-            );
+                &srs
+            )
 
-            let negative_poly = poly[0..n].iter().rev();
-            let positive_poly = poly[n..].iter();
-            multiexp(
-                srs.g_negative_x[1..(negative_poly.len() + 1)].iter().chain_ext(
-                    srs.g_positive_x[0..positive_poly.len()].iter()
-                ),
-                negative_poly.chain_ext(positive_poly)
-            ).into_affine()
+            // let poly = kate_divison(
+            //     s_poly_negative.iter().rev().chain_ext(Some(value).iter()).chain_ext(s_poly_positive.iter()),
+            //     *y,
+            // );
+
+            // let negative_poly = poly[0..n].iter().rev();
+            // let positive_poly = poly[n..].iter();
+            // multiexp(
+            //     srs.g_negative_x[1..(negative_poly.len() + 1)].iter().chain_ext(
+            //         srs.g_positive_x[0..positive_poly.len()].iter()
+            //     ),
+            //     negative_poly.chain_ext(positive_poly)
+            // ).into_affine()
         };
 
         c_openings.push((opening, value));
@@ -213,35 +228,45 @@ pub fn create_aggregate_on_srs_using_information<E: Engine, C: Circuit<E>, S: Sy
         value.mul_assign(&r);
         expected_value.add_assign(&value);
 
-        for (mut coeff, target) in s_poly_negative.into_iter().zip(poly_negative.iter_mut()) {
-            coeff.mul_assign(&r);
-            target.add_assign(&coeff);
-        }
+        mul_add_polynomials(& mut poly_negative[..], &s_poly_negative[..], r);
+        mul_add_polynomials(& mut poly_positive[..], &s_poly_positive[..], r);
 
-        for (mut coeff, target) in s_poly_positive.into_iter().zip(poly_positive.iter_mut()) {
-            coeff.mul_assign(&r);
-            target.add_assign(&coeff);
-        }
+        // for (mut coeff, target) in s_poly_negative.into_iter().zip(poly_negative.iter_mut()) {
+        //     coeff.mul_assign(&r);
+        //     target.add_assign(&coeff);
+        // }
+
+        // for (mut coeff, target) in s_poly_positive.into_iter().zip(poly_positive.iter_mut()) {
+        //     coeff.mul_assign(&r);
+        //     target.add_assign(&coeff);
+        // }
     }
 
-    // TODO: parallelize
     let s_opening = {
         let mut value = expected_value;
         value.negate();
 
-        let poly = kate_divison(
+        polynomial_commitment_opening(
+            n,
+            0,
             poly_negative.iter().rev().chain_ext(Some(value).iter()).chain_ext(poly_positive.iter()),
             z,
-        );
+            &srs
+        )
 
-        let negative_poly = poly[0..n].iter().rev();
-        let positive_poly = poly[n..].iter();
-        multiexp(
-            srs.g_negative_x[1..(negative_poly.len() + 1)].iter().chain_ext(
-                srs.g_positive_x[0..positive_poly.len()].iter()
-            ),
-            negative_poly.chain_ext(positive_poly)
-        ).into_affine()
+        // let poly = kate_divison(
+        //     poly_negative.iter().rev().chain_ext(Some(value).iter()).chain_ext(poly_positive.iter()),
+        //     z,
+        // );
+
+        // let negative_poly = poly[0..n].iter().rev();
+        // let positive_poly = poly[n..].iter();
+        // multiexp(
+        //     srs.g_negative_x[1..(negative_poly.len() + 1)].iter().chain_ext(
+        //         srs.g_positive_x[0..positive_poly.len()].iter()
+        //     ),
+        //     negative_poly.chain_ext(positive_poly)
+        // ).into_affine()
     };
 
     Aggregate {
