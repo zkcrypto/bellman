@@ -240,7 +240,6 @@ pub fn create_proof_on_srs<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
     rx1.push(E::Fr::zero());
     rx1.extend(wires.a);
 
-
     let mut rxy = rx1.clone();
 
     let y_inv = y.inverse().ok_or(SynthesisError::DivisionByZero)?;

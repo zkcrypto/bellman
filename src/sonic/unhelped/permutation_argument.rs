@@ -43,8 +43,6 @@ pub struct Proof<E: Engine> {
     s_zy: E::Fr
 }
 
-
-
 fn permute<F: Field>(coeffs: &[F], permutation: & [usize]) -> Vec<F>{
     assert_eq!(coeffs.len(), permutation.len());
     let mut result: Vec<F> = vec![F::zero(); coeffs.len()];

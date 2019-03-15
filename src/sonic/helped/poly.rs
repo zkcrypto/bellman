@@ -74,11 +74,11 @@ impl<E: Engine> SxEval<E> {
 
         let mut acc = E::Fr::zero();
 
-        let mut tmp = x_inv;
+        let tmp = x_inv;
         acc.add_assign(&evaluate_at_consequitive_powers(& self.u[..], tmp, tmp));
-        let mut tmp = x;
+        let tmp = x;
         acc.add_assign(&evaluate_at_consequitive_powers(& self.v[..], tmp, tmp));
-        let mut tmp = x.pow(&[(self.v.len()+1) as u64]);
+        let tmp = x.pow(&[(self.v.len()+1) as u64]);
         acc.add_assign(&evaluate_at_consequitive_powers(& self.w[..], tmp, x));
 
         // let mut tmp = x_inv;
