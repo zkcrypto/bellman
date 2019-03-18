@@ -214,6 +214,7 @@ pub fn create_aggregate_on_srs_using_information<E: Engine, C: Circuit<E>, S: Sy
     let mut poly_positive = vec![E::Fr::zero(); 2*n];
     let mut expected_value = E::Fr::zero();
 
+    // TODO: this part can be further parallelized due to synthesis of S(X, y) being singlethreaded
     for (y, c_opening) in y_values.iter().zip(c_openings.iter()) {
         // Compute s(X, y_i)
         let (s_poly_negative, s_poly_positive) = {
