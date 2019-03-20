@@ -101,7 +101,7 @@ impl<E: Engine, G: Group<E>> EvaluationDomain<E, G> {
                     }
                 });
             }
-        });
+        }).unwrap();
     }
 
     pub fn distribute_powers(&mut self, worker: &Worker, g: E::Fr)
@@ -116,7 +116,7 @@ impl<E: Engine, G: Group<E>> EvaluationDomain<E, G> {
                     }
                 });
             }
-        });
+        }).unwrap();
     }
 
     pub fn coset_fft(&mut self, worker: &Worker)
@@ -157,7 +157,7 @@ impl<E: Engine, G: Group<E>> EvaluationDomain<E, G> {
                     }
                 });
             }
-        });
+        }).unwrap();
     }
 
     /// Perform O(n) multiplication of two polynomials in the domain.
@@ -172,7 +172,7 @@ impl<E: Engine, G: Group<E>> EvaluationDomain<E, G> {
                     }
                 });
             }
-        });
+        }).unwrap();
     }
 
     /// Perform O(n) subtraction of one polynomial from another in the domain.
@@ -187,7 +187,7 @@ impl<E: Engine, G: Group<E>> EvaluationDomain<E, G> {
                     }
                 });
             }
-        });
+        }).unwrap();
     }
 }
 
@@ -356,7 +356,7 @@ fn parallel_fft<E: Engine, T: Group<E>>(
                 serial_fft(tmp, &new_omega, log_new_n);
             });
         }
-    });
+    }).unwrap();
 
     // TODO: does this hurt or help?
     worker.scope(a.len(), |scope, chunk| {
@@ -372,7 +372,7 @@ fn parallel_fft<E: Engine, T: Group<E>>(
                 }
             });
         }
-    });
+    }).unwrap();
 }
 
 // Test multiplying various (low degree) polynomials together and

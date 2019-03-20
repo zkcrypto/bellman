@@ -260,7 +260,7 @@ pub fn generate_parameters<E, C>(
                         }
                     });
                 }
-            });
+            }).unwrap();
         }
 
         // coeff = t(x) / delta
@@ -289,7 +289,7 @@ pub fn generate_parameters<E, C>(
                     E::G1::batch_normalization(h);
                 });
             }
-        });
+        }).unwrap();
     }
 
     // Use inverse FFT to convert powers of tau to Lagrange coefficients
@@ -413,7 +413,7 @@ pub fn generate_parameters<E, C>(
                     E::G1::batch_normalization(ext);
                 });
             }
-        });
+        }).unwrap();
     }
 
     // Evaluate for inputs.
