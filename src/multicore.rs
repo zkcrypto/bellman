@@ -4,10 +4,11 @@
 //! crossbeam but may be extended in the future to
 //! allow for various parallelism strategies.
 
+use std::any::Any;
 use num_cpus;
 use futures::{Future, IntoFuture, Poll};
 use futures_cpupool::{CpuPool, CpuFuture};
-use crossbeam::{self, Scope};
+use crossbeam::thread::{self, Scope};
 
 #[derive(Clone)]
 pub struct Worker {
@@ -52,7 +53,7 @@ impl Worker {
         &self,
         elements: usize,
         f: F
-    ) -> R
+    ) -> Result<R, Box<dyn Any + 'static + Send>>
         where F: FnOnce(&Scope<'a>, usize) -> R
     {
         let chunk_size = if elements < self.cpus {
@@ -61,7 +62,7 @@ impl Worker {
             elements / self.cpus
         };
 
-        crossbeam::scope(|scope| {
+        thread::scope(|scope| {
             f(scope, chunk_size)
         })
     }
