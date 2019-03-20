@@ -6,7 +6,7 @@ homepage = "https://github.com/ebfull/bellman"
 license = "MIT/Apache-2.0"
 name = "bellman"
 repository = "https://github.com/ebfull/bellman"
-version = "0.1.0"
+version = "0.1.1"
 
 [dependencies]
 rand = "0.4"
@@ -19,7 +19,7 @@ byteorder = "1"
 ff = "0.4.0"
 
 [dependencies.pairing]
-git = "https://github.com/zkcrypto/pairing"
+git = "https://github.com/filecoin-project/pairing"
 branch = "master"
 
 [features]
