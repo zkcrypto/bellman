@@ -1,6 +1,7 @@
 extern crate bellman;
 extern crate pairing;
 extern crate rand;
+extern crate ff;
 
 // For randomness (during paramgen and proof generation)
 use rand::{thread_rng, Rng};
@@ -9,10 +10,9 @@ use rand::{thread_rng, Rng};
 use std::time::{Duration, Instant};
 
 // Bring in some tools for using pairing-friendly curves
-use pairing::{
-    Engine,
-    Field
-};
+use pairing::Engine;
+
+use ff::Field;
 
 // We're going to use the BLS12-381 pairing-friendly elliptic curve.
 use pairing::bls12_381::{
@@ -39,7 +39,7 @@ const MIMC_ROUNDS: usize = 322;
 
 /// This is an implementation of MiMC, specifically a
 /// variant named `LongsightF322p3` for BLS12-381.
-/// See http://eprint.iacr.org/2016/492 for more 
+/// See http://eprint.iacr.org/2016/492 for more
 /// information about this construction.
 ///
 /// ```

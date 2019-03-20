@@ -216,7 +216,7 @@ impl<E: Engine> VerifyingKey<E> {
 pub struct Parameters<E: Engine> {
     pub vk: VerifyingKey<E>,
 
-    // Elements of the form ((tau^i * t(tau)) / delta) for i between 0 and 
+    // Elements of the form ((tau^i * t(tau)) / delta) for i between 0 and
     // m-2 inclusive. Never contains points at infinity.
     pub h: Arc<Vec<E::G1Affine>>,
 
@@ -487,7 +487,7 @@ mod test_with_bls12_381 {
     use {Circuit, SynthesisError, ConstraintSystem};
 
     use rand::{Rand, thread_rng};
-    use pairing::{Field};
+    use ff::Field;
     use pairing::bls12_381::{Bls12, Fr};
 
     #[test]

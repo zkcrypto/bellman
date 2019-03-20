@@ -6,10 +6,13 @@ use futures::Future;
 
 use pairing::{
     Engine,
-    PrimeField,
-    Field,
     CurveProjective,
     CurveAffine
+};
+
+use ff::{
+    PrimeField,
+    Field,
 };
 
 use super::{
@@ -286,7 +289,7 @@ pub fn create_proof<E, C, P: ParameterSource<E>>(
     let b_g1_aux = multiexp(&worker, b_g1_aux_source, b_aux_density.clone(), aux_assignment.clone());
 
     let (b_g2_inputs_source, b_g2_aux_source) = params.get_b_g2(b_input_density_total, b_aux_density_total)?;
-    
+
     let b_g2_inputs = multiexp(&worker, b_g2_inputs_source, b_input_density, input_assignment);
     let b_g2_aux = multiexp(&worker, b_g2_aux_source, b_aux_density, aux_assignment);
 

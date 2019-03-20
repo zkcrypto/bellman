@@ -1,15 +1,18 @@
 use pairing::{
     Engine,
+    CurveProjective,
+    CurveAffine,
+    GroupDecodingError,
+    EncodedPoint
+};
+use ff::{
+    ScalarEngine,
+    LegendreSymbol,
     PrimeField,
     PrimeFieldRepr,
     Field,
     SqrtField,
-    LegendreSymbol,
-    CurveProjective,
-    CurveAffine,
     PrimeFieldDecodingError,
-    GroupDecodingError,
-    EncodedPoint
 };
 
 use std::cmp::Ordering;
@@ -263,15 +266,18 @@ impl PrimeField for Fr {
 #[derive(Clone)]
 pub struct DummyEngine;
 
-impl Engine for DummyEngine {
+impl ScalarEngine for DummyEngine {
     type Fr = Fr;
+}
+
+impl Engine for DummyEngine {
     type G1 = Fr;
     type G1Affine = Fr;
     type G2 = Fr;
     type G2Affine = Fr;
     type Fq = Fr;
     type Fqe = Fr;
-    
+
     // TODO: This should be F_645131 or something. Doesn't matter for now.
     type Fqk = Fr;
 
@@ -318,7 +324,7 @@ impl CurveProjective for Fr {
     }
 
     fn batch_normalization(_: &mut [Self]) {
-        
+
     }
 
     fn is_normalized(&self) -> bool {

@@ -2,8 +2,9 @@ use pairing::{
     Engine,
     CurveProjective,
     CurveAffine,
-    PrimeField
 };
+
+use ff::PrimeField;
 
 use super::{
     Proof,
