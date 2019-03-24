@@ -1,4 +1,4 @@
-use super::super::verbose_flag;
+use crate::log::Stopwatch;
 
 use rand::Rng;
 
@@ -187,8 +187,6 @@ pub fn generate_parameters<E, C>(
 ) -> Result<Parameters<E>, SynthesisError>
     where E: Engine, C: Circuit<E>
 {
-    let verbose = verbose_flag();
-
     let mut assembly = KeypairAssembly {
         num_inputs: 0,
         num_aux: 0,
@@ -217,7 +215,7 @@ pub fn generate_parameters<E, C>(
         );
     }
 
-    if verbose {eprintln!("Making {} powers of tau", assembly.num_constraints)};
+    elog_verbose!("Making {} powers of tau", assembly.num_constraints);
     // Create bases for blind evaluation of polynomials at tau
     let powers_of_tau = vec![Scalar::<E>(E::Fr::zero()); assembly.num_constraints];
     let mut powers_of_tau = EvaluationDomain::from_coeffs(powers_of_tau)?;
@@ -250,9 +248,9 @@ pub fn generate_parameters<E, C>(
     let mut h = vec![E::G1::zero(); powers_of_tau.as_ref().len() - 1];
     {
         // Compute powers of tau
-        if verbose {eprintln!("computing powers of tau...")};
+        elog_verbose!("computing powers of tau...");
 
-        let start = std::time::Instant::now();
+        let stopwatch = Stopwatch::new();
 
         {
             let powers_of_tau = powers_of_tau.as_mut();
@@ -270,15 +268,15 @@ pub fn generate_parameters<E, C>(
                 }
             });
         }
-        if verbose {eprintln!("powers of tau stage 1 done in {} s", start.elapsed().as_millis() as f64 / 1000.0);};
+        elog_verbose!("powers of tau stage 1 done in {} s", stopwatch.elapsed());
 
         // coeff = t(x) / delta
         let mut coeff = powers_of_tau.z(&tau);
         coeff.mul_assign(&delta_inverse);
 
-        if verbose {eprintln!("computing the H query with multiple threads...")};
+        elog_verbose!("computing the H query with multiple threads...");
 
-        let start = std::time::Instant::now();
+        let stopwatch = Stopwatch::new();
 
         // Compute the H query with multiple threads
         worker.scope(h.len(), |scope, chunk| {
@@ -302,27 +300,26 @@ pub fn generate_parameters<E, C>(
                 });
             }
         });
-        if verbose {eprintln!("computing the H query done in {} s", start.elapsed().as_millis() as f64 / 1000.0);};
+        elog_verbose!("computing the H query done in {} s", stopwatch.elapsed());
     }
 
-    if verbose {eprintln!("using inverse FFT to convert powers of tau to Lagrange coefficients...")};
-    
-    let start = std::time::Instant::now();
+    elog_verbose!("using inverse FFT to convert powers of tau to Lagrange coefficients...");
+
+    let stopwatch = Stopwatch::new();
 
     // Use inverse FFT to convert powers of tau to Lagrange coefficients
     powers_of_tau.ifft(&worker);
     let powers_of_tau = powers_of_tau.into_coeffs();
 
-    if verbose {eprintln!("powers of tau stage 2 done in {} s", start.elapsed().as_millis() as f64 / 1000.0)};
-
+    elog_verbose!("powers of tau stage 2 done in {} s", stopwatch.elapsed());
     let mut a = vec![E::G1::zero(); assembly.num_inputs + assembly.num_aux];
     let mut b_g1 = vec![E::G1::zero(); assembly.num_inputs + assembly.num_aux];
     let mut b_g2 = vec![E::G2::zero(); assembly.num_inputs + assembly.num_aux];
     let mut ic = vec![E::G1::zero(); assembly.num_inputs];
     let mut l = vec![E::G1::zero(); assembly.num_aux];
 
-    if verbose {eprintln!("evaluating polynomials...")};
-    let start = std::time::Instant::now();
+    elog_verbose!("evaluating polynomials...");
+    let stopwatch = Stopwatch::new();
 
     fn eval<E: Engine>(
         // wNAF window tables
@@ -475,7 +472,7 @@ pub fn generate_parameters<E, C>(
         &worker
     );
 
-    if verbose {eprintln!("evaluating polynomials done in {} s", start.elapsed().as_millis() as f64 / 1000.0);};
+    elog_verbose!("evaluating polynomials done in {} s", stopwatch.elapsed());
 
     // Don't allow any elements be unconstrained, so that
     // the L query is always fully dense.
@@ -498,7 +495,7 @@ pub fn generate_parameters<E, C>(
         ic: ic.into_iter().map(|e| e.into_affine()).collect()
     };
 
-    println!("Has generated {} points", a.len());
+    log!("Has generated {} points", a.len());
 
     Ok(Parameters {
         vk: vk,

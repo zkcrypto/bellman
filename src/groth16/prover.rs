@@ -1,4 +1,4 @@
-use super::super::verbose_flag;
+use crate::log::Stopwatch;
 
 use rand::Rng;
 
@@ -164,20 +164,18 @@ impl<E:Engine> PreparedProver<E> {
         s: E::Fr
     ) -> Result<Proof<E>, SynthesisError>
     {
-        let verbose = verbose_flag();
-
         let prover = self.assignment.clone();
         let worker = Worker::new();
 
         let vk = params.get_vk(self.assignment.input_assignment.len())?;
 
-        let start = std::time::Instant::now();
+        let stopwatch = Stopwatch::new();
 
         let h = {
             let mut a = EvaluationDomain::from_coeffs(prover.a)?;
             let mut b = EvaluationDomain::from_coeffs(prover.b)?;
             let mut c = EvaluationDomain::from_coeffs(prover.c)?;
-            if verbose {eprintln!("H query domain size is {}", a.as_ref().len())};
+            elog_verbose!("H query domain size is {}", a.as_ref().len());
 
             // here a coset is a domain where denominator (z) does not vanish
             // inverse FFT is an interpolation
@@ -209,9 +207,9 @@ impl<E:Engine> PreparedProver<E> {
             multiexp(&worker, params.get_h(a.len())?, FullDensity, a)
         };
 
-        if verbose {eprintln!("{} seconds for prover for H evaluation (mostly FFT)", start.elapsed().as_millis() as f64 / 1000.0)};
+        elog_verbose!("{} seconds for prover for H evaluation (mostly FFT)", stopwatch.elapsed());
 
-        let start = std::time::Instant::now();
+        let stopwatch = Stopwatch::new();
 
         // TODO: Check that difference in operations for different chunks is small
 
@@ -222,9 +220,8 @@ impl<E:Engine> PreparedProver<E> {
 
         let input_len = input_assignment.len();
         let aux_len = aux_assignment.len();
-        if verbose {eprintln!("H query is dense in G1,\nOther queries are {} elements in G1 and {} elements in G2",
-            2*(input_len + aux_len) + aux_len, input_len + aux_len)
-        };
+        elog_verbose!("H query is dense in G1,\nOther queries are {} elements in G1 and {} elements in G2",
+            2*(input_len + aux_len) + aux_len, input_len + aux_len);
 
         // Run a dedicated process for dense vector
         let l = multiexp(&worker, params.get_l(aux_assignment.len())?, FullDensity, aux_assignment.clone());
@@ -287,7 +284,7 @@ impl<E:Engine> PreparedProver<E> {
         g_c.add_assign(&h.wait()?);
         g_c.add_assign(&l.wait()?);
 
-        if verbose {eprintln!("{} seconds for prover for point multiplication", start.elapsed().as_millis() as f64 / 1000.0)};
+        elog_verbose!("{} seconds for prover for point multiplication", stopwatch.elapsed());
 
         Ok(Proof {
             a: g_a.into_affine(),
@@ -411,8 +408,6 @@ pub fn create_proof<E, C, P: ParameterSource<E>>(
 ) -> Result<Proof<E>, SynthesisError>
     where E: Engine, C: Circuit<E>
 {
-    let verbose = verbose_flag();
-
     let mut prover = ProvingAssignment {
         a_aux_density: DensityTracker::new(),
         b_input_density: DensityTracker::new(),
@@ -440,13 +435,13 @@ pub fn create_proof<E, C, P: ParameterSource<E>>(
 
     let vk = params.get_vk(prover.input_assignment.len())?;
 
-    let start = std::time::Instant::now();
+    let stopwatch = Stopwatch::new();
 
     let h = {
         let mut a = EvaluationDomain::from_coeffs(prover.a)?;
         let mut b = EvaluationDomain::from_coeffs(prover.b)?;
         let mut c = EvaluationDomain::from_coeffs(prover.c)?;
-        if verbose {eprintln!("H query domain size is {}", a.as_ref().len())};
+        elog_verbose!("H query domain size is {}", a.as_ref().len());
         // here a coset is a domain where denominator (z) does not vanish
         // inverse FFT is an interpolation
         a.ifft(&worker);
@@ -477,9 +472,9 @@ pub fn create_proof<E, C, P: ParameterSource<E>>(
         multiexp(&worker, params.get_h(a.len())?, FullDensity, a)
     };
 
-    if verbose {eprintln!("{} seconds for prover for H evaluation (mostly FFT)", start.elapsed().as_millis() as f64 / 1000.0)};
+    elog_verbose!("{} seconds for prover for H evaluation (mostly FFT)", stopwatch.elapsed());
 
-    let start = std::time::Instant::now();
+    let stopwatch = Stopwatch::new();
 
     // TODO: Check that difference in operations for different chunks is small
 
@@ -549,7 +544,7 @@ pub fn create_proof<E, C, P: ParameterSource<E>>(
     g_c.add_assign(&h.wait()?);
     g_c.add_assign(&l.wait()?);
 
-    if verbose {eprintln!("{} seconds for prover for point multiplication", start.elapsed().as_millis() as f64 / 1000.0)};
+    elog_verbose!("{} seconds for prover for point multiplication", stopwatch.elapsed());
 
     Ok(Proof {
         a: g_a.into_affine(),
