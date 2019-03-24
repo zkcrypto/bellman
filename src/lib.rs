@@ -1,5 +1,7 @@
 #![allow(unused_imports)]
+#[macro_use]
 
+extern crate cfg_if;
 extern crate pairing as pairing_import;
 extern crate rand;
 extern crate bit_vec;
@@ -20,18 +22,18 @@ mod multiexp;
 #[cfg(test)]
 mod tests;
 
-#[cfg(feature = "multicore")]
-mod multicore;
-
-#[cfg(feature = "singlecore")]
-mod singlecore;
-
-mod worker {
-    #[cfg(feature = "multicore")]
-    pub use crate::multicore::*;
-
-    #[cfg(feature = "singlecore")]
-    pub use crate::singlecore::*;
+cfg_if! {
+    if #[cfg(feature = "multicore")] {
+        mod multicore;
+        mod worker {
+            pub use crate::multicore::*;
+        }
+    } else {
+        mod singlecore;
+        mod worker {
+            pub use crate::singlecore::*;
+        }
+    }
 }
 
 pub mod pairing {

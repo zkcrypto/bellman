@@ -16,6 +16,7 @@ crate-type = ["cdylib", "lib", "staticlib"]
 rand = "0.4"
 bit-vec = "0.4.4"
 futures = "0.1"
+cfg-if = "0.1.7"
 
 pairing = { git = 'https://github.com/matterinc/pairing', tag = "0.16.2" }
 #pairing = { path = "../pairing" }
