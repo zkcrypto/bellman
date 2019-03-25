@@ -7,6 +7,8 @@
 
 #[cfg(feature = "multicore")]
 mod implementation {
+    use std::env;
+
     use crossbeam::{self, thread::Scope};
     use futures::{Future, IntoFuture, Poll};
     use futures_cpupool::{CpuFuture, CpuPool};
@@ -30,7 +32,17 @@ mod implementation {
         }
 
         pub fn new() -> Worker {
-            Self::new_with_cpus(num_cpus::get())
+            let cpus = if let Ok(num) = env::var("BELLMAN_NUM_CPUS") {
+                if let Ok(num) = num.parse() {
+                    num
+                } else {
+                    num_cpus::get()
+                }
+            } else {
+                num_cpus::get()
+            };
+
+            Self::new_with_cpus(cpus)
         }
 
         pub fn log_num_cpus(&self) -> u32 {
