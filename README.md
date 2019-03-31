@@ -11,6 +11,11 @@ Licensed under either of
 
 at your option.
 
+### Code Examples:
+
+- [Edcon2019_material](https://github.com/matter-labs/Edcon2019_material)
+- [EDCON Workshop record (youtube): Intro to bellman: Practical zkSNARKs constructing for Ethereum](https://www.youtube.com/watch?v=tUY0YGTpehg&t=74s)
+
 ### Contribution
 
 Unless you explicitly state otherwise, any contribution intentionally
