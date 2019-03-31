@@ -2,8 +2,8 @@
 /// in those two polynomials are equal (part of the permutation argument) with additional assumption that
 /// those coefficients are never equal to zero
 
-use pairing::ff::{Field, PrimeField, PrimeFieldRepr};
-use pairing::{Engine, CurveProjective, CurveAffine};
+use crate::pairing::ff::{Field, PrimeField, PrimeFieldRepr};
+use crate::pairing::{Engine, CurveProjective, CurveAffine};
 use std::marker::PhantomData;
 
 use crate::sonic::srs::SRS;
@@ -658,7 +658,7 @@ impl<E: Engine> GrandProductArgument<E> {
 
 #[test]
 fn test_grand_product_argument() {
-    use pairing::bls12_381::{Fr, G1Affine, G1, Bls12};
+    use crate::pairing::bls12_381::{Fr, G1Affine, G1, Bls12};
     use rand::{XorShiftRng, SeedableRng, Rand, Rng};
     use crate::sonic::srs::SRS;
 

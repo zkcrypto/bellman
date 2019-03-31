@@ -1,5 +1,5 @@
-use pairing::ff::{Field};
-use pairing::{Engine};
+use crate::pairing::ff::{Field};
+use crate::pairing::{Engine};
 use std::ops::{Add, Sub, Neg};
 
 /// This represents a linear combination of some variables, with coefficients

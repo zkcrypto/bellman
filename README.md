@@ -1,6 +1,6 @@
 # bellman "Community edition"
  
-Originally developed for ZCash, with extensions from us to make it a little more pleasant. Uses our "community edition" pairing for Ethereum's BN256 curve.
+Originally developed for ZCash, with extensions from us to make it a little more pleasant. Uses our "community edition" pairing for Ethereum's BN256 curve. Now published as `bellman_ce` on `crate.io` to allow ease of use.
 
 ## License
 

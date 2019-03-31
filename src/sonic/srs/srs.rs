@@ -1,5 +1,5 @@
-use pairing::ff::{Field, PrimeField};
-use pairing::{CurveAffine, CurveProjective, Engine, Wnaf};
+use crate::pairing::ff::{Field, PrimeField};
+use crate::pairing::{CurveAffine, CurveProjective, Engine, Wnaf};
 
 use std::io::{self, Read, Write};
 use std::sync::Arc;
@@ -169,7 +169,7 @@ impl<E: Engine> SRS<E> {
         checked: bool
     ) -> io::Result<Self>
     {
-        use pairing::EncodedPoint;
+        use crate::pairing::EncodedPoint;
 
         let read_g1 = |reader: &mut R| -> io::Result<E::G1Affine> {
             let mut repr = <E::G1Affine as CurveAffine>::Uncompressed::empty();

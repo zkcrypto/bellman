@@ -3,7 +3,7 @@
 #[macro_use]
 
 extern crate cfg_if;
-extern crate pairing as pairing_import;
+extern crate pairing_ce as pairing_import;
 extern crate rand;
 extern crate bit_vec;
 extern crate byteorder;
@@ -50,20 +50,9 @@ pub mod pairing {
 mod cs;
 pub use self::cs::*;
 
-// todo move to log module after removing all references
-static mut VERBOSE_SWITCH: i8 = -1;
-
 use std::str::FromStr;
 use std::env;
 
 fn verbose_flag() -> bool {
-    unsafe {
-        if VERBOSE_SWITCH < 0 {
-            VERBOSE_SWITCH = FromStr::from_str(&env::var("BELLMAN_VERBOSE").unwrap_or(String::new())).unwrap_or(1);
-        }
-        match VERBOSE_SWITCH {
-            1 => true,
-            _ => false,
-        }
-    }
+    option_env!("BELLMAN_VERBOSE").unwrap_or("0") == "1"
 }

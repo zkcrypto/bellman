@@ -10,12 +10,12 @@
 //! This allows us to perform polynomial operations in O(n)
 //! by performing an O(n log n) FFT over such a domain.
 
-use pairing::{
+use crate::pairing::{
     Engine,
     CurveProjective
 };
 
-use pairing::ff::{
+use crate::pairing::ff::{
     Field, 
     PrimeField
 };
@@ -51,7 +51,7 @@ impl<E: Engine, G: Group<E>> EvaluationDomain<E, G> {
 
     pub fn from_coeffs(mut coeffs: Vec<G>) -> Result<EvaluationDomain<E, G>, SynthesisError>
     {
-        use pairing::ff::PrimeField;
+        use crate::pairing::ff::PrimeField;
         // Compute the size of our evaluation domain
 
         let coeffs_len = coeffs.len();
@@ -101,7 +101,7 @@ impl<E: Engine, G: Group<E>> EvaluationDomain<E, G> {
     // this one does expect coefficients to be smaller than `num_roots_of_unity/2` as we expect multiplication
     pub fn from_coeffs_into_sized(mut coeffs: Vec<G>, size: usize) -> Result<EvaluationDomain<E, G>, SynthesisError>
     {
-        use pairing::ff::PrimeField;
+        use crate::pairing::ff::PrimeField;
         // Compute the size of our evaluation domain
 
         assert!(size >= coeffs.len());
@@ -379,7 +379,7 @@ pub(crate) fn parallel_fft<E: Engine, T: Group<E>>(
 // comparing with naive evaluations.
 #[test]
 fn polynomial_arith() {
-    use pairing::bls12_381::Bls12;
+    use crate::pairing::bls12_381::Bls12;
     use rand::{self, Rand};
 
     fn test_mul<E: Engine, R: rand::Rng>(rng: &mut R)
@@ -426,7 +426,7 @@ fn polynomial_arith() {
 
 #[test]
 fn fft_composition() {
-    use pairing::bls12_381::Bls12;
+    use crate::pairing::bls12_381::Bls12;
     use rand;
 
     fn test_comp<E: Engine, R: rand::Rng>(rng: &mut R)
@@ -464,7 +464,7 @@ fn fft_composition() {
 
 #[test]
 fn parallel_fft_consistency() {
-    use pairing::bls12_381::Bls12;
+    use crate::pairing::bls12_381::Bls12;
     use rand::{self, Rand};
     use std::cmp::min;
 
@@ -498,8 +498,8 @@ fn parallel_fft_consistency() {
 #[test]
 fn test_field_element_multiplication_bn256() {
     use rand::{self, Rand};
-    use pairing::bn256::Bn256;
-    use pairing::bn256::Fr;
+    use crate::pairing::bn256::Bn256;
+    use crate::pairing::bn256::Fr;
     use num_cpus;
 
     let cpus = num_cpus::get();
@@ -527,8 +527,8 @@ fn test_field_element_multiplication_bn256() {
 #[test]
 fn test_fft_bn256() {
     use rand::{self, Rand};
-    use pairing::bn256::Bn256;
-    use pairing::bn256::Fr;
+    use crate::pairing::bn256::Bn256;
+    use crate::pairing::bn256::Fr;
     use num_cpus;
 
     let cpus = num_cpus::get();

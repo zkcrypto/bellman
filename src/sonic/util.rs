@@ -1,6 +1,6 @@
 use crate::SynthesisError;
-use pairing::ff::{Field, PrimeField, PrimeFieldRepr, ScalarEngine};
-use pairing::{CurveAffine, CurveProjective, Engine};
+use crate::pairing::ff::{Field, PrimeField, PrimeFieldRepr, ScalarEngine};
+use crate::pairing::{CurveAffine, CurveProjective, Engine};
 use super::srs::SRS;
 
 pub trait ChainExt: Iterator {
@@ -437,8 +437,8 @@ pub fn check_polynomial_commitment<E: Engine>(
 
 #[test]
 fn laurent_division() {
-    use pairing::ff::PrimeField;
-    use pairing::bls12_381::{Fr};
+    use crate::pairing::ff::PrimeField;
+    use crate::pairing::bls12_381::{Fr};
 
     let mut poly = vec![
         Fr::from_str("328947234").unwrap(),
@@ -696,8 +696,8 @@ impl<T> OptionExt<T> for Option<T> {
 
 fn test_mul() {
     use rand::{self, Rand};
-    use pairing::bls12_381::Bls12;
-    use pairing::bls12_381::Fr;
+    use crate::pairing::bls12_381::Bls12;
+    use crate::pairing::bls12_381::Fr;
 
     const SAMPLES: usize = 100;
 
@@ -715,8 +715,8 @@ fn test_mul() {
 #[test]
 fn test_eval_at_powers() {
     use rand::{self, Rand, Rng};
-    use pairing::bls12_381::Bls12;
-    use pairing::bls12_381::Fr;
+    use crate::pairing::bls12_381::Bls12;
+    use crate::pairing::bls12_381::Fr;
 
     const SAMPLES: usize = 100000;
 
@@ -747,8 +747,8 @@ fn test_eval_at_powers() {
 #[test]
 fn test_mut_eval_at_powers() {
     use rand::{self, Rand, Rng};
-    use pairing::bls12_381::Bls12;
-    use pairing::bls12_381::Fr;
+    use crate::pairing::bls12_381::Bls12;
+    use crate::pairing::bls12_381::Fr;
 
     const SAMPLES: usize = 100000;
 
@@ -780,8 +780,8 @@ fn test_mut_eval_at_powers() {
 #[test]
 fn test_mut_distribute_powers() {
     use rand::{self, Rand, Rng};
-    use pairing::bls12_381::Bls12;
-    use pairing::bls12_381::Fr;
+    use crate::pairing::bls12_381::Bls12;
+    use crate::pairing::bls12_381::Fr;
 
     const SAMPLES: usize = 100000;
 

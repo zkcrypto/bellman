@@ -1,7 +1,7 @@
 extern crate pairing;
 
-use pairing::ff::{Field};
-use pairing::{Engine, CurveProjective};
+use crate::pairing::ff::{Field};
+use crate::pairing::{Engine, CurveProjective};
 use std::marker::PhantomData;
 
 mod batch;

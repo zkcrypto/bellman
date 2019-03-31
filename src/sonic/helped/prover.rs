@@ -1,5 +1,5 @@
-use pairing::ff::{Field};
-use pairing::{Engine, CurveProjective};
+use crate::pairing::ff::{Field};
+use crate::pairing::{Engine, CurveProjective};
 use std::marker::PhantomData;
 
 use super::{Proof, SxyAdvice};
@@ -397,8 +397,8 @@ pub fn create_proof_on_srs<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
 
 #[test]
 fn my_fun_circuit_test() {
-    use pairing::ff::PrimeField;
-    use pairing::bls12_381::{Bls12, Fr};
+    use crate::pairing::ff::PrimeField;
+    use crate::pairing::bls12_381::{Bls12, Fr};
     use super::*;
     use crate::sonic::cs::{Basic, ConstraintSystem, LinearCombination};
     use rand::{thread_rng};
@@ -449,13 +449,13 @@ fn my_fun_circuit_test() {
 
 #[test]
 fn polynomial_commitment_test() {
-    use pairing::ff::PrimeField;
-    use pairing::ff::PrimeFieldRepr;
-    use pairing::bls12_381::{Bls12, Fr};
+    use crate::pairing::ff::PrimeField;
+    use crate::pairing::ff::PrimeFieldRepr;
+    use crate::pairing::bls12_381::{Bls12, Fr};
     use super::*;
     use crate::sonic::cs::{Basic, ConstraintSystem, LinearCombination};
     use rand::{thread_rng}; 
-    use pairing::{CurveAffine};
+    use crate::pairing::{CurveAffine};
 
     let srs = SRS::<Bls12>::new(
         20,

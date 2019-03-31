@@ -1,10 +1,10 @@
-use pairing::{
+use crate::pairing::{
     CurveAffine,
     CurveProjective,
     Engine
 };
 
-use pairing::ff::{
+use crate::pairing::ff::{
     PrimeField,
     Field,
     PrimeFieldRepr,
@@ -323,7 +323,7 @@ fn test_with_bls12() {
     }
 
     use rand::{self, Rand};
-    use pairing::bls12_381::Bls12;
+    use crate::pairing::bls12_381::Bls12;
 
     const SAMPLES: usize = 1 << 14;
 
@@ -348,7 +348,7 @@ fn test_with_bls12() {
 #[test]
 fn test_speed_with_bn256() {
     use rand::{self, Rand};
-    use pairing::bn256::Bn256;
+    use crate::pairing::bn256::Bn256;
     use num_cpus;
 
     let cpus = num_cpus::get();
@@ -380,7 +380,7 @@ fn test_speed_with_bn256() {
 #[test]
 fn test_dense_multiexp() {
     use rand::{XorShiftRng, SeedableRng, Rand, Rng};
-    use pairing::bn256::Bn256;
+    use crate::pairing::bn256::Bn256;
     use num_cpus;
 
     // const SAMPLES: usize = 1 << 22;

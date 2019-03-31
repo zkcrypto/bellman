@@ -1,7 +1,7 @@
 
 #[test]
 fn test_paper_results() {
-    use pairing::bls12_381::{Bls12, Fr};
+    use crate::pairing::bls12_381::{Bls12, Fr};
     use std::time::{Instant};
 
     let srs_x = Fr::from_str("23923").unwrap();
@@ -78,8 +78,8 @@ fn test_paper_results() {
     }
 
     {
-        use pairing::{CurveAffine};
-        use pairing::bls12_381::{G1Affine, G2Affine};
+        use crate::pairing::{CurveAffine};
+        use crate::pairing::bls12_381::{G1Affine, G2Affine};
         let a = G1Affine::one();
         let b = G2Affine::one();
         let c = G1Affine::one();
@@ -106,8 +106,8 @@ fn test_paper_results() {
 
     {
         use sonic::util::multiexp;
-        use pairing::{CurveAffine};
-        use pairing::bls12_381::{G1Affine, G2Affine};
+        use crate::pairing::{CurveAffine};
+        use crate::pairing::bls12_381::{G1Affine, G2Affine};
         // e([\alpha G], [\beta H]) = e(A, B) e(IV, [\gamma] H) e(C, [\delta] H)
         let a = G1Affine::one();
         let b = G2Affine::one();

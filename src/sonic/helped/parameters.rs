@@ -1,10 +1,10 @@
-use pairing::ff::{
+use crate::pairing::ff::{
     Field,
     PrimeField, 
     PrimeFieldRepr
 };
 
-use pairing::{
+use crate::pairing::{
     Engine,
     CurveAffine,
     EncodedPoint
@@ -64,7 +64,7 @@ impl<E: Engine> Proof<E> {
         mut writer: W
     ) -> io::Result<()>
     {
-        use pairing::ff::{PrimeField, PrimeFieldRepr};
+        use crate::pairing::ff::{PrimeField, PrimeFieldRepr};
         writer.write_all(self.r.into_compressed().as_ref())?;
         writer.write_all(self.t.into_compressed().as_ref())?;
         let mut buffer = vec![];
@@ -388,7 +388,7 @@ impl<E: Engine> Parameters<E> {
 fn parameters_generation() {
     use crate::{ConstraintSystem, Circuit};
 
-    use pairing::bls12_381::{Bls12, Fr};
+    use crate::pairing::bls12_381::{Bls12, Fr};
 
     #[derive(Clone)]
     struct MySillyCircuit<E: Engine> {

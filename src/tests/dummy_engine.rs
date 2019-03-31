@@ -1,4 +1,4 @@
-use pairing::{
+use crate::pairing::{
     Engine,
     CurveProjective,
     CurveAffine,
@@ -6,7 +6,7 @@ use pairing::{
     EncodedPoint
 };
 
-use pairing::ff::{
+use crate::pairing::ff::{
     PrimeField,
     PrimeFieldRepr,
     Field,

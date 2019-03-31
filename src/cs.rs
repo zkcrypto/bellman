@@ -1,5 +1,5 @@
-use pairing::{Engine};
-use pairing::ff::Field;
+use crate::pairing::{Engine};
+use crate::pairing::ff::Field;
 
 use std::ops::{Add, Sub};
 use std::fmt;

@@ -2,14 +2,14 @@ use rand::Rng;
 
 use std::sync::Arc;
 
-use pairing::{
+use crate::pairing::{
     Engine,
     Wnaf,
     CurveProjective,
     CurveAffine
 };
 
-use pairing::ff::{    
+use crate::pairing::ff::{    
     PrimeField,
     Field
 };

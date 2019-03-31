@@ -1,7 +1,7 @@
 extern crate pairing;
 
-use pairing::ff::{Field, PrimeField, PrimeFieldRepr};
-use pairing::{CurveAffine, CurveProjective, Engine};
+use crate::pairing::ff::{Field, PrimeField, PrimeFieldRepr};
+use crate::pairing::{CurveAffine, CurveProjective, Engine};
 use std::io;
 
 mod hasher;

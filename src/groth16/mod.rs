@@ -1,4 +1,4 @@
-use pairing::{
+use crate::pairing::{
     Engine,
     CurveAffine,
     EncodedPoint
@@ -487,8 +487,8 @@ mod test_with_bls12_381 {
     use crate::{Circuit, SynthesisError, ConstraintSystem};
 
     use rand::{Rand, thread_rng};
-    use pairing::ff::{Field};
-    use pairing::bls12_381::{Bls12, Fr};
+    use crate::pairing::ff::{Field};
+    use crate::pairing::bls12_381::{Bls12, Fr};
 
     #[test]
     fn serialization() {

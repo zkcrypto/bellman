@@ -1,5 +1,5 @@
-use pairing::ff::{Field};
-use pairing::{Engine, CurveProjective};
+use crate::pairing::ff::{Field};
+use crate::pairing::{Engine, CurveProjective};
 use std::marker::PhantomData;
 
 use super::{Proof, SxyAdvice};
@@ -97,8 +97,8 @@ pub fn create_proof_on_srs<E: Engine, C: Circuit<E> + Clone>(
 
 // #[test]
 // fn my_fun_circuit_test() {
-//     use pairing::ff::PrimeField;
-//     use pairing::bls12_381::{Bls12, Fr};
+//     use crate::pairing::ff::PrimeField;
+//     use crate::pairing::bls12_381::{Bls12, Fr};
 //     use super::*;
 //     use crate::sonic::cs::{Basic, ConstraintSystem, LinearCombination};
 

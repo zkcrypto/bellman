@@ -1,8 +1,8 @@
-use pairing::{
+use crate::pairing::{
     Engine
 };
 
-use pairing::ff:: {
+use crate::pairing::ff:: {
     Field,
     PrimeField,
 };

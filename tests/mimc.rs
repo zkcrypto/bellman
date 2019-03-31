@@ -9,20 +9,20 @@ use rand::{thread_rng, Rng};
 use std::time::{Duration, Instant};
 
 // Bring in some tools for using pairing-friendly curves
-use pairing::{
+use crate::pairing::{
     Engine  
 };
 
-use pairing::ff::{
+use crate::pairing::ff::{
     Field,
 };
 
 // We're going to use the BLS12-381 pairing-friendly elliptic curve.
-use pairing::bls12_381::{
+use crate::pairing::bls12_381::{
     Bls12
 };
 
-use pairing::bn256::{
+use crate::pairing::bn256::{
     Bn256
 };
 

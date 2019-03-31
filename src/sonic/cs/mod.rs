@@ -1,7 +1,7 @@
 extern crate pairing;
 
-use pairing::ff::{Field};
-use pairing::{Engine};
+use crate::pairing::ff::{Field};
+use crate::pairing::{Engine};
 
 use crate::{SynthesisError};
 use std::marker::PhantomData;

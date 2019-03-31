@@ -1,8 +1,8 @@
 /// Wellformedness argument allows to verify that some committment was to multivariate polynomial of degree n, 
 /// with no constant term and negative powers
 
-use pairing::ff::{Field, PrimeField, PrimeFieldRepr};
-use pairing::{Engine, CurveProjective, CurveAffine};
+use crate::pairing::ff::{Field, PrimeField, PrimeFieldRepr};
+use crate::pairing::{Engine, CurveProjective, CurveAffine};
 use std::marker::PhantomData;
 
 use crate::sonic::srs::SRS;
@@ -132,7 +132,7 @@ impl<E: Engine> WellformednessArgument<E> {
 
 #[test]
 fn test_argument() {
-    use pairing::bls12_381::{Fr, G1Affine, G1, Bls12};
+    use crate::pairing::bls12_381::{Fr, G1Affine, G1, Bls12};
     use rand::{XorShiftRng, SeedableRng, Rand, Rng};
     use crate::sonic::srs::SRS;
 
@@ -158,7 +158,7 @@ fn test_argument() {
 
 #[test]
 fn test_argument_soundness() {
-    use pairing::bls12_381::{Fr, G1Affine, G1, Bls12};
+    use crate::pairing::bls12_381::{Fr, G1Affine, G1, Bls12};
     use rand::{XorShiftRng, SeedableRng, Rand, Rng};
     use crate::sonic::srs::SRS;
 

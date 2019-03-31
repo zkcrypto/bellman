@@ -6,13 +6,13 @@ use std::sync::Arc;
 
 use futures::Future;
 
-use pairing::{
+use crate::pairing::{
     Engine,
     CurveProjective,
     CurveAffine
 };
 
-use pairing::ff::{
+use crate::pairing::ff::{
     PrimeField,
     Field
 };

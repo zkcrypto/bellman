@@ -1,5 +1,5 @@
-use pairing::ff::{Field};
-use pairing::{Engine, CurveProjective};
+use crate::pairing::ff::{Field};
+use crate::pairing::{Engine, CurveProjective};
 use std::marker::PhantomData;
 
 use rand::{Rand, Rng};

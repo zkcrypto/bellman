@@ -1,10 +1,10 @@
-use pairing::{
+use crate::pairing::{
     Engine,
     CurveProjective,
     CurveAffine
 };
 
-use pairing::ff::{PrimeField};
+use crate::pairing::ff::{PrimeField};
 
 use super::{
     Proof,

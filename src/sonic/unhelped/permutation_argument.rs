@@ -2,8 +2,8 @@
 /// actually a commitment to a vector of values that are equal to `(s^{perm})_i * y^{perm(i)}`
 /// for some fixed permutation `perm`
 
-use pairing::ff::{Field, PrimeField, PrimeFieldRepr, ScalarEngine};
-use pairing::{Engine, CurveProjective, CurveAffine};
+use crate::pairing::ff::{Field, PrimeField, PrimeFieldRepr, ScalarEngine};
+use crate::pairing::{Engine, CurveProjective, CurveAffine};
 use std::marker::PhantomData;
 
 use crate::sonic::srs::SRS;
@@ -584,7 +584,7 @@ impl<E: Engine> PermutationArgument<E> {
 
 #[test]
 fn test_permutation_argument() {
-    use pairing::bls12_381::{Fr, G1Affine, G1, Bls12};
+    use crate::pairing::bls12_381::{Fr, G1Affine, G1, Bls12};
     use rand::{XorShiftRng, SeedableRng, Rand, Rng};
     use crate::sonic::srs::SRS;
 

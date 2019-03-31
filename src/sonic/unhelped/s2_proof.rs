@@ -1,5 +1,5 @@
-use pairing::ff::{Field, PrimeField, PrimeFieldRepr};
-use pairing::{Engine, CurveProjective, CurveAffine};
+use crate::pairing::ff::{Field, PrimeField, PrimeFieldRepr};
+use crate::pairing::{Engine, CurveProjective, CurveAffine};
 use std::marker::PhantomData;
 
 use crate::sonic::srs::SRS;

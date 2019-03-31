@@ -1,9 +1,9 @@
-use pairing::{
+use crate::pairing::{
     Engine,
     CurveProjective
 };
 
-use pairing::ff::{
+use crate::pairing::ff::{
     Field, 
     PrimeField
 };

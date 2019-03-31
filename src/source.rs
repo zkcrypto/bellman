@@ -1,10 +1,10 @@
-use pairing::{
+use crate::pairing::{
     CurveAffine,
     CurveProjective,
     Engine
 };
 
-use pairing::ff::{
+use crate::pairing::ff::{
     PrimeField,
     Field,
     PrimeFieldRepr,
