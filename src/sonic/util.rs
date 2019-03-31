@@ -1048,8 +1048,8 @@ fn test_mut_distribute_powers() {
 
 #[test]
 fn test_trivial_parallel_kate_division() {
-    use pairing::ff::PrimeField;
-    use pairing::bls12_381::{Bls12, Fr};
+    use crate::pairing::ff::PrimeField;
+    use crate::pairing::bls12_381::{Bls12, Fr};
 
     let mut minus_one = Fr::one();
     minus_one.negate();
@@ -1072,8 +1072,8 @@ fn test_trivial_parallel_kate_division() {
 
 #[test]
 fn test_less_trivial_parallel_kate_division() {
-    use pairing::ff::PrimeField;
-    use pairing::bls12_381::{Bls12, Fr};
+    use crate::pairing::ff::PrimeField;
+    use crate::pairing::bls12_381::{Bls12, Fr};
 
     let z = Fr::one();
 
@@ -1113,8 +1113,8 @@ fn test_less_trivial_parallel_kate_division() {
 
 #[test]
 fn test_parallel_kate_division() {
-    use pairing::ff::PrimeField;
-    use pairing::bls12_381::{Bls12, Fr};
+    use crate::pairing::ff::PrimeField;
+    use crate::pairing::bls12_381::{Bls12, Fr};
 
     let mut poly = vec![
         Fr::from_str("328947234").unwrap(),

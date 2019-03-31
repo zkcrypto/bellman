@@ -543,7 +543,7 @@ fn test_high_level_sonic_api() {
 
 #[test]
 fn test_constraints_info() {
-    use pairing::bn256::{Bn256};
+    use crate::pairing::bn256::{Bn256};
     use std::time::{Instant};
     use crate::sonic::unhelped::padding::{constraints_info};
     {
@@ -572,9 +572,9 @@ fn test_constraints_info() {
 
 #[test]
 fn test_padding_using_mimc() {
-    use pairing::ff::{Field, PrimeField};
-    use pairing::{Engine, CurveAffine, CurveProjective};
-    use pairing::bls12_381::{Bls12, Fr};
+    use crate::pairing::ff::{Field, PrimeField};
+    use crate::pairing::{Engine, CurveAffine, CurveProjective};
+    use crate::pairing::bls12_381::{Bls12, Fr};
     use std::time::{Instant};
     use crate::sonic::srs::SRS;
 
