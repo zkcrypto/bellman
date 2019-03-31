@@ -10,3 +10,4 @@ mod permutation_argument;
 pub mod padding;
 
 pub use self::wellformed_argument::{WellformednessArgument, WellformednessProof};
+pub use self::permutation_argument::{PermutationArgument, PermutationProof, Proof};

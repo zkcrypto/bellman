@@ -172,6 +172,9 @@ pub fn create_aggregate_on_srs_using_information<E: Engine, C: Circuit<E>, S: Sy
         value
     }
 
+    use std::time::Instant;
+    let start = Instant::now();
+
     let mut c_openings = vec![];
     for y in &y_values {
         let value = compute_value::<E>(y, &s_poly_positive, &s_poly_negative);
@@ -206,6 +209,8 @@ pub fn create_aggregate_on_srs_using_information<E: Engine, C: Circuit<E>, S: Sy
         c_openings.push((opening, value));
     }
 
+    println!("Evaluation of s(z, Y) taken {:?}", start.elapsed());
+
     // Okay, great. Now we need to open up each S at the same point z to the same value.
     // Since we're opening up all the S's at the same point, we create a bunch of random
     // challenges instead and open up a random linear combination.
@@ -215,6 +220,8 @@ pub fn create_aggregate_on_srs_using_information<E: Engine, C: Circuit<E>, S: Sy
     let mut expected_value = E::Fr::zero();
 
     // TODO: this part can be further parallelized due to synthesis of S(X, y) being singlethreaded
+    let start = Instant::now();
+
     for (y, c_opening) in y_values.iter().zip(c_openings.iter()) {
         // Compute s(X, y_i)
         let (s_poly_negative, s_poly_positive) = {
@@ -242,6 +249,8 @@ pub fn create_aggregate_on_srs_using_information<E: Engine, C: Circuit<E>, S: Sy
         //     target.add_assign(&coeff);
         // }
     }
+
+    println!("Re-evaluation of {} S polynomials taken {:?}", y_values.len(), start.elapsed());
 
     let s_opening = {
         let mut value = expected_value;

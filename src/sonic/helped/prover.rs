@@ -51,21 +51,27 @@ pub fn create_advice_on_information_and_srs<E: Engine, C: Circuit<E>, S: Synthes
     // Compute s(z, y)
     let mut szy = E::Fr::zero();
     {
-        let mut tmp = z;
-        for &p in &s_poly_positive {
-            let mut p = p;
-            p.mul_assign(&tmp);
-            szy.add_assign(&p);
-            tmp.mul_assign(&z);
-        }
-        let mut tmp = z_inv;
-        for &p in &s_poly_negative {
-            let mut p = p;
-            p.mul_assign(&tmp);
-            szy.add_assign(&p);
-            tmp.mul_assign(&z_inv);
-        }
+        szy.add_assign(& evaluate_at_consequitive_powers(& s_poly_positive[..], z, z));
+        szy.add_assign(& evaluate_at_consequitive_powers(& s_poly_negative[..], z_inv, z_inv));
     }
+
+    // let mut szy = E::Fr::zero();
+    // {
+    //     let mut tmp = z;
+    //     for &p in &s_poly_positive {
+    //         let mut p = p;
+    //         p.mul_assign(&tmp);
+    //         szy.add_assign(&p);
+    //         tmp.mul_assign(&z);
+    //     }
+    //     let mut tmp = z_inv;
+    //     for &p in &s_poly_negative {
+    //         let mut p = p;
+    //         p.mul_assign(&tmp);
+    //         szy.add_assign(&p);
+    //         tmp.mul_assign(&z_inv);
+    //     }
+    // }
 
     // Compute kate opening
     let opening = {
@@ -232,7 +238,6 @@ pub fn create_proof_on_srs<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
     // create r(X, 1) by observation that it's just a series of coefficients.
     // Used representation is for powers X^{-2n}...X^{-n-1}, X^{-n}...X^{-1}, X^{1}...X^{n}
     // Same representation is ok for r(X, Y) too cause powers always match
-    // TODO: add blindings c_{n+1}*X^{-2n - 1}, c_{n+2}*X^{-2n - 2}, c_{n+3}*X^{-2n - 3}, c_{n+4}*X^{-2n - 4}
     let mut rx1 = wires.b;
     rx1.extend(wires.c);
     rx1.extend(blindings.clone()); 
@@ -260,7 +265,6 @@ pub fn create_proof_on_srs<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
         tmp.poly()
     };
 
-    // TODO: Parallelize
     // r'(X, y) = r(X, y) + s(X, y). Note `y` - those are evaluated at the point already
     let mut rxy_prime = rxy.clone();
     {
