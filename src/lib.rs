@@ -1,9 +1,15 @@
 #![allow(unused_imports)]
+#![allow(unused_macros)]
+#[macro_use]
 
+extern crate cfg_if;
 extern crate pairing as pairing_import;
 extern crate rand;
 extern crate bit_vec;
 extern crate byteorder;
+
+#[macro_use]
+mod log;
 
 pub mod domain;
 pub mod groth16;
@@ -20,18 +26,21 @@ mod multiexp;
 #[cfg(test)]
 mod tests;
 
-#[cfg(feature = "multicore")]
-mod multicore;
+cfg_if! {
+    if #[cfg(feature = "multicore")] {
+        #[cfg(feature = "wasm")]
+        compile_error!("Multicore feature is not yet compatible with wasm target arch");
 
-#[cfg(feature = "singlecore")]
-mod singlecore;
-
-mod worker {
-    #[cfg(feature = "multicore")]
-    pub use crate::multicore::*;
-
-    #[cfg(feature = "singlecore")]
-    pub use crate::singlecore::*;
+        mod multicore;
+        mod worker {
+            pub use crate::multicore::*;
+        }
+    } else {
+        mod singlecore;
+        mod worker {
+            pub use crate::singlecore::*;
+        }
+    }
 }
 
 pub mod pairing {
@@ -41,6 +50,7 @@ pub mod pairing {
 mod cs;
 pub use self::cs::*;
 
+// todo move to log module after removing all references
 static mut VERBOSE_SWITCH: i8 = -1;
 
 use std::str::FromStr;

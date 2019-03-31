@@ -16,6 +16,7 @@ crate-type = ["cdylib", "lib", "staticlib"]
 rand = "0.4"
 bit-vec = "0.4.4"
 futures = "0.1"
+cfg-if = "0.1.7"
 
 pairing = { git = 'https://github.com/matterinc/pairing', tag = "0.16.2" }
 #pairing = { path = "../pairing" }
@@ -26,6 +27,7 @@ num_cpus = {version = "1", optional = true}
 crossbeam = {version = "0.7.1", optional = true}
 
 tiny-keccak = {version = "1.4.2", optional = true}
+web-sys = {version = "0.3.17", optional = true, features = ["console", "Performance", "Window"]}
 
 [dependencies.blake2-rfc]
 git = "https://github.com/gtank/blake2-rfc"
@@ -34,8 +36,8 @@ rev = "7a5b5fc99ae483a0043db7547fb79a6fa44b88a9"
 [features]
 default = ["multicore"]
 #default = ["multicore", "gm17", "sonic"]
-#default = ["singlecore"]
+#default = ["wasm"]
 multicore = ["futures-cpupool", "num_cpus", "crossbeam"]
 sonic = ["tiny-keccak"]
 gm17 = []
-singlecore = []
+wasm = ["web-sys"]
