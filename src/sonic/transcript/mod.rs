@@ -1,5 +1,3 @@
-extern crate pairing;
-
 use crate::pairing::ff::{Field, PrimeField, PrimeFieldRepr};
 use crate::pairing::{CurveAffine, CurveProjective, Engine};
 use std::io;

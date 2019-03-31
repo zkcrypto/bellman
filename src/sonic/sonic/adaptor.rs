@@ -1,6 +1,3 @@
-extern crate pairing;
-extern crate rand;
-
 use crate::pairing::ff::{Field, PrimeField};
 use crate::pairing::{Engine, CurveProjective};
 

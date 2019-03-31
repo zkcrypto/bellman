@@ -2,7 +2,7 @@ extern crate tiny_keccak;
 extern crate blake2_rfc;
 
 use self::tiny_keccak::Keccak;
-use self::blake2_rfc::blake2s::Blake2s;
+use self::blake2_rfc::blake2s::{Blake2s, blake2s};
 
 pub trait Hasher {
     fn new(personalization: &[u8]) -> Self;
@@ -17,7 +17,8 @@ pub struct BlakeHasher {
 
 impl Hasher for BlakeHasher {
     fn new(personalization: &[u8]) -> Self {
-        let h = Blake2s::with_params(32, &[], &[], personalization);
+        let mut h = Blake2s::new(32);
+        h.update(personalization);
 
         Self {
             h: h
@@ -31,7 +32,7 @@ impl Hasher for BlakeHasher {
     fn finalize(&mut self) -> Vec<u8> {
         use std::mem;
 
-        let new_h = Blake2s::with_params(32, &[], &[], &[]);
+        let new_h = Blake2s::new(32);
         let h = std::mem::replace(&mut self.h, new_h);
 
         let result = h.finalize();

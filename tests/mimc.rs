@@ -1,7 +1,3 @@
-extern crate bellman;
-extern crate pairing;
-extern crate rand;
-
 // For randomness (during paramgen and proof generation)
 use rand::{thread_rng, Rng};
 
@@ -9,32 +5,32 @@ use rand::{thread_rng, Rng};
 use std::time::{Duration, Instant};
 
 // Bring in some tools for using pairing-friendly curves
-use crate::pairing::{
+use bellman_ce::pairing::{
     Engine  
 };
 
-use crate::pairing::ff::{
+use bellman_ce::pairing::ff::{
     Field,
 };
 
 // We're going to use the BLS12-381 pairing-friendly elliptic curve.
-use crate::pairing::bls12_381::{
+use bellman_ce::pairing::bls12_381::{
     Bls12
 };
 
-use crate::pairing::bn256::{
+use bellman_ce::pairing::bn256::{
     Bn256
 };
 
 // We'll use these interfaces to construct our circuit.
-use bellman::{
+use bellman_ce::{
     Circuit,
     ConstraintSystem,
     SynthesisError
 };
 
 // We're going to use the Groth16 proving system.
-use bellman::groth16::{
+use bellman_ce::groth16::{
     Proof,
     generate_random_parameters,
     prepare_verifying_key,

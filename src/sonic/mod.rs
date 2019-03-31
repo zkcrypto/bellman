@@ -1,5 +1,3 @@
-extern crate pairing;
-
 pub use crate::{SynthesisError};
 
 pub mod sonic;
