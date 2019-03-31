@@ -41,18 +41,27 @@ impl<E: Engine> SxEval<E> {
 
         let u = vec![E::Fr::zero(); n];
         let v = vec![E::Fr::zero(); n];
-        let mut w = vec![E::Fr::zero(); n];
 
-        let mut tmp1 = y;
-        let mut tmp2 = y_inv;
-        for w in &mut w {
-            let mut new = tmp1;
-            new.add_assign(&tmp2);
-            new.negate();
-            *w = new;
-            tmp1.mul_assign(&y);
-            tmp2.mul_assign(&y_inv);
-        }
+        let mut minus_one = E::Fr::one();
+        minus_one.negate();
+
+        let mut w = vec![minus_one; n];
+        let mut w_neg = vec![minus_one; n];
+        mut_distribute_consequitive_powers(&mut w[..], y, y);
+        mut_distribute_consequitive_powers(&mut w_neg[..], y_inv, y_inv);
+        add_polynomials(&mut w[..], &w_neg[..]);
+
+        // let mut w = vec![E::Fr::zero(); n];
+        // let mut tmp1 = y;
+        // let mut tmp2 = y_inv;
+        // for w in &mut w {
+        //     let mut new = tmp1;
+        //     new.add_assign(&tmp2);
+        //     new.negate();
+        //     *w = new;
+        //     tmp1.mul_assign(&y);
+        //     tmp2.mul_assign(&y_inv);
+        // }
 
         SxEval {
             y,
@@ -169,36 +178,54 @@ pub struct SyEval<E: Engine> {
 impl<E: Engine> SyEval<E> {
     pub fn new(x: E::Fr, n: usize, q: usize) -> Self {
         let xinv = x.inverse().unwrap();
-        let mut tmp = E::Fr::one();
-        let mut a = vec![E::Fr::zero(); n];
-        for a in &mut a {
-            tmp.mul_assign(&xinv); // tmp = x^{-i}
-            *a = tmp;
-        }
+        let mut a = vec![E::Fr::one(); n];
+        let mut b = vec![E::Fr::one(); n];
 
-        let mut tmp = E::Fr::one();
-        let mut b = vec![E::Fr::zero(); n];
-        for b in &mut b {
-            tmp.mul_assign(&x); // tmp = x^{i}
-            *b = tmp;
-        }
+        mut_distribute_consequitive_powers(&mut a[..], xinv, xinv);
+        mut_distribute_consequitive_powers(&mut b[..], x, x);
 
-        let mut positive_coeffs = vec![E::Fr::zero(); n + q];
-        let mut negative_coeffs = vec![E::Fr::zero(); n];
+        let mut c = vec![E::Fr::one(); n];
+        mut_distribute_consequitive_powers(&mut c[..], x.pow(&[(n+1) as u64]), x);
 
-        let mut c = vec![E::Fr::zero(); n];
-        for ((c, positive_coeff), negative_coeff) in c.iter_mut().zip(&mut positive_coeffs).zip(&mut negative_coeffs) {
-            tmp.mul_assign(&x); // tmp = x^{i+N}
-            *c = tmp;
+        let mut minus_one = E::Fr::one();
+        minus_one.negate();
 
-            // - \sum\limits_{i=1}^N Y^i X^{i+N}
-            let mut tmp = tmp;
-            tmp.negate();
-            *positive_coeff = tmp;
+        let mut positive_coeffs = vec![minus_one; n];
+        mut_distribute_consequitive_powers(&mut positive_coeffs[..], x.pow(&[(n+1) as u64]), x);
+        let negative_coeffs = positive_coeffs.clone();
 
-            // - \sum\limits_{i=1}^N Y^{-i} X^{i+N}
-            *negative_coeff = tmp;
-        }
+        positive_coeffs.resize(n + q, E::Fr::zero());
+
+        // let mut tmp = E::Fr::one();
+        // let mut a = vec![E::Fr::zero(); n];
+        // for a in &mut a {
+        //     tmp.mul_assign(&xinv); // tmp = x^{-i}
+        //     *a = tmp;
+        // }
+
+        // let mut tmp = E::Fr::one();
+        // let mut b = vec![E::Fr::zero(); n];
+        // for b in &mut b {
+        //     tmp.mul_assign(&x); // tmp = x^{i}
+        //     *b = tmp;
+        // }
+
+        // let mut positive_coeffs = vec![E::Fr::zero(); n + q];
+        // let mut negative_coeffs = vec![E::Fr::zero(); n];
+
+        // let mut c = vec![E::Fr::zero(); n];
+        // for ((c, positive_coeff), negative_coeff) in c.iter_mut().zip(&mut positive_coeffs).zip(&mut negative_coeffs) {
+        //     tmp.mul_assign(&x); // tmp = x^{i+N}
+        //     *c = tmp;
+
+        //     // - \sum\limits_{i=1}^N Y^i X^{i+N}
+        //     let mut tmp = tmp;
+        //     tmp.negate();
+        //     *positive_coeff = tmp;
+
+        //     // - \sum\limits_{i=1}^N Y^{-i} X^{i+N}
+        //     *negative_coeff = tmp;
+        // }
 
         SyEval {
             a,

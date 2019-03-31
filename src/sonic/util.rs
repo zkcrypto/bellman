@@ -125,15 +125,15 @@ pub fn polynomial_commitment_opening<
     {
         // let poly = parallel_kate_divison::<E, _>(polynomial_coefficients, point);
 
-        use std::time::Instant;
-        let start = Instant::now();
+        // use std::time::Instant;
+        // let start = Instant::now();
 
         let poly = kate_divison(
             polynomial_coefficients,
             point,
         );
 
-        println!("Kate division of size {} taken {:?}", poly.len(), start.elapsed());
+        // println!("Kate division of size {} taken {:?}", poly.len(), start.elapsed());
 
         let negative_poly = poly[0..largest_negative_power].iter().rev();
         let positive_poly = poly[largest_negative_power..].iter();
@@ -278,6 +278,49 @@ pub fn mut_distribute_consequitive_powers<'a, F: Field> (
     });
 }
 
+// pub fn multiexp<
+//     'a,
+//     G: CurveAffine,
+//     IB: IntoIterator<Item = &'a G>,
+//     IS: IntoIterator<Item = &'a G::Scalar>,
+// >(
+//     g: IB,
+//     s: IS,
+// ) -> G::Projective
+// where
+//     IB::IntoIter: ExactSizeIterator + Clone,
+//     IS::IntoIter: ExactSizeIterator,
+// {
+//     use crate::multicore::Worker;
+//     use crate::multiexp::dense_multiexp;
+
+//     use std::time::Instant;
+//     let start = Instant::now();
+
+//     let s: Vec<<G::Scalar as PrimeField>::Repr> = s.into_iter().map(|e| e.into_repr()).collect::<Vec<_>>();
+//     let g: Vec<G> = g.into_iter().map(|e| *e).collect::<Vec<_>>();
+
+//     println!("Multiexp collecting taken {:?}", start.elapsed());
+
+//     assert_eq!(s.len(), g.len(), "scalars and exponents must have the same length");
+
+//     let start = Instant::now();
+//     let pool = Worker::new();
+//     println!("Multiexp pool creation taken {:?}", start.elapsed());
+
+//     let start = Instant::now();
+
+//     let result = dense_multiexp(
+//         &pool,
+//         &g,
+//         &s
+//     ).unwrap();
+
+//     println!("Multiexp taken {:?}", start.elapsed());
+
+//     result
+// }
+
 pub fn multiexp<
     'a,
     G: CurveAffine,
@@ -292,7 +335,10 @@ where
     IS::IntoIter: ExactSizeIterator,
 {
     use crate::multicore::Worker;
-    use crate::multiexp::dense_multiexp;
+    use crate::multiexp::multiexp;
+    use crate::source::FullDensity;
+    use futures::Future;
+    use std::sync::Arc;
 
     let s: Vec<<G::Scalar as PrimeField>::Repr> = s.into_iter().map(|e| e.into_repr()).collect::<Vec<_>>();
     let g: Vec<G> = g.into_iter().map(|e| *e).collect::<Vec<_>>();
@@ -301,14 +347,23 @@ where
 
     let pool = Worker::new();
 
-    let result = dense_multiexp(
+    // use std::time::Instant;
+    // let start = Instant::now();
+
+    let result = multiexp(
         &pool,
-        &g,
-        &s
-    ).unwrap();
+        (Arc::new(g), 0),
+        FullDensity,
+        Arc::new(s)
+    ).wait().unwrap();
+
+    // println!("Multiexp taken {:?}", start.elapsed());
 
     result
 }
+
+
+
 
 pub fn multiexp_serial<
     'a,
