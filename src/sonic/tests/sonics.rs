@@ -1,3 +1,5 @@
+extern crate rand;
+
 // For randomness (during paramgen and proof generation)
 use rand::{thread_rng, Rng};
 
