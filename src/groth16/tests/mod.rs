@@ -156,8 +156,8 @@ fn test_xordemo() {
 
     // We expect our H query to be 7 elements of the form...
     // {tau^i t(tau) / delta}
-    let delta_inverse = delta.inverse().unwrap();
-    let gamma_inverse = gamma.inverse().unwrap();
+    let delta_inverse = delta.invert().unwrap();
+    let gamma_inverse = gamma.invert().unwrap();
     {
         let mut coeff = delta_inverse;
         coeff.mul_assign(&t_at_tau);

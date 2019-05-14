@@ -215,8 +215,22 @@ where
         assembly.num_inputs + assembly.num_aux
     });
 
-    let gamma_inverse = gamma.inverse().ok_or(SynthesisError::UnexpectedIdentity)?;
-    let delta_inverse = delta.inverse().ok_or(SynthesisError::UnexpectedIdentity)?;
+    let gamma_inverse = {
+        let inverse = gamma.invert();
+        if bool::from(inverse.is_some()) {
+            Ok(inverse.unwrap())
+        } else {
+            Err(SynthesisError::UnexpectedIdentity)
+        }
+    }?;
+    let delta_inverse = {
+        let inverse = delta.invert();
+        if bool::from(inverse.is_some()) {
+            Ok(inverse.unwrap())
+        } else {
+            Err(SynthesisError::UnexpectedIdentity)
+        }
+    }?;
 
     let worker = Worker::new();
 

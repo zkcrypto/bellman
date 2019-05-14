@@ -73,11 +73,11 @@ impl<E: ScalarEngine, G: Group<E>> EvaluationDomain<E, G> {
             coeffs,
             exp,
             omega,
-            omegainv: omega.inverse().unwrap(),
-            geninv: E::Fr::multiplicative_generator().inverse().unwrap(),
+            omegainv: omega.invert().unwrap(),
+            geninv: E::Fr::multiplicative_generator().invert().unwrap(),
             minv: E::Fr::from_str(&format!("{}", m))
                 .unwrap()
-                .inverse()
+                .invert()
                 .unwrap(),
         })
     }
@@ -141,10 +141,7 @@ impl<E: ScalarEngine, G: Group<E>> EvaluationDomain<E, G> {
     /// evaluation domain, so we must perform division over
     /// a coset.
     pub fn divide_by_z_on_coset(&mut self, worker: &Worker) {
-        let i = self
-            .z(&E::Fr::multiplicative_generator())
-            .inverse()
-            .unwrap();
+        let i = self.z(&E::Fr::multiplicative_generator()).invert().unwrap();
 
         worker.scope(self.coeffs.len(), |scope, chunk| {
             for v in self.coeffs.chunks_mut(chunk) {
