@@ -314,7 +314,7 @@ impl PrimeField for Fr {
 
     fn from_repr(repr: FrRepr) -> Result<Self, PrimeFieldDecodingError> {
         if repr.0[0] >= (MODULUS_R.0 as u64) {
-            Err(PrimeFieldDecodingError::NotInField(format!("{}", repr)))
+            Err(PrimeFieldDecodingError::NotInField)
         } else {
             Ok(Fr(Wrapping(repr.0[0] as u32)))
         }
