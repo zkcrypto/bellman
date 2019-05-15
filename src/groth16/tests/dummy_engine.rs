@@ -1,7 +1,4 @@
-use ff::{
-    Field, LegendreSymbol, PrimeField, PrimeFieldDecodingError, PrimeFieldRepr, ScalarEngine,
-    SqrtField,
-};
+use ff::{Field, PrimeField, PrimeFieldDecodingError, PrimeFieldRepr, ScalarEngine, SqrtField};
 use group::{CurveAffine, CurveProjective, EncodedPoint, GroupDecodingError};
 use pairing::{Engine, PairingCurveAffine};
 
@@ -10,7 +7,7 @@ use std::cmp::Ordering;
 use std::fmt;
 use std::num::Wrapping;
 use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
-use subtle::{Choice, ConditionallySelectable, CtOption};
+use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
 
 const MODULUS_R: Wrapping<u32> = Wrapping(64513);
 
@@ -20,6 +17,12 @@ pub struct Fr(Wrapping<u32>);
 impl Default for Fr {
     fn default() -> Self {
         <Fr as Field>::zero()
+    }
+}
+
+impl ConstantTimeEq for Fr {
+    fn ct_eq(&self, other: &Fr) -> Choice {
+        (self.0).0.ct_eq(&(other.0).0)
     }
 }
 
@@ -179,57 +182,39 @@ impl Field for Fr {
 }
 
 impl SqrtField for Fr {
-    fn legendre(&self) -> LegendreSymbol {
-        // s = self^((r - 1) // 2)
-        let s = self.pow([32256]);
-        if s == <Fr as Field>::zero() {
-            LegendreSymbol::Zero
-        } else if s == <Fr as Field>::one() {
-            LegendreSymbol::QuadraticResidue
-        } else {
-            LegendreSymbol::QuadraticNonResidue
-        }
-    }
-
-    fn sqrt(&self) -> Option<Self> {
+    fn sqrt(&self) -> CtOption<Self> {
         // Tonelli-Shank's algorithm for q mod 16 = 1
         // https://eprint.iacr.org/2012/685.pdf (page 12, algorithm 5)
-        match self.legendre() {
-            LegendreSymbol::Zero => Some(*self),
-            LegendreSymbol::QuadraticNonResidue => None,
-            LegendreSymbol::QuadraticResidue => {
-                let mut c = Fr::root_of_unity();
-                // r = self^((t + 1) // 2)
-                let mut r = self.pow([32]);
-                // t = self^t
-                let mut t = self.pow([63]);
-                let mut m = Fr::S;
+        let mut c = Fr::root_of_unity();
+        // r = self^((t + 1) // 2)
+        let mut r = self.pow([32]);
+        // t = self^t
+        let mut t = self.pow([63]);
+        let mut m = Fr::S;
 
-                while t != <Fr as Field>::one() {
-                    let mut i = 1;
-                    {
-                        let mut t2i = t.square();
-                        loop {
-                            if t2i == <Fr as Field>::one() {
-                                break;
-                            }
-                            t2i = t2i.square();
-                            i += 1;
-                        }
+        while t != <Fr as Field>::one() {
+            let mut i = 1;
+            {
+                let mut t2i = t.square();
+                loop {
+                    if t2i == <Fr as Field>::one() {
+                        break;
                     }
-
-                    for _ in 0..(m - i - 1) {
-                        c = c.square();
-                    }
-                    MulAssign::mul_assign(&mut r, &c);
-                    c = c.square();
-                    MulAssign::mul_assign(&mut t, &c);
-                    m = i;
+                    t2i = t2i.square();
+                    i += 1;
                 }
-
-                Some(r)
             }
+
+            for _ in 0..(m - i - 1) {
+                c = c.square();
+            }
+            MulAssign::mul_assign(&mut r, &c);
+            c = c.square();
+            MulAssign::mul_assign(&mut t, &c);
+            m = i;
         }
+
+        CtOption::new(r, (r * r).ct_eq(self))
     }
 }
 
