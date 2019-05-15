@@ -155,7 +155,7 @@ impl<E: ScalarEngine> TestConstraintSystem<E> {
         let negone = E::Fr::one().neg();
 
         let powers_of_two = (0..E::Fr::NUM_BITS)
-            .map(|i| E::Fr::from_str("2").unwrap().pow(&[u64::from(i)]))
+            .map(|i| E::Fr::from_str("2").unwrap().pow_vartime(&[u64::from(i)]))
             .collect::<Vec<_>>();
 
         let pp = |s: &mut String, lc: &LinearCombination<E>| {

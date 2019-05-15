@@ -50,7 +50,9 @@ impl<E: ScalarEngine, CS: ConstraintSystem<E>> MultiEq<E, CS> {
 
         assert!((E::Fr::CAPACITY as usize) > (self.bits_used + num_bits));
 
-        let coeff = E::Fr::from_str("2").unwrap().pow(&[self.bits_used as u64]);
+        let coeff = E::Fr::from_str("2")
+            .unwrap()
+            .pow_vartime(&[self.bits_used as u64]);
         self.lhs = self.lhs.clone() + (coeff, lhs);
         self.rhs = self.rhs.clone() + (coeff, rhs);
         self.bits_used += num_bits;

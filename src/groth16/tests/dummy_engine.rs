@@ -172,7 +172,10 @@ impl Field for Fr {
         if <Fr as Field>::is_zero(self) {
             CtOption::new(<Fr as Field>::zero(), Choice::from(0))
         } else {
-            CtOption::new(self.pow(&[(MODULUS_R.0 as u64) - 2]), Choice::from(1))
+            CtOption::new(
+                self.pow_vartime(&[(MODULUS_R.0 as u64) - 2]),
+                Choice::from(1),
+            )
         }
     }
 
@@ -187,9 +190,9 @@ impl SqrtField for Fr {
         // https://eprint.iacr.org/2012/685.pdf (page 12, algorithm 5)
         let mut c = Fr::root_of_unity();
         // r = self^((t + 1) // 2)
-        let mut r = self.pow([32]);
+        let mut r = self.pow_vartime([32]);
         // t = self^t
-        let mut t = self.pow([63]);
+        let mut t = self.pow_vartime([63]);
         let mut m = Fr::S;
 
         while t != <Fr as Field>::one() {
