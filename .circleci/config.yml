@@ -24,20 +24,9 @@ commands:
     steps:
       - *restore-workspace
       - *restore-cache
-      - setup_remote_docker:
-          docker_layer_caching: true
-      # TODO: move into image
-      - run:
-          name: Install Docker client
-          command: |
-            set -x
-            VER="18.09.2"
-            curl -L -o /tmp/docker-$VER.tgz https://download.docker.com/linux/static/stable/x86_64/docker-$VER.tgz
-            tar -xz -C /tmp -f /tmp/docker-$VER.tgz
-            mv /tmp/docker/* /usr/bin
       - run:
           name: Test (<< parameters.target >>)
-          command: TARGET=<< parameters.target >> ci/run.sh
+          command: TARGET=<< parameters.target >> cargo test
           no_output_timeout: 15m
 
 jobs:
