@@ -74,7 +74,7 @@ jobs:
       - test_target:
           target: "x86_64-unknown-linux-gnu"
 
-  clippy:
+  build:
     executor: default
     steps:
       - *restore-workspace
