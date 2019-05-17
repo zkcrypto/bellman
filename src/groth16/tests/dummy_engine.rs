@@ -1,23 +1,12 @@
-use pairing::{
-    Engine,
-    CurveProjective,
-    CurveAffine,
-    GroupDecodingError,
-    EncodedPoint
-};
 use ff::{
-    ScalarEngine,
-    LegendreSymbol,
-    PrimeField,
-    PrimeFieldRepr,
-    Field,
+    Field, LegendreSymbol, PrimeField, PrimeFieldDecodingError, PrimeFieldRepr, ScalarEngine,
     SqrtField,
-    PrimeFieldDecodingError,
 };
+use pairing::{CurveAffine, CurveProjective, EncodedPoint, Engine, GroupDecodingError};
 
+use rand::{Rand, Rng};
 use std::cmp::Ordering;
 use std::fmt;
-use rand::{Rand, Rng};
 use std::num::Wrapping;
 
 const MODULUS_R: Wrapping<u32> = Wrapping(64513);
@@ -93,9 +82,13 @@ impl SqrtField for Fr {
     fn legendre(&self) -> LegendreSymbol {
         // s = self^((r - 1) // 2)
         let s = self.pow([32256]);
-        if s == <Fr as Field>::zero() { LegendreSymbol::Zero }
-        else if s == <Fr as Field>::one() { LegendreSymbol::QuadraticResidue }
-        else { LegendreSymbol::QuadraticNonResidue }
+        if s == <Fr as Field>::zero() {
+            LegendreSymbol::Zero
+        } else if s == <Fr as Field>::one() {
+            LegendreSymbol::QuadraticResidue
+        } else {
+            LegendreSymbol::QuadraticNonResidue
+        }
     }
 
     fn sqrt(&self) -> Option<Self> {
@@ -113,7 +106,7 @@ impl SqrtField for Fr {
                 let mut m = Fr::S;
 
                 while t != <Fr as Field>::one() {
-                let mut i = 1;
+                    let mut i = 1;
                     {
                         let mut t2i = t;
                         t2i.square();
@@ -282,10 +275,13 @@ impl Engine for DummyEngine {
     type Fqk = Fr;
 
     fn miller_loop<'a, I>(i: I) -> Self::Fqk
-        where I: IntoIterator<Item=&'a (
-                                    &'a <Self::G1Affine as CurveAffine>::Prepared,
-                                    &'a <Self::G2Affine as CurveAffine>::Prepared
-                               )>
+    where
+        I: IntoIterator<
+            Item = &'a (
+                &'a <Self::G1Affine as CurveAffine>::Prepared,
+                &'a <Self::G2Affine as CurveAffine>::Prepared,
+            ),
+        >,
     {
         let mut acc = <Fr as Field>::zero();
 
@@ -299,8 +295,7 @@ impl Engine for DummyEngine {
     }
 
     /// Perform final exponentiation of the result of a miller loop.
-    fn final_exponentiation(this: &Self::Fqk) -> Option<Self::Fqk>
-    {
+    fn final_exponentiation(this: &Self::Fqk) -> Option<Self::Fqk> {
         Some(*this)
     }
 }
@@ -323,9 +318,7 @@ impl CurveProjective for Fr {
         <Fr as Field>::is_zero(self)
     }
 
-    fn batch_normalization(_: &mut [Self]) {
-
-    }
+    fn batch_normalization<S: ::std::borrow::BorrowMut<Self>>(v: &mut [S]) {}
 
     fn is_normalized(&self) -> bool {
         true
@@ -347,8 +340,7 @@ impl CurveProjective for Fr {
         <Fr as Field>::negate(self);
     }
 
-    fn mul_assign<S: Into<<Self::Scalar as PrimeField>::Repr>>(&mut self, other: S)
-    {
+    fn mul_assign<S: Into<<Self::Scalar as PrimeField>::Repr>>(&mut self, other: S) {
         let tmp = Fr::from_repr(other.into()).unwrap();
 
         <Fr as Field>::mul_assign(self, &tmp);
@@ -365,10 +357,20 @@ impl CurveProjective for Fr {
     fn recommended_wnaf_for_num_scalars(_: usize) -> usize {
         3
     }
+
+    fn hash(input: &[u8]) -> Self {
+        unimplemented!()
+    }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Eq, PartialEq, PartialOrd, Ord)]
 pub struct FakePoint;
+
+impl std::hash::Hash for FakePoint {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        unimplemented!()
+    }
+}
 
 impl AsMut<[u8]> for FakePoint {
     fn as_mut(&mut self) -> &mut [u8] {
@@ -433,8 +435,7 @@ impl CurveAffine for Fr {
         <Fr as Field>::negate(self);
     }
 
-    fn mul<S: Into<<Self::Scalar as PrimeField>::Repr>>(&self, other: S) -> Self::Projective
-    {
+    fn mul<S: Into<<Self::Scalar as PrimeField>::Repr>>(&self, other: S) -> Self::Projective {
         let mut res = *self;
         let tmp = Fr::from_repr(other.into()).unwrap();
 
