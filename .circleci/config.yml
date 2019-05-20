@@ -1,0 +1,87 @@
+version: 2.1
+
+executors:
+  default:
+    docker:
+      - image: filecoin/rust:latest
+    working_directory: /mnt/crate
+
+restore-workspace: &restore-workspace
+  attach_workspace:
+    at: /mnt
+
+restore-cache: &restore-cache
+  restore_cache:
+    keys:
+      - cargo-v0-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+      - repo-source-{{ .Branch }}-{{ .Revision }}
+
+commands:
+  test_target:
+    parameters:
+      target:
+        type: string
+    steps:
+      - *restore-workspace
+      - *restore-cache
+      - run:
+          name: Test (<< parameters.target >>)
+          command: TARGET=<< parameters.target >> cargo test
+          no_output_timeout: 15m
+
+jobs:
+  cargo_fetch:
+    executor: default
+    steps:
+      - checkout
+      - run:
+          name: Update submodules
+          command: git submodule update --init --recursive
+      - run:
+          name: Calculate dependencies
+          command: cargo generate-lockfile
+      - restore_cache:
+          keys:
+            - cargo-v0-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+      - run: cargo update
+      - run: cargo fetch
+      - run: rustc --version
+      - run: rm -rf .git
+      - persist_to_workspace:
+          root: /mnt
+          paths:
+            - crate
+      - save_cache:
+          key: cargo-v0-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+          paths:
+            - "~/.cargo"
+            - "~/.rustup"
+
+  test_x86_64-unknown-linux-gnu:
+    executor: default
+    steps:
+      - test_target:
+          target: "x86_64-unknown-linux-gnu"
+
+  build:
+    executor: default
+    steps:
+      - *restore-workspace
+      - *restore-cache
+      - run:
+          name: Run cargo release build
+          command: cargo build --release
+
+
+workflows:
+  version: 2.1
+
+  test:
+    jobs:
+      - cargo_fetch
+      - test_x86_64-unknown-linux-gnu:
+          requires:
+            - cargo_fetch
+      - build:
+          requires:
+            - cargo_fetch
