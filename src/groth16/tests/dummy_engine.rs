@@ -2,7 +2,7 @@ use ff::{
     Field, LegendreSymbol, PrimeField, PrimeFieldDecodingError, PrimeFieldRepr, ScalarEngine,
     SqrtField,
 };
-use pairing::{CurveAffine, CurveProjective, EncodedPoint, Engine, GroupDecodingError};
+use paired::{CurveAffine, CurveProjective, EncodedPoint, Engine, GroupDecodingError};
 
 use rand::{Rand, Rng};
 use std::cmp::Ordering;

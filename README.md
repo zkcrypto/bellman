@@ -1,6 +1,6 @@
-# bellman [![Crates.io](https://img.shields.io/crates/v/bellman.svg)](https://crates.io/crates/bellman) #
+# bellperson [![Crates.io](https://img.shields.io/crates/v/bellperson.svg)](https://crates.io/crates/bellperson)
 
-This is a research project being built for [Zcash](https://z.cash/).
+> This is a fork of the great [bellman](https://github.com/zkcrypto/bellman) library.
 
 ## License
 
