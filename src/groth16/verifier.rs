@@ -1,6 +1,7 @@
 use ff::PrimeField;
 use group::{CurveAffine, CurveProjective};
 use pairing::{Engine, PairingCurveAffine};
+use std::ops::AddAssign;
 
 use super::{PreparedVerifyingKey, Proof, VerifyingKey};
 

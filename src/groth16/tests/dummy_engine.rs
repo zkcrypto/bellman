@@ -413,10 +413,6 @@ impl CurveProjective for Fr {
         self.0 = <Fr as Field>::double(self).0;
     }
 
-    fn add_assign(&mut self, other: &Self) {
-        AddAssign::add_assign(self, other);
-    }
-
     fn add_assign_mixed(&mut self, other: &Self) {
         AddAssign::add_assign(self, other);
     }

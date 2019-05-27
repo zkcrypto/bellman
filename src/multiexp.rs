@@ -5,6 +5,7 @@ use futures::Future;
 use group::{CurveAffine, CurveProjective};
 use std::io;
 use std::iter;
+use std::ops::AddAssign;
 use std::sync::Arc;
 
 use super::SynthesisError;
