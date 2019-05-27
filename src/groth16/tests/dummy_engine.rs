@@ -417,10 +417,6 @@ impl CurveProjective for Fr {
         AddAssign::add_assign(self, other);
     }
 
-    fn negate(&mut self) {
-        self.0 = self.neg().0;
-    }
-
     fn mul_assign<S: Into<<Self::Scalar as PrimeField>::Repr>>(&mut self, other: S) {
         let tmp = Fr::from_repr(other.into()).unwrap();
 
@@ -497,10 +493,6 @@ impl CurveAffine for Fr {
 
     fn is_zero(&self) -> bool {
         <Fr as Field>::is_zero(self)
-    }
-
-    fn negate(&mut self) {
-        self.0 = self.neg().0;
     }
 
     fn mul<S: Into<<Self::Scalar as PrimeField>::Repr>>(&self, other: S) -> Self::Projective {
