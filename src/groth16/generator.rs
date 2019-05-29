@@ -425,7 +425,7 @@ pub fn generate_parameters<E, C>(
         &worker
     );
 
-    // Evaluate for auxillary variables.
+    // Evaluate for auxiliary variables.
     eval(
         &g1_wnaf,
         &g2_wnaf,
