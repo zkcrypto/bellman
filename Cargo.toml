@@ -18,7 +18,7 @@ bit-vec = "0.4.4"
 futures = "0.1"
 cfg-if = "0.1.7"
 
-#pairing = { git = 'https://github.com/matterinc/pairing', tag = "0.16.2" }
+#pairing_ce = { path = "../pairing" }
 pairing_ce = { version = "0.17.0" }
 byteorder = "1"
 

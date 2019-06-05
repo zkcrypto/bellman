@@ -3,11 +3,11 @@ use crate::pairing::{Engine, CurveProjective};
 use std::marker::PhantomData;
 use rand::{Rand, Rng};
 
-use super::{Proof, SxyAdvice};
-use super::batch::Batch;
-use super::poly::{SxEval, SyEval};
-use super::helper::Aggregate;
-use super::parameters::{Parameters};
+use crate::sonic::helped::{Proof, SxyAdvice};
+use crate::sonic::helped::batch::Batch;
+use crate::sonic::helped::poly::{SxEval, SyEval};
+use crate::sonic::helped::helper::Aggregate;
+use crate::sonic::helped::parameters::{Parameters};
 
 use crate::SynthesisError;
 
@@ -18,7 +18,7 @@ use crate::sonic::cs::{Circuit, Variable, Coeff};
 use crate::sonic::srs::SRS;
 use crate::sonic::sonic::Preprocess;
 
-pub struct MultiVerifier<E: Engine, C: Circuit<E>, S: SynthesisDriver, R: Rng> {
+pub struct SuccinctMultiVerifier<E: Engine, C: Circuit<E>, S: SynthesisDriver, R: Rng> {
     circuit: C,
     pub(crate) batch: Batch<E>,
     k_map: Vec<usize>,
@@ -28,14 +28,14 @@ pub struct MultiVerifier<E: Engine, C: Circuit<E>, S: SynthesisDriver, R: Rng> {
     _marker: PhantomData<(E, S)>
 }
 
-impl<E: Engine, C: Circuit<E>, S: SynthesisDriver, R: Rng> MultiVerifier<E, C, S, R> {
+impl<E: Engine, C: Circuit<E>, S: SynthesisDriver, R: Rng> SuccinctMultiVerifier<E, C, S, R> {
     // This constructor consumes randomness source cause it's later used internally
     pub fn new(circuit: C, srs: &SRS<E>, rng: R) -> Result<Self, SynthesisError> {
         let mut preprocess = Preprocess::new();
 
         S::synthesize(&mut preprocess, &circuit)?;
 
-        Ok(MultiVerifier {
+        Ok(SuccinctMultiVerifier {
             circuit,
             batch: Batch::new(srs, preprocess.n),
             k_map: preprocess.k_map,
@@ -50,6 +50,7 @@ impl<E: Engine, C: Circuit<E>, S: SynthesisDriver, R: Rng> MultiVerifier<E, C, S
         &mut self,
         proofs: &[(Proof<E>, SxyAdvice<E>)],
         aggregate: &Aggregate<E>,
+        szw: E::Fr
     )
     {
         let mut transcript = Transcript::new(&[]);
@@ -70,12 +71,12 @@ impl<E: Engine, C: Circuit<E>, S: SynthesisDriver, R: Rng> MultiVerifier<E, C, S
 
         let w: E::Fr = transcript.get_challenge_scalar();
 
-        let szw = {
-            let mut tmp = SxEval::new(w, self.n);
-            S::synthesize(&mut tmp, &self.circuit).unwrap(); // TODO
+        // let szw = {
+        //     let mut tmp = SxEval::new(w, self.n);
+        //     S::synthesize(&mut tmp, &self.circuit).unwrap(); // TODO
 
-            tmp.finalize(z)
-        };
+        //     tmp.finalize(z)
+        // };
 
         {
             let random: E::Fr = self.randomness_source.gen();
@@ -242,72 +243,72 @@ impl<E: Engine, C: Circuit<E>, S: SynthesisDriver, R: Rng> MultiVerifier<E, C, S
     }
 }
 
-/// Check multiple proofs without aggregation. Verifier's work is 
-/// not succint due to `S(X, Y)` evaluation
-pub fn verify_proofs<E: Engine, C: Circuit<E>, S: SynthesisDriver, R: Rng>(
-    proofs: &[Proof<E>],
-    inputs: &[Vec<E::Fr>],
-    circuit: C,
-    rng: R,
-    params: &Parameters<E>,
-) -> Result<bool, SynthesisError> {
-    verify_proofs_on_srs::<E, C, S, R>(proofs, inputs, circuit, rng, &params.srs)
-}
+// /// Check multiple proofs without aggregation. Verifier's work is 
+// /// not succint due to `S(X, Y)` evaluation
+// pub fn verify_proofs<E: Engine, C: Circuit<E>, S: SynthesisDriver, R: Rng>(
+//     proofs: &[Proof<E>],
+//     inputs: &[Vec<E::Fr>],
+//     circuit: C,
+//     rng: R,
+//     params: &Parameters<E>,
+// ) -> Result<bool, SynthesisError> {
+//     verify_proofs_on_srs::<E, C, S, R>(proofs, inputs, circuit, rng, &params.srs)
+// }
 
-/// Check multiple proofs without aggregation. Verifier's work is 
-/// not succint due to `S(X, Y)` evaluation
-pub fn verify_proofs_on_srs<E: Engine, C: Circuit<E>, S: SynthesisDriver, R: Rng>(
-    proofs: &[Proof<E>],
-    inputs: &[Vec<E::Fr>],
-    circuit: C,
-    rng: R,
-    srs: &SRS<E>,
-) -> Result<bool, SynthesisError> {
-    let mut verifier = MultiVerifier::<E, C, S, R>::new(circuit, srs, rng)?;
-    let expected_inputs_size = verifier.get_k_map().len() - 1;
-    for (proof, inputs) in proofs.iter().zip(inputs.iter()) {
-        if inputs.len() != expected_inputs_size {
-            return Err(SynthesisError::Unsatisfiable);
-        }
-        verifier.add_proof(proof, &inputs, |_, _| None);
-    }
+// /// Check multiple proofs without aggregation. Verifier's work is 
+// /// not succint due to `S(X, Y)` evaluation
+// pub fn verify_proofs_on_srs<E: Engine, C: Circuit<E>, S: SynthesisDriver, R: Rng>(
+//     proofs: &[Proof<E>],
+//     inputs: &[Vec<E::Fr>],
+//     circuit: C,
+//     rng: R,
+//     srs: &SRS<E>,
+// ) -> Result<bool, SynthesisError> {
+//     let mut verifier = MultiVerifier::<E, C, S, R>::new(circuit, srs, rng)?;
+//     let expected_inputs_size = verifier.get_k_map().len() - 1;
+//     for (proof, inputs) in proofs.iter().zip(inputs.iter()) {
+//         if inputs.len() != expected_inputs_size {
+//             return Err(SynthesisError::Unsatisfiable);
+//         }
+//         verifier.add_proof(proof, &inputs, |_, _| None);
+//     }
 
-    Ok(verifier.check_all())
-}
+//     Ok(verifier.check_all())
+// }
 
-/// Check multiple proofs with aggregation. Verifier's work is 
-/// not succint due to `S(X, Y)` evaluation
-pub fn verify_aggregate<E: Engine, C: Circuit<E>, S: SynthesisDriver,R: Rng>(
-    proofs: &[(Proof<E>, SxyAdvice<E>)],
-    aggregate: &Aggregate<E>,
-    inputs: &[Vec<E::Fr>],
-    circuit: C,
-    rng: R,
-    params: &Parameters<E>,
-) -> Result<bool, SynthesisError> {
-    verify_aggregate_on_srs::<E, C, S, R>(proofs, aggregate, inputs, circuit, rng, &params.srs)
-}
+// /// Check multiple proofs with aggregation. Verifier's work is 
+// /// not succint due to `S(X, Y)` evaluation
+// pub fn verify_aggregate<E: Engine, C: Circuit<E>, S: SynthesisDriver,R: Rng>(
+//     proofs: &[(Proof<E>, SxyAdvice<E>)],
+//     aggregate: &Aggregate<E>,
+//     inputs: &[Vec<E::Fr>],
+//     circuit: C,
+//     rng: R,
+//     params: &Parameters<E>,
+// ) -> Result<bool, SynthesisError> {
+//     verify_aggregate_on_srs::<E, C, S, R>(proofs, aggregate, inputs, circuit, rng, &params.srs)
+// }
 
-/// Check multiple proofs with aggregation. Verifier's work is 
-/// not succint due to `S(X, Y)` evaluation
-pub fn verify_aggregate_on_srs<E: Engine, C: Circuit<E>, S: SynthesisDriver, R: Rng>(
-    proofs: &[(Proof<E>, SxyAdvice<E>)],
-    aggregate: &Aggregate<E>,
-    inputs: &[Vec<E::Fr>],
-    circuit: C,
-    rng: R,
-    srs: &SRS<E>,
-) -> Result<bool, SynthesisError> {
-    let mut verifier = MultiVerifier::<E, C, S, R>::new(circuit, srs, rng)?;
-    let expected_inputs_size = verifier.get_k_map().len() - 1;
-    for ((proof, advice), inputs) in proofs.iter().zip(inputs.iter()) {
-        if inputs.len() != expected_inputs_size {
-            return Err(SynthesisError::Unsatisfiable);
-        }
-        verifier.add_proof_with_advice(proof, &inputs, &advice);
-    }
-    verifier.add_aggregate(proofs, aggregate);
+// /// Check multiple proofs with aggregation. Verifier's work is 
+// /// not succint due to `S(X, Y)` evaluation
+// pub fn verify_aggregate_on_srs<E: Engine, C: Circuit<E>, S: SynthesisDriver, R: Rng>(
+//     proofs: &[(Proof<E>, SxyAdvice<E>)],
+//     aggregate: &Aggregate<E>,
+//     inputs: &[Vec<E::Fr>],
+//     circuit: C,
+//     rng: R,
+//     srs: &SRS<E>,
+// ) -> Result<bool, SynthesisError> {
+//     let mut verifier = MultiVerifier::<E, C, S, R>::new(circuit, srs, rng)?;
+//     let expected_inputs_size = verifier.get_k_map().len() - 1;
+//     for ((proof, advice), inputs) in proofs.iter().zip(inputs.iter()) {
+//         if inputs.len() != expected_inputs_size {
+//             return Err(SynthesisError::Unsatisfiable);
+//         }
+//         verifier.add_proof_with_advice(proof, &inputs, &advice);
+//     }
+//     verifier.add_aggregate(proofs, aggregate);
 
-    Ok(verifier.check_all())
-}
+//     Ok(verifier.check_all())
+// }
 

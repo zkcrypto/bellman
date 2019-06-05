@@ -2,10 +2,10 @@ use crate::pairing::ff::{Field};
 use crate::pairing::{Engine, CurveProjective};
 use std::marker::PhantomData;
 
-use super::{Proof, SxyAdvice};
-use super::batch::Batch;
-use super::poly::{SxEval, SyEval};
-use super::Parameters;
+use crate::sonic::helped::{Proof, SxyAdvice};
+use crate::sonic::helped::batch::Batch;
+use crate::sonic::helped::poly::{SxEval, SyEval};
+use crate::sonic::helped::Parameters;
 
 use crate::SynthesisError;
 
@@ -15,24 +15,21 @@ use crate::sonic::cs::{Backend, SynthesisDriver};
 use crate::sonic::cs::{Circuit, Variable, Coeff};
 use crate::sonic::srs::SRS;
 use crate::sonic::sonic::CountNandQ;
+use crate::sonic::sonic::M;
 
 #[derive(Clone)]
-pub struct Aggregate<E: Engine> {
-    // Commitment to s(z, Y)
-    pub c: E::G1Affine,
-    // We have to open each of the S commitments to a random point `z`
-    pub s_opening: E::G1Affine,
-    // We have to open C to each constituent `y`
-    pub c_openings: Vec<(E::G1Affine, E::Fr)>,
-    // Then we have to finally open C
-    pub opening: E::G1Affine,
+pub struct SuccinctAggregate<E: Engine> {
+    pub permutations: []
+    pub a: Vec<[Option<(Coeff<E>, usize)>; M]>,
+    pub b: Vec<[Option<(Coeff<E>, usize)>; M]>,
+    pub c: Vec<[Option<(Coeff<E>, usize)>; M]>,
 }
 
 pub fn create_aggregate<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
     circuit: &C,
     inputs: &[(Proof<E>, SxyAdvice<E>)],
     params: &Parameters<E>,
-) -> Aggregate<E>
+) -> SuccinctAggregate<E>
 {
     let n = params.vk.n;
     let q = params.vk.q;
@@ -44,7 +41,7 @@ pub fn create_aggregate_on_srs<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
     circuit: &C,
     inputs: &[(Proof<E>, SxyAdvice<E>)],
     srs: &SRS<E>,
-) -> Aggregate<E>
+) -> SuccinctAggregate<E>
 {
     // TODO: precompute this?
     let (n, q) = {
@@ -64,7 +61,7 @@ pub fn create_aggregate_on_srs_using_information<E: Engine, C: Circuit<E>, S: Sy
     srs: &SRS<E>,
     n: usize,
     q: usize,
-) -> Aggregate<E>
+) -> SuccinctAggregate<E>
 {
     let mut transcript = Transcript::new(&[]);
     let mut y_values: Vec<E::Fr> = Vec::with_capacity(inputs.len());
@@ -79,6 +76,21 @@ pub fn create_aggregate_on_srs_using_information<E: Engine, C: Circuit<E>, S: Sy
     }
 
     let z: E::Fr = transcript.get_challenge_scalar();
+
+    let t = {
+        let mut tmp: PermutationSynthesizer<E, B> = PermutationSynthesizer::new(backend);
+
+        let one = tmp.alloc_input(|| Ok(E::Fr::one())).expect("should have no issues");
+
+        match (one, <PermutationSynthesizer<E, B> as ConstraintSystem<E>>::ONE) {
+            (Variable::A(1), Variable::A(1)) => {},
+            _ => panic!("one variable is incorrect")
+        }
+
+        circuit.synthesize(&mut tmp).expect("should synthesize");
+
+        tmp
+    };
 
     // Compute s(z, Y)
     let (s_poly_negative, s_poly_positive) = {

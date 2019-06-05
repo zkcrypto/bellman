@@ -47,6 +47,11 @@ fn permute<F: Field>(coeffs: &[F], permutation: & [usize]) -> Vec<F>{
     assert_eq!(coeffs.len(), permutation.len());
     let mut result: Vec<F> = vec![F::zero(); coeffs.len()];
     for (i, j) in permutation.iter().enumerate() {
+        if *j < 1 {
+            // if permutation information is missing coefficient itself must be zero!
+            assert!(coeffs[i].is_zero());
+            continue;
+        }
         result[*j - 1] = coeffs[i];
     }
     result
@@ -79,7 +84,7 @@ impl<E: Engine> PermutationArgument<E> {
 
         let n = non_permuted_coefficients[0].len();
 
-        // p1 is just a commitment to the powers of x
+        // p1 is just a commitment to the powers of x. It's indexed from 0 cause there is no g^0
         let p_1 = multiexp(srs.g_positive_x_alpha[0..n].iter(), vec![E::Fr::one(); n].iter()).into_affine();
 
         let mut p_2 = vec![];
@@ -104,7 +109,6 @@ impl<E: Engine> PermutationArgument<E> {
 
             // p2 is a commitment to the s^{perm}_i * x^i
             {
-                // let permuted_coeffs = permute(&c[..], &p[..]);
                 let p2 = multiexp(srs.g_positive_x_alpha[0..n].iter(), c.iter()).into_affine();
                 p_2.push(p2);
             }
@@ -253,7 +257,7 @@ impl<E: Engine> PermutationArgument<E> {
                 s_polynomial = Some(c.clone());
             }
         }
-        let mut s_polynomial = s_polynomial.unwrap();
+        let s_polynomial = s_polynomial.unwrap();
         // evaluate at z
         let s_zy = evaluate_at_consequitive_powers(& s_polynomial[..], z, z);
 
@@ -590,14 +594,12 @@ fn test_permutation_argument() {
     let srs_alpha = Fr::from_str("23728792").unwrap();
     let srs = SRS::<Bls12>::dummy(830564, srs_x, srs_alpha);
 
-    let n: usize = 1 << 1;
+    let n: usize = 1 << 4;
     let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
-    // let coeffs = (0..n).map(|_| Fr::rand(rng)).collect::<Vec<_>>();
-    // let mut permutation = (0..n).collect::<Vec<_>>();
-    // rng.shuffle(&mut permutation);
-
-    let coeffs = vec![Fr::from_str("3").unwrap(), Fr::from_str("4").unwrap()];
-    let permutation = vec![2, 1];
+    let mut coeffs = (0..n).map(|_| Fr::rand(rng)).collect::<Vec<_>>();
+    coeffs[2] = Fr::zero(); // edge case
+    let mut permutation = (1..=n).collect::<Vec<_>>();
+    rng.shuffle(&mut permutation);
 
     let coeffs = vec![coeffs];
     let permutations = vec![permutation];
@@ -607,12 +609,8 @@ fn test_permutation_argument() {
     let mut argument = PermutationArgument::new(coeffs, permutations);
 
     let y : Fr = rng.gen();
-    let y : Fr = Fr::one();
-    let y : Fr = Fr::from_str("2").unwrap();
 
-    // let challenges = (0..1).map(|_| Fr::rand(rng)).collect::<Vec<_>>();
-
-    let challenges = vec![Fr::one()];
+    let challenges = (0..1).map(|_| Fr::rand(rng)).collect::<Vec<_>>();
 
     let commitments = argument.commit(y, &srs);
     let mut s_commitments = vec![];
@@ -623,7 +621,6 @@ fn test_permutation_argument() {
     }
 
     let z_prime : Fr = rng.gen();
-    let z_prime : Fr = Fr::one();
 
     let opening = argument.open_commitments_to_s_prime(&challenges, y, z_prime, &srs);
 

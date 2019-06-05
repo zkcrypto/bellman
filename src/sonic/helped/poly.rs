@@ -31,6 +31,8 @@ pub struct SxEval<E: Engine> {
     v: Vec<E::Fr>,
     // x^{i+N} (-y^i -y^{-i} + \sum\limits_{q=1}^Q y^{q+N} w_{q,i})
     w: Vec<E::Fr>,
+
+    max_n: usize,
 }
 
 impl<E: Engine> SxEval<E> {
@@ -69,6 +71,7 @@ impl<E: Engine> SxEval<E> {
             u,
             v,
             w,
+            max_n: n
         }
     }
 
@@ -114,11 +117,19 @@ impl<E: Engine> SxEval<E> {
 }
 
 impl<'a, E: Engine> Backend<E> for &'a mut SxEval<E> {
-    fn new_linear_constraint(&mut self) {
+    type LinearConstraintIndex = E::Fr;
+
+    fn new_linear_constraint(&mut self) -> E::Fr {
         self.yqn.mul_assign(&self.y);
+
+        self.yqn
     }
 
-    fn insert_coefficient(&mut self, var: Variable, coeff: Coeff<E>) {
+    fn get_for_q(&self, q: usize) -> Self::LinearConstraintIndex {
+        self.y.pow(&[(self.max_n + q) as u64])
+    }
+
+    fn insert_coefficient(&mut self, var: Variable, coeff: Coeff<E>, y: &E::Fr) {
         let acc = match var {
             Variable::A(index) => {
                 &mut self.u[index - 1]
@@ -134,13 +145,13 @@ impl<'a, E: Engine> Backend<E> for &'a mut SxEval<E> {
         match coeff {
             Coeff::Zero => { },
             Coeff::One => {
-                acc.add_assign(&self.yqn);
+                acc.add_assign(&y);
             },
             Coeff::NegativeOne => {
-                acc.sub_assign(&self.yqn);
+                acc.sub_assign(&y);
             },
             Coeff::Full(mut val) => {
-                val.mul_assign(&self.yqn);
+                val.mul_assign(&y);
                 acc.add_assign(&val);
             }
         }
@@ -270,18 +281,25 @@ impl<E: Engine> SyEval<E> {
 }
 
 impl<'a, E: Engine> Backend<E> for &'a mut SyEval<E> {
-    fn new_linear_constraint(&mut self) {
+    type LinearConstraintIndex = usize;
+
+    fn new_linear_constraint(&mut self) -> usize {
         self.current_q += 1;
+        self.current_q
     }
 
-    fn insert_coefficient(&mut self, var: Variable, coeff: Coeff<E>) {
+    fn get_for_q(&self, q: usize) -> Self::LinearConstraintIndex {
+        q
+    }
+
+    fn insert_coefficient(&mut self, var: Variable, coeff: Coeff<E>, q: &usize) {
         match var {
             Variable::A(index) => {
                 let index = index - 1;
                 // Y^{q+N} += X^{-i} * coeff
                 let mut tmp = self.a[index];
                 coeff.multiply(&mut tmp);
-                let yindex = self.current_q + self.max_n;
+                let yindex = *q + self.max_n;
                 self.positive_coeffs[yindex - 1].add_assign(&tmp);
             }
             Variable::B(index) => {
@@ -289,7 +307,7 @@ impl<'a, E: Engine> Backend<E> for &'a mut SyEval<E> {
                 // Y^{q+N} += X^{i} * coeff
                 let mut tmp = self.b[index];
                 coeff.multiply(&mut tmp);
-                let yindex = self.current_q + self.max_n;
+                let yindex = *q + self.max_n;
                 self.positive_coeffs[yindex - 1].add_assign(&tmp);
             }
             Variable::C(index) => {
@@ -297,7 +315,7 @@ impl<'a, E: Engine> Backend<E> for &'a mut SyEval<E> {
                 // Y^{q+N} += X^{i+N} * coeff
                 let mut tmp = self.c[index];
                 coeff.multiply(&mut tmp);
-                let yindex = self.current_q + self.max_n;
+                let yindex = *q + self.max_n;
                 self.positive_coeffs[yindex - 1].add_assign(&tmp);
             }
         };

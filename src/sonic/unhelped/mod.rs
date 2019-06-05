@@ -7,7 +7,12 @@ mod s2_proof;
 mod wellformed_argument;
 mod grand_product_argument;
 mod permutation_argument;
-pub mod padding;
+mod verifier;
+pub mod permutation_structure;
+// mod helper;
+// mod permutation;
+// pub mod padding;
 
 pub use self::wellformed_argument::{WellformednessArgument, WellformednessProof};
 pub use self::permutation_argument::{PermutationArgument, PermutationProof, Proof};
+pub use self::verifier::SuccinctMultiVerifier;

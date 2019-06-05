@@ -284,7 +284,7 @@ fn test_sonic_mimc() {
             constants: &constants
         };
 
-        use crate::sonic::cs::Basic;
+        use crate::sonic::sonic::Basic;
         use crate::sonic::sonic::AdaptorCircuit;
         use crate::sonic::helped::prover::{create_advice_on_srs, create_proof_on_srs};
         use crate::sonic::helped::{MultiVerifier, get_circuit_parameters};
@@ -352,6 +352,121 @@ fn test_sonic_mimc() {
 }
 
 #[test]
+fn test_succinct_sonic_mimc() {
+    use crate::pairing::ff::{Field, PrimeField};
+    use crate::pairing::{Engine, CurveAffine, CurveProjective};
+    use crate::pairing::bls12_381::{Bls12, Fr};
+    use std::time::{Instant};
+    use crate::sonic::srs::SRS;
+
+    let srs_x = Fr::from_str("23923").unwrap();
+    let srs_alpha = Fr::from_str("23728792").unwrap();
+    println!("making srs");
+    let start = Instant::now();
+    let srs = SRS::<Bls12>::dummy(830564, srs_x, srs_alpha);
+    println!("done in {:?}", start.elapsed());
+
+    {
+        use rand::{XorShiftRng, SeedableRng, Rand, Rng};
+        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+
+        // Generate the MiMC round constants
+        let constants = (0..MIMC_ROUNDS).map(|_| rng.gen()).collect::<Vec<_>>();
+        let samples: usize = 100;
+
+        let xl = rng.gen();
+        let xr = rng.gen();
+        let image = mimc::<Bls12>(xl, xr, &constants);
+
+        // Create an instance of our circuit (with the
+        // witness)
+        let circuit = MiMCDemoNoInputs {
+            xl: Some(xl),
+            xr: Some(xr),
+            image: Some(image),
+            constants: &constants
+        };
+
+        use crate::sonic::sonic::Basic;
+        use crate::sonic::sonic::AdaptorCircuit;
+        use crate::sonic::helped::prover::{create_advice_on_srs, create_proof_on_srs};
+        use crate::sonic::helped::{MultiVerifier, get_circuit_parameters_for_succinct_sonic};
+        use crate::sonic::helped::helper::{create_aggregate_on_srs};
+        use crate::sonic::sonic::Permutation3;
+        use crate::sonic::unhelped::permutation_structure::*;
+
+        let perm_structure = create_permutation_structure::<Bls12, _>(&AdaptorCircuit(circuit.clone()));
+        perm_structure.create_permutation_arguments(Fr::one(), Fr::one(), rng, &srs);
+
+
+        println!("N = {}, Q = {}", perm_structure.n, perm_structure.q);
+        return;
+
+        // let info = get_circuit_parameters_for_succinct_sonic::<Bls12, _>(circuit.clone()).expect("Must get circuit info");
+        // println!("{:?}", info);
+
+        // println!("creating proof");
+        // let start = Instant::now();
+        // let proof = create_proof_on_srs::<Bls12, _, Permutation3>(&AdaptorCircuit(circuit.clone()), &srs).unwrap();
+        // println!("done in {:?}", start.elapsed());
+
+        // println!("creating advice");
+        // let start = Instant::now();
+        // let advice = create_advice_on_srs::<Bls12, _, Permutation3>(&AdaptorCircuit(circuit.clone()), &proof, &srs).unwrap();
+        // println!("done in {:?}", start.elapsed());
+
+        // println!("creating aggregate for {} proofs", samples);
+        // let start = Instant::now();
+        // let proofs: Vec<_> = (0..samples).map(|_| (proof.clone(), advice.clone())).collect();
+        // let aggregate = create_aggregate_on_srs::<Bls12, _, Permutation3>(&AdaptorCircuit(circuit.clone()), &proofs, &srs);
+        // println!("done in {:?}", start.elapsed());
+
+        // {
+        //     let rng = thread_rng();
+        //     let mut verifier = MultiVerifier::<Bls12, _, Permutation3, _>::new(AdaptorCircuit(circuit.clone()), &srs, rng).unwrap();
+        //     println!("verifying 1 proof without advice");
+        //     let start = Instant::now();
+        //     {
+        //         for _ in 0..1 {
+        //             verifier.add_proof(&proof, &[], |_, _| None);
+        //         }
+        //         assert_eq!(verifier.check_all(), true); // TODO
+        //     }
+        //     println!("done in {:?}", start.elapsed());
+        // }
+
+        // {
+        //     let rng = thread_rng();
+        //     let mut verifier = MultiVerifier::<Bls12, _, Permutation3, _>::new(AdaptorCircuit(circuit.clone()), &srs, rng).unwrap();
+        //     println!("verifying {} proofs without advice", samples);
+        //     let start = Instant::now();
+        //     {
+        //         for _ in 0..samples {
+        //             verifier.add_proof(&proof, &[], |_, _| None);
+        //         }
+        //         assert_eq!(verifier.check_all(), true); // TODO
+        //     }
+        //     println!("done in {:?}", start.elapsed());
+        // }
+        
+        // {
+        //     let rng = thread_rng();
+        //     let mut verifier = MultiVerifier::<Bls12, _, Permutation3, _>::new(AdaptorCircuit(circuit.clone()), &srs, rng).unwrap();
+        //     println!("verifying 100 proofs with advice");
+        //     let start = Instant::now();
+        //     {
+        //         for (ref proof, ref advice) in &proofs {
+        //             verifier.add_proof_with_advice(proof, &[], advice);
+        //         }
+        //         verifier.add_aggregate(&proofs, &aggregate);
+        //         assert_eq!(verifier.check_all(), true); // TODO
+        //     }
+        //     println!("done in {:?}", start.elapsed());
+        // }
+    }
+}
+
+#[test]
 fn test_inputs_into_sonic_mimc() {
     use crate::pairing::ff::{Field, PrimeField};
     use crate::pairing::{Engine, CurveAffine, CurveProjective};
@@ -388,7 +503,7 @@ fn test_inputs_into_sonic_mimc() {
             constants: &constants
         };
 
-        use crate::sonic::cs::Basic;
+        use crate::sonic::sonic::Basic;
         use crate::sonic::sonic::AdaptorCircuit;
         use crate::sonic::helped::prover::{create_advice_on_srs, create_proof_on_srs};
         use crate::sonic::helped::{MultiVerifier, get_circuit_parameters};
@@ -541,100 +656,100 @@ fn test_high_level_sonic_api() {
     }
 }
 
-#[test]
-fn test_constraints_info() {
-    use crate::pairing::bn256::{Bn256};
-    use std::time::{Instant};
-    use crate::sonic::unhelped::padding::{constraints_info};
-    {
-        // This may not be cryptographically safe, use
-        // `OsRng` (for example) in production software.
-        let mut rng = &mut thread_rng();
+// #[test]
+// fn test_constraints_info() {
+//     use crate::pairing::bn256::{Bn256};
+//     use std::time::{Instant};
+//     use crate::sonic::unhelped::padding::{constraints_info};
+//     {
+//         // This may not be cryptographically safe, use
+//         // `OsRng` (for example) in production software.
+//         let mut rng = &mut thread_rng();
 
-        // Generate the MiMC round constants
-        let constants = (0..MIMC_ROUNDS).map(|_| rng.gen()).collect::<Vec<_>>();
+//         // Generate the MiMC round constants
+//         let constants = (0..MIMC_ROUNDS).map(|_| rng.gen()).collect::<Vec<_>>();
 
-        let xl = rng.gen();
-        let xr = rng.gen();
-        let image = mimc::<Bn256>(xl, xr, &constants);
+//         let xl = rng.gen();
+//         let xr = rng.gen();
+//         let image = mimc::<Bn256>(xl, xr, &constants);
 
-        // Create an instance of our circuit (with the
-        // witness)
-        let circuit = MiMCDemo {
-            xl: Some(xl),
-            xr: Some(xr),
-            constants: &constants
-        };
+//         // Create an instance of our circuit (with the
+//         // witness)
+//         let circuit = MiMCDemo {
+//             xl: Some(xl),
+//             xr: Some(xr),
+//             constants: &constants
+//         };
 
-        constraints_info::<Bn256, _>(circuit.clone());
-    }
-}
+//         constraints_info::<Bn256, _>(circuit.clone());
+//     }
+// }
 
-#[test]
-fn test_padding_using_mimc() {
-    use crate::pairing::ff::{Field, PrimeField};
-    use crate::pairing::{Engine, CurveAffine, CurveProjective};
-    use crate::pairing::bls12_381::{Bls12, Fr};
-    use std::time::{Instant};
-    use crate::sonic::srs::SRS;
+// #[test]
+// fn test_padding_using_mimc() {
+//     use crate::pairing::ff::{Field, PrimeField};
+//     use crate::pairing::{Engine, CurveAffine, CurveProjective};
+//     use crate::pairing::bls12_381::{Bls12, Fr};
+//     use std::time::{Instant};
+//     use crate::sonic::srs::SRS;
 
-    let srs_x = Fr::from_str("23923").unwrap();
-    let srs_alpha = Fr::from_str("23728792").unwrap();
-    println!("making srs");
-    let start = Instant::now();
-    let srs = SRS::<Bls12>::dummy(830564, srs_x, srs_alpha);
-    println!("done in {:?}", start.elapsed());
+//     let srs_x = Fr::from_str("23923").unwrap();
+//     let srs_alpha = Fr::from_str("23728792").unwrap();
+//     println!("making srs");
+//     let start = Instant::now();
+//     let srs = SRS::<Bls12>::dummy(830564, srs_x, srs_alpha);
+//     println!("done in {:?}", start.elapsed());
 
-    {
-        // This may not be cryptographically safe, use
-        // `OsRng` (for example) in production software.
-        let rng = &mut thread_rng();
+//     {
+//         // This may not be cryptographically safe, use
+//         // `OsRng` (for example) in production software.
+//         let rng = &mut thread_rng();
 
-        // Generate the MiMC round constants
-        let constants = (0..MIMC_ROUNDS).map(|_| rng.gen()).collect::<Vec<_>>();
-        let samples: usize = 100;
+//         // Generate the MiMC round constants
+//         let constants = (0..MIMC_ROUNDS).map(|_| rng.gen()).collect::<Vec<_>>();
+//         let samples: usize = 100;
 
-        let xl = rng.gen();
-        let xr = rng.gen();
-        let image = mimc::<Bls12>(xl, xr, &constants);
+//         let xl = rng.gen();
+//         let xr = rng.gen();
+//         let image = mimc::<Bls12>(xl, xr, &constants);
 
-        // Create an instance of our circuit (with the
-        // witness)
-        let circuit = MiMCDemoNoInputs {
-            xl: Some(xl),
-            xr: Some(xr),
-            image: Some(image),
-            constants: &constants
-        };
+//         // Create an instance of our circuit (with the
+//         // witness)
+//         let circuit = MiMCDemoNoInputs {
+//             xl: Some(xl),
+//             xr: Some(xr),
+//             image: Some(image),
+//             constants: &constants
+//         };
 
-        use crate::sonic::cs::Basic;
-        use crate::sonic::sonic::AdaptorCircuit;
-        use crate::sonic::helped::prover::{create_advice_on_srs, create_proof_on_srs};
-        use crate::sonic::helped::{MultiVerifier, get_circuit_parameters};
-        use crate::sonic::helped::helper::{create_aggregate_on_srs};
-        use crate::sonic::unhelped::padding::Padding;
+//         use crate::sonic::cs::Basic;
+//         use crate::sonic::sonic::AdaptorCircuit;
+//         use crate::sonic::helped::prover::{create_advice_on_srs, create_proof_on_srs};
+//         use crate::sonic::helped::{MultiVerifier, get_circuit_parameters};
+//         use crate::sonic::helped::helper::{create_aggregate_on_srs};
+//         use crate::sonic::unhelped::padding::Padding;
 
-        let info = get_circuit_parameters::<Bls12, _>(circuit.clone()).expect("Must get circuit info");
-        println!("{:?}", info);
+//         let info = get_circuit_parameters::<Bls12, _>(circuit.clone()).expect("Must get circuit info");
+//         println!("{:?}", info);
 
-        println!("creating proof");
-        let start = Instant::now();
-        let proof = create_proof_on_srs::<Bls12, _, Padding>(&AdaptorCircuit(circuit.clone()), &srs).unwrap();
-        println!("done in {:?}", start.elapsed());
+//         println!("creating proof");
+//         let start = Instant::now();
+//         let proof = create_proof_on_srs::<Bls12, _, Padding>(&AdaptorCircuit(circuit.clone()), &srs).unwrap();
+//         println!("done in {:?}", start.elapsed());
 
-        {
-            let rng = thread_rng();
-            let mut verifier = MultiVerifier::<Bls12, _, Padding, _>::new(AdaptorCircuit(circuit.clone()), &srs, rng).unwrap();
-            println!("K map = {:?}", verifier.get_k_map());
-            println!("verifying 1 proof without advice");
-            let start = Instant::now();
-            {
-                for _ in 0..1 {
-                    verifier.add_proof(&proof, &[], |_, _| None);
-                }
-                assert_eq!(verifier.check_all(), true); // TODO
-            }
-            println!("done in {:?}", start.elapsed());
-        }
-    }
-}
+//         {
+//             let rng = thread_rng();
+//             let mut verifier = MultiVerifier::<Bls12, _, Padding, _>::new(AdaptorCircuit(circuit.clone()), &srs, rng).unwrap();
+//             println!("K map = {:?}", verifier.get_k_map());
+//             println!("verifying 1 proof without advice");
+//             let start = Instant::now();
+//             {
+//                 for _ in 0..1 {
+//                     verifier.add_proof(&proof, &[], |_, _| None);
+//                 }
+//                 assert_eq!(verifier.check_all(), true); // TODO
+//             }
+//             println!("done in {:?}", start.elapsed());
+//         }
+//     }
+// }

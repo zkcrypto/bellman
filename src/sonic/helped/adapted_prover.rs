@@ -15,10 +15,11 @@ use crate::sonic::cs::{Backend, SynthesisDriver};
 use crate::{Circuit};
 use crate::sonic::sonic::AdaptorCircuit;
 use crate::sonic::srs::SRS;
-use crate::sonic::cs::Basic;
+use crate::sonic::sonic::Basic;
 use super::prover::create_advice as create_advice_sonic_circuit;
 use super::prover::create_advice_on_information_and_srs as create_advice_on_information_and_srs_sonic_circuit;
 use super::prover::create_proof_on_srs as create_proof_on_srs_sonic_circuit;
+use crate::sonic::sonic::CountN;
 
 // pub fn create_advice_on_information_and_srs<E: Engine, C: Circuit<E> + Clone, S: SynthesisDriver>(
 pub fn create_advice_on_information_and_srs<E: Engine, C: Circuit<E> + Clone>(
@@ -51,23 +52,13 @@ pub fn create_advice_on_srs<E: Engine, C: Circuit<E> + Clone>(
     srs: &SRS<E>
 ) -> Result<SxyAdvice<E>, SynthesisError>
 {
-    use crate::sonic::cs::Nonassigning;
+    use crate::sonic::sonic::Nonassigning;
 
     let adapted_circuit = AdaptorCircuit(circuit.clone());
     // annoying, but we need n to compute s(z, y), and this isn't
     // precomputed anywhere yet
     let n = {
-        struct CountN {
-            n: usize
-        }
-
-        impl<'a, E: Engine> Backend<E> for &'a mut CountN {
-            fn new_multiplication_gate(&mut self) {
-                self.n += 1;
-            }
-        }
-
-        let mut tmp = CountN{n:0};
+        let mut tmp = CountN::<Nonassigning>::new();
         Nonassigning::synthesize(&mut tmp, &adapted_circuit)?;
 
         tmp.n
