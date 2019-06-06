@@ -104,6 +104,7 @@ impl<E: Engine> Batch<E> {
         }
     }
 
+    /// add `(r*P) to the h^(alpha*x) terms, add -(r*point)*P to h^(alpha) terms 
     pub fn add_opening(&mut self, p: E::G1Affine, mut r: E::Fr, point: E::Fr) {
         self.alpha_x.push((p, r));
         r.mul_assign(&point);
@@ -111,14 +112,17 @@ impl<E: Engine> Batch<E> {
         self.alpha.push((p, r));
     }
 
+    /// add (r*P) to -h^(x) terms
     pub fn add_commitment(&mut self, p: E::G1Affine, r: E::Fr) {
         self.neg_h.push((p, r));
     }
 
+    /// add (r*P) to -h^(d-n) terms
     pub fn add_commitment_max_n(&mut self, p: E::G1Affine, r: E::Fr) {
         self.neg_x_n_minus_d.push((p, r));
     }
 
+    /// add (r*point) to g terms for later pairing with h^(alpha)
     pub fn add_opening_value(&mut self, mut r: E::Fr, point: E::Fr) {
         r.mul_assign(&point);
         self.value.add_assign(&r);

@@ -351,6 +351,112 @@ fn test_sonic_mimc() {
     }
 }
 
+
+#[test]
+fn test_sonic_mimc_in_permutation_driver() {
+    use crate::pairing::ff::{Field, PrimeField};
+    use crate::pairing::{Engine, CurveAffine, CurveProjective};
+    use crate::pairing::bls12_381::{Bls12, Fr};
+    use std::time::{Instant};
+    use crate::sonic::srs::SRS;
+
+    let srs_x = Fr::from_str("23923").unwrap();
+    let srs_alpha = Fr::from_str("23728792").unwrap();
+    println!("making srs");
+    let start = Instant::now();
+    let srs = SRS::<Bls12>::dummy(830564, srs_x, srs_alpha);
+    println!("done in {:?}", start.elapsed());
+
+    {
+        // This may not be cryptographically safe, use
+        // `OsRng` (for example) in production software.
+        let rng = &mut thread_rng();
+
+        // Generate the MiMC round constants
+        let constants = (0..MIMC_ROUNDS).map(|_| rng.gen()).collect::<Vec<_>>();
+        let samples: usize = 100;
+
+        let xl = rng.gen();
+        let xr = rng.gen();
+        let image = mimc::<Bls12>(xl, xr, &constants);
+
+        // Create an instance of our circuit (with the
+        // witness)
+        let circuit = MiMCDemoNoInputs {
+            xl: Some(xl),
+            xr: Some(xr),
+            image: Some(image),
+            constants: &constants
+        };
+
+        use crate::sonic::sonic::Basic;
+        use crate::sonic::sonic::AdaptorCircuit;
+        use crate::sonic::helped::prover::{create_advice_on_srs, create_proof_on_srs};
+        use crate::sonic::helped::{MultiVerifier, get_circuit_parameters};
+        use crate::sonic::helped::helper::{create_aggregate_on_srs};
+        use crate::sonic::sonic::Permutation3;
+
+        println!("creating proof");
+        let start = Instant::now();
+        let proof = create_proof_on_srs::<Bls12, _, Permutation3>(&AdaptorCircuit(circuit.clone()), &srs).unwrap();
+        println!("done in {:?}", start.elapsed());
+
+        println!("creating advice");
+        let start = Instant::now();
+        let advice = create_advice_on_srs::<Bls12, _, Permutation3>(&AdaptorCircuit(circuit.clone()), &proof, &srs).unwrap();
+        println!("done in {:?}", start.elapsed());
+
+        println!("creating aggregate for {} proofs", samples);
+        let start = Instant::now();
+        let proofs: Vec<_> = (0..samples).map(|_| (proof.clone(), advice.clone())).collect();
+        let aggregate = create_aggregate_on_srs::<Bls12, _, Permutation3>(&AdaptorCircuit(circuit.clone()), &proofs, &srs);
+        println!("done in {:?}", start.elapsed());
+
+        {
+            let rng = thread_rng();
+            let mut verifier = MultiVerifier::<Bls12, _, Permutation3, _>::new(AdaptorCircuit(circuit.clone()), &srs, rng).unwrap();
+            println!("verifying 1 proof without advice");
+            let start = Instant::now();
+            {
+                for _ in 0..1 {
+                    verifier.add_proof(&proof, &[], |_, _| None);
+                }
+                assert_eq!(verifier.check_all(), true); // TODO
+            }
+            println!("done in {:?}", start.elapsed());
+        }
+
+        {
+            let rng = thread_rng();
+            let mut verifier = MultiVerifier::<Bls12, _, Permutation3, _>::new(AdaptorCircuit(circuit.clone()), &srs, rng).unwrap();
+            println!("verifying {} proofs without advice", samples);
+            let start = Instant::now();
+            {
+                for _ in 0..samples {
+                    verifier.add_proof(&proof, &[], |_, _| None);
+                }
+                assert_eq!(verifier.check_all(), true); // TODO
+            }
+            println!("done in {:?}", start.elapsed());
+        }
+        
+        {
+            let rng = thread_rng();
+            let mut verifier = MultiVerifier::<Bls12, _, Permutation3, _>::new(AdaptorCircuit(circuit.clone()), &srs, rng).unwrap();
+            println!("verifying 100 proofs with advice");
+            let start = Instant::now();
+            {
+                for (ref proof, ref advice) in &proofs {
+                    verifier.add_proof_with_advice(proof, &[], advice);
+                }
+                verifier.add_aggregate(&proofs, &aggregate);
+                assert_eq!(verifier.check_all(), true); // TODO
+            }
+            println!("done in {:?}", start.elapsed());
+        }
+    }
+}
+
 #[test]
 fn test_succinct_sonic_mimc() {
     use crate::pairing::ff::{Field, PrimeField};
@@ -390,79 +496,136 @@ fn test_succinct_sonic_mimc() {
         use crate::sonic::sonic::Basic;
         use crate::sonic::sonic::AdaptorCircuit;
         use crate::sonic::helped::prover::{create_advice_on_srs, create_proof_on_srs};
-        use crate::sonic::helped::{MultiVerifier, get_circuit_parameters_for_succinct_sonic};
+        use crate::sonic::helped::{get_circuit_parameters_for_succinct_sonic, MultiVerifier};
         use crate::sonic::helped::helper::{create_aggregate_on_srs};
         use crate::sonic::sonic::Permutation3;
         use crate::sonic::unhelped::permutation_structure::*;
+        use crate::sonic::unhelped::SuccinctMultiVerifier;
+
+        use crate::sonic::cs::{Circuit, ConstraintSystem, LinearCombination, Coeff};
+
+        struct MyCircuit;
+
+        impl<E: Engine> Circuit<E> for MyCircuit {
+            fn synthesize<CS: ConstraintSystem<E>>(&self, cs: &mut CS) -> Result<(), SynthesisError> {
+                let (a, b, c) = cs.multiply(|| {
+                    Ok((
+                        E::Fr::from_str("10").unwrap(),
+                        E::Fr::from_str("20").unwrap(),
+                        E::Fr::from_str("200").unwrap(),
+                    ))
+                })?;
+
+                cs.enforce_zero(LinearCombination::zero() + (Coeff::Full(E::Fr::from_str("2").unwrap()), a) - b);
+
+                let multiplier = cs.alloc_input(|| Ok(E::Fr::from_str("20").unwrap()))?;
+
+                let dummy = cs.alloc_input(|| Ok(E::Fr::from_str("200").unwrap()))?;
+
+                cs.enforce_zero(LinearCombination::from(b) - multiplier);
+                cs.enforce_zero(LinearCombination::from(c) - dummy);
+
+                Ok(())
+            }
+        }
 
         let perm_structure = create_permutation_structure::<Bls12, _>(&AdaptorCircuit(circuit.clone()));
-        perm_structure.create_permutation_arguments(Fr::one(), Fr::one(), rng, &srs);
-
-
-        println!("N = {}, Q = {}", perm_structure.n, perm_structure.q);
-        return;
+        // let perm_structure = create_permutation_structure::<Bls12, _>(&MyCircuit);
+        let s1_srs = perm_structure.create_permutation_special_reference(&srs);
+        let s2_srs = perm_structure.calculate_s2_commitment_value(&srs);
 
         // let info = get_circuit_parameters_for_succinct_sonic::<Bls12, _>(circuit.clone()).expect("Must get circuit info");
         // println!("{:?}", info);
 
-        // println!("creating proof");
-        // let start = Instant::now();
-        // let proof = create_proof_on_srs::<Bls12, _, Permutation3>(&AdaptorCircuit(circuit.clone()), &srs).unwrap();
-        // println!("done in {:?}", start.elapsed());
+        println!("creating proof");
+        let start = Instant::now();
+        let proof = create_proof_on_srs::<Bls12, _, Permutation3>(&AdaptorCircuit(circuit.clone()), &srs).unwrap();
+        println!("done in {:?}", start.elapsed());
 
-        // println!("creating advice");
-        // let start = Instant::now();
-        // let advice = create_advice_on_srs::<Bls12, _, Permutation3>(&AdaptorCircuit(circuit.clone()), &proof, &srs).unwrap();
-        // println!("done in {:?}", start.elapsed());
+        println!("creating advice");
+        let start = Instant::now();
+        let advice = create_advice_on_srs::<Bls12, _, Permutation3>(&AdaptorCircuit(circuit.clone()), &proof, &srs).unwrap();
+        println!("done in {:?}", start.elapsed());
 
-        // println!("creating aggregate for {} proofs", samples);
-        // let start = Instant::now();
-        // let proofs: Vec<_> = (0..samples).map(|_| (proof.clone(), advice.clone())).collect();
-        // let aggregate = create_aggregate_on_srs::<Bls12, _, Permutation3>(&AdaptorCircuit(circuit.clone()), &proofs, &srs);
-        // println!("done in {:?}", start.elapsed());
+        println!("creating aggregate for {} proofs", samples);
+        let start = Instant::now();
+        let proofs: Vec<_> = (0..samples).map(|_| (proof.clone(), advice.clone())).collect();
+        let aggregate = create_aggregate_on_srs::<Bls12, _, Permutation3>(&AdaptorCircuit(circuit.clone()), &proofs, &srs);
+        println!("done in {:?}", start.elapsed());
 
-        // {
-        //     let rng = thread_rng();
-        //     let mut verifier = MultiVerifier::<Bls12, _, Permutation3, _>::new(AdaptorCircuit(circuit.clone()), &srs, rng).unwrap();
-        //     println!("verifying 1 proof without advice");
-        //     let start = Instant::now();
-        //     {
-        //         for _ in 0..1 {
-        //             verifier.add_proof(&proof, &[], |_, _| None);
-        //         }
-        //         assert_eq!(verifier.check_all(), true); // TODO
-        //     }
-        //     println!("done in {:?}", start.elapsed());
-        // }
+        {
+            let rng = thread_rng();
+            let mut verifier = MultiVerifier::<Bls12, _, Permutation3, _>::new(AdaptorCircuit(circuit.clone()), &srs, rng).unwrap();
+            println!("verifying 1 proof without advice");
+            let start = Instant::now();
+            {
+                for _ in 0..1 {
+                    verifier.add_proof(&proof, &[], |_, _| None);
+                }
+                assert_eq!(verifier.check_all(), true); // TODO
+            }
+            println!("done in {:?}", start.elapsed());
+        }
 
-        // {
-        //     let rng = thread_rng();
-        //     let mut verifier = MultiVerifier::<Bls12, _, Permutation3, _>::new(AdaptorCircuit(circuit.clone()), &srs, rng).unwrap();
-        //     println!("verifying {} proofs without advice", samples);
-        //     let start = Instant::now();
-        //     {
-        //         for _ in 0..samples {
-        //             verifier.add_proof(&proof, &[], |_, _| None);
-        //         }
-        //         assert_eq!(verifier.check_all(), true); // TODO
-        //     }
-        //     println!("done in {:?}", start.elapsed());
-        // }
-        
-        // {
-        //     let rng = thread_rng();
-        //     let mut verifier = MultiVerifier::<Bls12, _, Permutation3, _>::new(AdaptorCircuit(circuit.clone()), &srs, rng).unwrap();
-        //     println!("verifying 100 proofs with advice");
-        //     let start = Instant::now();
-        //     {
-        //         for (ref proof, ref advice) in &proofs {
-        //             verifier.add_proof_with_advice(proof, &[], advice);
-        //         }
-        //         verifier.add_aggregate(&proofs, &aggregate);
-        //         assert_eq!(verifier.check_all(), true); // TODO
-        //     }
-        //     println!("done in {:?}", start.elapsed());
-        // }
+        {
+            let rng = thread_rng();
+            let mut verifier = MultiVerifier::<Bls12, _, Permutation3, _>::new(AdaptorCircuit(circuit.clone()), &srs, rng).unwrap();
+            println!("verifying {} proofs without advice", samples);
+            let start = Instant::now();
+            {
+                for _ in 0..samples {
+                    verifier.add_proof(&proof, &[], |_, _| None);
+                }
+                assert_eq!(verifier.check_all(), true); // TODO
+            }
+            println!("done in {:?}", start.elapsed());
+        }
+
+        {
+            let rng = thread_rng();
+            let mut verifier = MultiVerifier::<Bls12, _, Permutation3, _>::new(AdaptorCircuit(circuit.clone()), &srs, rng).unwrap();
+            println!("verifying 100 proofs with advice non-succinct");
+            let start = Instant::now();
+            {
+                for (ref proof, ref advice) in &proofs {
+                    verifier.add_proof_with_advice(proof, &[], advice);
+                }
+                verifier.add_aggregate(&proofs, &aggregate);
+                assert_eq!(verifier.check_all(), true); // TODO
+            }
+            println!("done in {:?}", start.elapsed());
+        }
+
+        {
+            use rand::{XorShiftRng, SeedableRng, Rand, Rng};
+            let mut rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+            
+            let (perm_commitments, s_prime_challenges, perm_proof, perm_arg_proof, z_prime, num_poly) = perm_structure.create_permutation_arguments(aggregate.w, aggregate.z, &mut rng, &srs);
+            let s2_proof = perm_structure.calculate_s2_proof(aggregate.z, aggregate.w, &srs);
+
+            let mut verifier = SuccinctMultiVerifier::<Bls12, _, Permutation3, _>::new(AdaptorCircuit(circuit.clone()), &srs, rng).unwrap();
+            println!("verifying 100 proofs with advice");
+            let start = Instant::now();
+            {
+                for (ref proof, ref advice) in &proofs {
+                    verifier.add_proof_with_advice(proof, &[], advice);
+                }
+                verifier.add_aggregate(
+                    &proofs, 
+                    &aggregate,
+                    &perm_arg_proof,
+                    &perm_proof,
+                    &s2_proof,
+                    num_poly,
+                    &srs,
+                    z_prime,
+                    &perm_commitments,
+                    s_prime_challenges
+                );
+                assert_eq!(verifier.check_all(), true); // TODO
+            }
+            println!("done in {:?}", start.elapsed());
+        }
     }
 }
 

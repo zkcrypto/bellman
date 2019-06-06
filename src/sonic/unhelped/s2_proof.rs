@@ -14,10 +14,10 @@ pub struct S2Eval<E: Engine> {
 #[derive(Clone)]
 pub struct S2Proof<E: Engine> {
     o: E::G1Affine,
-    c_value: E::Fr,
-    d_value: E::Fr,
-    c_opening: E::G1Affine,
-    d_opening: E::G1Affine
+    pub c_value: E::Fr,
+    pub d_value: E::Fr,
+    pub c_opening: E::G1Affine,
+    pub d_opening: E::G1Affine
 }
 
 impl<E: Engine> S2Eval<E> {
@@ -48,7 +48,7 @@ impl<E: Engine> S2Eval<E> {
         let (c, c_opening) = {
             let mut point = y;
             point.mul_assign(&x);
-            let val = evaluate_at_consequitive_powers(&poly[1..], E::Fr::one(), point);
+            let val = evaluate_at_consequitive_powers(&poly[1..], point, point);
             poly[0] = val;
             poly[0].negate();
             let opening = polynomial_commitment_opening(0, self.n, poly.iter(), point, &srs);
@@ -59,7 +59,7 @@ impl<E: Engine> S2Eval<E> {
         let (d, d_opening) = {
             let mut point = y.inverse().unwrap();
             point.mul_assign(&x);
-            let val = evaluate_at_consequitive_powers(&poly[1..], E::Fr::one(), point);
+            let val = evaluate_at_consequitive_powers(&poly[1..], point, point);
             poly[0] = val;
             poly[0].negate();
             let opening = polynomial_commitment_opening(0, self.n, poly.iter(), point, &srs);
@@ -87,17 +87,19 @@ impl<E: Engine> S2Eval<E> {
         h_prep.negate();
         let h_prep = h_prep.prepare();
 
-        let mut c_minus_xy = proof.c_value;
-        let mut xy = x;
-        xy.mul_assign(&y);
+        let mut minus_xy = x;
+        minus_xy.mul_assign(&y);
+        minus_xy.negate();
 
-        c_minus_xy.sub_assign(&xy);
+        let mut h_alpha_term = proof.c_opening.mul(minus_xy.into_repr());
+        let g_in_c = E::G1Affine::one().mul(proof.c_value);
+        h_alpha_term.add_assign(&g_in_c);
 
-        let c_in_c_minus_xy = proof.c_opening.mul(c_minus_xy.into_repr()).into_affine();
+        let h_alpha_term = h_alpha_term.into_affine();
 
         let valid = E::final_exponentiation(&E::miller_loop(&[
                 (&proof.c_opening.prepare(), &alpha_x_precomp),
-                (&c_in_c_minus_xy.prepare(), &alpha_precomp),
+                (&h_alpha_term.prepare(), &alpha_precomp),
                 (&proof.o.prepare(), &h_prep),
             ])).unwrap() == E::Fqk::one();
 
@@ -107,17 +109,19 @@ impl<E: Engine> S2Eval<E> {
 
         // e(D,hαx)e(D−y−1z,hα) = e(O,h)e(g−d,hα)
 
-        let mut d_minus_x_y_inv = proof.d_value;
-        let mut x_y_inv = x;
-        x_y_inv.mul_assign(&y.inverse().unwrap());
+        let mut minus_x_y_inv = x;
+        minus_x_y_inv.mul_assign(&y.inverse().unwrap());
+        minus_x_y_inv.negate();
 
-        d_minus_x_y_inv.sub_assign(&x_y_inv);
+        let mut h_alpha_term = proof.d_opening.mul(minus_x_y_inv.into_repr());
+        let g_in_d = E::G1Affine::one().mul(proof.d_value);
+        h_alpha_term.add_assign(&g_in_d);
 
-        let d_in_d_minus_x_y_inv = proof.d_opening.mul(d_minus_x_y_inv.into_repr()).into_affine();
+        let h_alpha_term = h_alpha_term.into_affine();
 
         let valid = E::final_exponentiation(&E::miller_loop(&[
                 (&proof.d_opening.prepare(), &alpha_x_precomp),
-                (&d_in_d_minus_x_y_inv.prepare(), &alpha_precomp),
+                (&h_alpha_term.prepare(), &alpha_precomp),
                 (&proof.o.prepare(), &h_prep),
             ])).unwrap() == E::Fqk::one();
 
@@ -126,5 +130,38 @@ impl<E: Engine> S2Eval<E> {
         } 
 
         true
+    }
+}
+
+
+#[test]
+fn test_s2_proof() {
+    use crate::pairing::ff::{Field, PrimeField};
+    use crate::pairing::{Engine, CurveAffine, CurveProjective};
+    use crate::pairing::bls12_381::{Bls12, Fr};
+    use std::time::{Instant};
+    use crate::sonic::srs::SRS;
+    use crate::sonic::cs::{Circuit, ConstraintSystem, LinearCombination};
+
+    let srs_x = Fr::from_str("23923").unwrap();
+    let srs_alpha = Fr::from_str("23728792").unwrap();
+    println!("making srs");
+    let start = Instant::now();
+    let srs = SRS::<Bls12>::dummy(830564, srs_x, srs_alpha);
+    println!("done in {:?}", start.elapsed());
+
+    {
+        use rand::{XorShiftRng, SeedableRng, Rand, Rng};
+        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+
+        let x: Fr = rng.gen();
+        let y: Fr = rng.gen();
+
+        let proof = S2Eval::new(1024);
+        let proof = proof.evaluate(x, y, &srs);
+
+        let valid = S2Eval::verify(x, y, &proof, &srs);
+
+        assert!(valid);
     }
 }

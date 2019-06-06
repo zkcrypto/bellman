@@ -31,27 +31,27 @@ pub struct PermutationArgument<E: Engine> {
 
 #[derive(Clone)]
 pub struct PermutationProof<E: Engine> {
-    v_zy: E::Fr,
-    e_opening: E::G1Affine,
-    f_opening: E::G1Affine,
+    pub v_zy: E::Fr,
+    pub e_opening: E::G1Affine,
+    pub f_opening: E::G1Affine,
 }
 
 #[derive(Clone)]
-pub struct Proof<E: Engine> {
-    j: usize,
-    s_opening: E::G1Affine,
-    s_zy: E::Fr
+pub struct PermutationArgumentProof<E: Engine> {
+    pub j: usize,
+    pub s_opening: E::G1Affine,
+    pub s_zy: E::Fr
 }
 
 fn permute<F: Field>(coeffs: &[F], permutation: & [usize]) -> Vec<F>{
     assert_eq!(coeffs.len(), permutation.len());
     let mut result: Vec<F> = vec![F::zero(); coeffs.len()];
     for (i, j) in permutation.iter().enumerate() {
-        if *j < 1 {
-            // if permutation information is missing coefficient itself must be zero!
-            assert!(coeffs[i].is_zero());
-            continue;
-        }
+        // if *j < 1 {
+        //     // if permutation information is missing coefficient itself must be zero!
+        //     assert!(coeffs[i].is_zero());
+        //     continue;
+        // }
         result[*j - 1] = coeffs[i];
     }
     result
@@ -234,9 +234,9 @@ impl<E: Engine> PermutationArgument<E> {
         wellformed_challenges: & Vec<E::Fr>,
         y: E::Fr, 
         z: E::Fr, 
-        specialized_srs: &SpecializedSRS<E>,
+        _specialized_srs: &SpecializedSRS<E>,
         srs: &SRS<E>
-    ) -> Proof<E> {
+    ) -> PermutationArgumentProof<E> {
         // Sj(P4j)β(P1j)γ is equal to the product of the coefficients of Sj′(P3j)β(P1j)γ
         // also open s = \sum self.permuted_coefficients(X, y) at z
 
@@ -352,7 +352,7 @@ impl<E: Engine> PermutationArgument<E> {
 
             let valid = GrandProductArgument::verify_ab_commitment(n, 
                 &randomness, 
-                &a_commitments, 
+                & a_commitments, 
                 & b_commitments,
                 &grand_product_openings, 
                 y, 
@@ -375,7 +375,7 @@ impl<E: Engine> PermutationArgument<E> {
             assert!(valid, "grand product argument must be valid");
         }
         
-        Proof {
+        PermutationArgumentProof {
             j: j,
             s_opening: s_zy_opening,
             s_zy: s_zy
@@ -542,7 +542,7 @@ impl<E: Engine> PermutationArgument<E> {
 
     pub fn verify(
         s_commitments: &Vec<E::G1Affine>,
-        proof: &Proof<E>,
+        proof: &PermutationArgumentProof<E>,
         z: E::Fr,
         srs: &SRS<E>
     ) -> bool {
@@ -651,7 +651,8 @@ fn test_permutation_argument() {
         gamma, 
         & grand_product_challenges, 
         & wellformed_challenges, 
-        y, z, 
+        y, 
+        z, 
         &specialized_srs, &srs);
 
     let valid = PermutationArgument::verify(&s_commitments, &proof, z, &srs);

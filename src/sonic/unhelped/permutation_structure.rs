@@ -80,9 +80,7 @@ impl<E: Engine> PermutationStructure<E> {
         s2_eval.evaluate(x, y, &srs)
     }
 
-    pub fn create_permutation_arguments<R: Rng>(&self, y: E::Fr, z: E::Fr, rng: &mut R, srs: &SRS<E>) 
-    // -> PermutationProof<E> 
-    {
+    fn create_permutation_vectors(&self) -> (Vec<Vec<E::Fr>>, Vec<Vec<usize>>) {
         // we have to form non-permuted coefficients, as well as permutation structures;
         let n = self.n;
         let mut non_permuted_coeffs = vec![vec![E::Fr::zero(); 3*n+1]; M];
@@ -91,7 +89,7 @@ impl<E: Engine> PermutationStructure<E> {
         let one = E::Fr::one();
         let mut minus_one = E::Fr::one();
         minus_one.negate();
-        // println!("A");
+
         let mut not_empty = [false; M];
         // go other the permutations
         for (gate_index, info) in self.a.iter().enumerate() {
@@ -107,41 +105,27 @@ impl<E: Engine> PermutationStructure<E> {
                     let place_permutation_into = &mut permutations[i];
                     match coeff {
                         Coeff::Zero => {
-                            // println!("Variable A({}) coefficient 0 at constraint {} in poly {}", gate_index+1, place, i);
-                            // println!("Coeff 0 will be for Y^{} for X^{} for permutation {} ", place, x_power, i);
                         },
                         Coeff::One => {
                             not_empty[i] = true;
                             place_coeff_into[array_position] = one; 
                             place_permutation_into[array_position] = *place;
-                            // println!("Variable A({}) coefficient 1 at constraint {} in poly {}", gate_index+1, place, i);
-                            // println!("Term 1*X^{}*Y^{} in poly {}", x_power, place,i);
-                            // println!("Coeff 1 will be at for Y^{} for X^{} for permutation {} ", place, x_power, i);
                         },
                         Coeff::NegativeOne => {
                             not_empty[i] = true;
                             place_coeff_into[array_position] = minus_one; 
                             place_permutation_into[array_position] = *place;
-                            // println!("Variable A({}) coefficient -1 at constraint {} in poly {}", gate_index+1, place, i);
-                            // println!("Term -1*X^{}*Y^{} in poly {}", x_power, place,i);
-                            // println!("Coeff -1 will be at for Y^{} for X^{} for permutation {} ", place, x_power, i);
                         },
                         Coeff::Full(value) => {
                             not_empty[i] = true;
                             place_coeff_into[array_position] = *value; 
                             place_permutation_into[array_position] = *place;
-                            // println!("Variable A({}) coefficient * at constraint {} in poly {}", gate_index+1, place, i);
-                            // println!("Term k*X^{}*Y^{} in poly {}", x_power, place,i);
-                            // println!("Coeff {} will be at for Y^{} for X^{} for permutation {} ", value, place, x_power, i);
                         }
                     }
-                } else {
-                    // println!("Empty coeff for X^{} in permutation {}", gate_index, i);
                 }
             }
         }
 
-        // println!("B");
         for (gate_index, info) in self.b.iter().enumerate() {
             let offset = n + 1;
             for i in 0..M {
@@ -154,41 +138,27 @@ impl<E: Engine> PermutationStructure<E> {
                     let place_permutation_into = &mut permutations[i];
                     match coeff {
                         Coeff::Zero => {
-                            // println!("Coeff 0 will be for Y^{} for X^{} for permutation {} ", place, x_power, i);
-                            // println!("Variable B({}) coefficient 0 at constraint {} in poly {}", gate_index+1, place, i);
                         },
                         Coeff::One => {
                             not_empty[i] = true;
                             place_coeff_into[array_position] = one; 
                             place_permutation_into[array_position] = *place;
-                            // println!("Coeff 1 will be at for Y^{} for X^{} for permutation {} ", place, x_power, i);
-                            // println!("Variable B({}) coefficient 1 at constraint {} in poly {}", gate_index+1, place, i);
-                            // println!("Term 1*X^{}*Y^{} in poly {}", x_power, place,i);
                         },
                         Coeff::NegativeOne => {
                             not_empty[i] = true;
                             place_coeff_into[array_position] = minus_one; 
                             place_permutation_into[array_position] = *place;
-                            // println!("Coeff -1 will be at for Y^{} for X^{} for permutation {} ", place, x_power, i);
-                            // println!("Variable B({}) coefficient -1 at constraint {} in poly {}", gate_index+1, place, i);
-                            // println!("Term -1*X^{}*Y^{} in poly {}", x_power, place,i);
                         },
                         Coeff::Full(value) => {
                             not_empty[i] = true;
                             place_coeff_into[array_position] = *value; 
                             place_permutation_into[array_position] = *place;
-                            // println!("Coeff {} will be at for Y^{} for X^{} for permutation {} ", value, place, x_power, i);
-                            // println!("Variable B({}) coefficient * at constraint {} in poly {}", gate_index+1, place, i);
-                            // println!("Term k*X^{}*Y^{} in poly {}", x_power, place,i);
                         }
                     }
-                } else {
-                    // println!("Empty coeff for X^{} in permutation {}", gate_index, i);
                 }
             }
         }
 
-        // println!("C");
         for (gate_index, info) in self.c.iter().enumerate() {
             let offset = 2*n + 1;
             for i in 0..M {
@@ -202,54 +172,28 @@ impl<E: Engine> PermutationStructure<E> {
                     let place_permutation_into = &mut permutations[i];
                     match coeff {
                         Coeff::Zero => {
-                            // println!("Coeff 0 will be for Y^{} for X^{} for permutation {} ", place, x_power, i);
-                            // println!("Variable C({}) coefficient 0 at constraint {} in poly {}", gate_index+1, place, i);
                         },
                         Coeff::One => {
                             not_empty[i] = true;
                             place_coeff_into[array_position] = one; 
                             place_permutation_into[array_position] = *place;
-                            // println!("Coeff 1 will be at for Y^{} for X^{} for permutation {} ", place, x_power, i);
-                            // println!("Variable C({}) coefficient 1 at constraint {} in poly {}", gate_index+1, place, i);
-                            // println!("Term 1*X^{}*Y^{} in poly {}", x_power, place,i);
                         },
                         Coeff::NegativeOne => {
                             not_empty[i] = true;
                             place_coeff_into[array_position] = minus_one; 
                             place_permutation_into[array_position] = *place;
-                            // println!("Coeff -1 will be at for Y^{} for X^{} for permutation {} ", place, x_power, i);
-                            // println!("Variable C({}) coefficient -1 at constraint {} in poly {}", gate_index+1, place, i);
-                            // println!("Term -1*X^{}*Y^{} in poly {}", x_power, place,i);
                         },
                         Coeff::Full(value) => {
                             not_empty[i] = true;
                             place_coeff_into[array_position] = *value; 
                             place_permutation_into[array_position] = *place;
-                            // println!("Coeff {} will be at for Y^{} for X^{} for permutation {} ", value, place, x_power, i);
-                            // println!("Variable C({}) coefficient * at constraint {} in poly {}", gate_index+1, place, i);
-                            // println!("Term k*X^{}*Y^{} in poly {}", x_power, place,i);
                         }
                     }
-                } else {
-                    // println!("Empty coeff for X^{} in permutation {}", gate_index, i);
                 }
             }
         }
 
         // need to fill arrays with non-zero indexes just to have full permutation, even while it's just zero coefficient
-
-        // permutations[0][2] = 5;
-        // permutations[0][5] = 6;
-        // permutations[0][6] = 7;
-
-        // permutations[1][0] = 1;
-        // permutations[1][1] = 3;
-        // permutations[1][2] = 5;
-        // permutations[1][5] = 6;
-        // permutations[1][6] = 7;
-
-
-        println!("Not empty = {:?}", not_empty);
 
         // TODO: fix
 
@@ -292,13 +236,33 @@ impl<E: Engine> PermutationStructure<E> {
             }
         }
 
+        (non_permuted_coeffs, permutations)
+    }
+
+    pub fn create_permutation_special_reference(&self, srs: &SRS<E>) -> SpecializedSRS<E>
+    {
+        let (non_permuted_coeffs, permutations) = self.create_permutation_vectors();
+
+        let specialized_srs = PermutationArgument::make_specialized_srs(
+            &non_permuted_coeffs, 
+            &permutations, 
+            &srs
+        );
+
+        specialized_srs
+    }
+
+    pub fn create_permutation_arguments<R: Rng>(&self, y: E::Fr, z: E::Fr, rng: &mut R, srs: &SRS<E>) 
+    -> (Vec<(E::G1Affine, E::G1Affine)>, Vec<E::Fr>, PermutationProof<E>, PermutationArgumentProof<E>, E::Fr, usize)
+    {
+        // we have to form non-permuted coefficients, as well as permutation structures;
+        let n = self.n;
+        
+        let (non_permuted_coeffs, permutations) = self.create_permutation_vectors();
+
+        let m = non_permuted_coeffs.len();
+
         println!("Will need {} permutation polynomials", m);
-
-        // println!("Nonpermuted 0 (coeffs for X^1, X^2, ...) = {:?}", non_permuted_coeffs[0]);
-        // println!("Permutation 0 (power of Y for X^1, X^2, ...) = {:?}", permutations[0]);
-
-        // println!("Nonpermuted 1 (coeffs for X^1, X^2, ...)= {:?}", non_permuted_coeffs[1]);
-        // println!("Permutation 1 (power of Y for X^1, X^2, ...) = {:?}", permutations[1]);
 
         let specialized_srs = PermutationArgument::make_specialized_srs(
             &non_permuted_coeffs, 
@@ -312,12 +276,13 @@ impl<E: Engine> PermutationStructure<E> {
         let commitments = argument.commit(y, &srs);
         let mut s_commitments = vec![];
         let mut s_prime_commitments = vec![];
-        for (s, s_prime) in commitments.into_iter() {
+        for (s, s_prime) in commitments.clone().into_iter() {
             s_commitments.push(s);
             // println!("S' = {}", s_prime);
             s_prime_commitments.push(s_prime);
 
         }
+
         let z_prime : E::Fr = rng.gen();
 
         let opening = argument.open_commitments_to_s_prime(&challenges, y, z_prime, &srs);
@@ -354,6 +319,8 @@ impl<E: Engine> PermutationStructure<E> {
         let valid = PermutationArgument::verify(&s_commitments, &proof, z, &srs);
 
         assert!(valid, "permutation argument must be valid");
+
+        (commitments, challenges, opening, proof, z_prime, m)
     }
 }
 

@@ -32,6 +32,7 @@ pub fn create_advice_on_information_and_srs<E: Engine, C: Circuit<E>, S: Synthes
         transcript.commit_point(&proof.t);
         z = transcript.get_challenge_scalar();
     }
+
     let z_inv = z.inverse().ok_or(SynthesisError::DivisionByZero)?;
 
     let (s_poly_negative, s_poly_positive) = {

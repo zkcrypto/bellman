@@ -14,5 +14,5 @@ pub mod permutation_structure;
 // pub mod padding;
 
 pub use self::wellformed_argument::{WellformednessArgument, WellformednessProof};
-pub use self::permutation_argument::{PermutationArgument, PermutationProof, Proof};
+pub use self::permutation_argument::{PermutationArgument, PermutationProof, PermutationArgumentProof};
 pub use self::verifier::SuccinctMultiVerifier;
