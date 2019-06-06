@@ -7,6 +7,7 @@ use std::marker::PhantomData;
 
 use crate::sonic::srs::SRS;
 use crate::sonic::util::*;
+use crate::sonic::transcript::{Transcript, TranscriptProtocol};
 
 #[derive(Clone)]
 pub struct WellformednessArgument<E: Engine> {
@@ -15,11 +16,44 @@ pub struct WellformednessArgument<E: Engine> {
 
 #[derive(Clone)]
 pub struct WellformednessProof<E: Engine> {
-    l: E::G1Affine,
-    r: E::G1Affine
+    pub l: E::G1Affine,
+    pub r: E::G1Affine
+}
+
+#[derive(Clone)]
+pub struct WellformednessSignature<E: Engine> {
+    pub commitments: Vec<E::G1Affine>,
+    pub proof: WellformednessProof<E>
 }
 
 impl<E: Engine> WellformednessArgument<E> {
+
+    pub fn create_signature(
+        all_polys: Vec<Vec<E::Fr>>,
+        srs: &SRS<E>
+    ) -> WellformednessSignature<E> {
+        let j = all_polys.len();
+        let mut transcript = Transcript::new(&[]);
+        let wellformed_argument = WellformednessArgument::new(all_polys);
+        let commitments = wellformed_argument.commit(&srs);
+        let mut wellformed_challenges = vec![];
+        for c in commitments.iter() {
+            transcript.commit_point(c);
+        }
+
+        for _ in 0..j {
+            let challenge = transcript.get_challenge_scalar();
+            wellformed_challenges.push(challenge);
+        }
+
+        let proof = wellformed_argument.make_argument(wellformed_challenges, &srs);
+
+        WellformednessSignature {
+            commitments,
+            proof
+        }
+    }
+
     pub fn new(polynomials: Vec<Vec<E::Fr>>) -> Self {
         assert!(polynomials.len() > 0);
 

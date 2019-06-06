@@ -56,7 +56,7 @@ pub fn create_permutation_structure<E: Engine, C: Circuit<E>>(
     let n = backend.n;
     let q = backend.q;
 
-    println!("Will have {} gates and {} linear constraints", n, q);
+    // println!("Will have {} gates and {} linear constraints", n, q);
 
     PermutationStructure::<E> {
         n: n,
@@ -368,8 +368,6 @@ impl<E: Engine> PermutationStructure<E> {
                 s_contrib.add_assign(&result);
             }
         }
-
-        println!("naive s eval = {}", s_contrib);
 
         let mut argument = PermutationArgument::new(non_permuted_coeffs, permutations);
         let challenges = (0..m).map(|_| E::Fr::rand(rng)).collect::<Vec<_>>();

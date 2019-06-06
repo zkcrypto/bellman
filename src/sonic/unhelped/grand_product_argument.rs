@@ -8,6 +8,8 @@ use std::marker::PhantomData;
 
 use crate::sonic::srs::SRS;
 use crate::sonic::util::*;
+use crate::sonic::transcript::{Transcript, TranscriptProtocol};
+use super::wellformed_argument::{WellformednessSignature, WellformednessArgument};
 
 #[derive(Clone)]
 pub struct GrandProductArgument<E: Engine> {
@@ -27,7 +29,82 @@ pub struct GrandProductProof<E: Engine> {
     f_opening: E::G1Affine,
 }
 
+#[derive(Clone)]
+pub struct GrandProductSignature<E: Engine> {
+    pub a_commitments: Vec<E::G1Affine>,
+    pub b_commitments: Vec<E::G1Affine>,
+    pub c_commitments: Vec<(E::G1Affine, E::Fr)>,
+    pub t_commitment: E::G1Affine,
+    pub grand_product_openings: Vec<(E::Fr, E::G1Affine)>,
+    // pub a_zy: Vec<E::Fr>,
+    pub proof: GrandProductProof<E>,
+    pub wellformedness_signature: WellformednessSignature<E>,
+}
+
 impl<E: Engine> GrandProductArgument<E> {
+    pub fn create_signature(
+        grand_products: Vec<(Vec<E::Fr>, Vec<E::Fr>)>, 
+        y: E::Fr,
+        z: E::Fr,
+        srs: &SRS<E>,
+    ) -> GrandProductSignature<E> {
+        let mut a_commitments = vec![]; 
+        let mut b_commitments = vec![]; 
+
+        let mut transcript = Transcript::new(&[]);
+        let mut grand_product_challenges = vec![];
+
+        for (a, b) in grand_products.iter() {
+            let (c_a, c_b) = GrandProductArgument::commit_for_individual_products(& a[..], & b[..], &srs);
+            {
+                let mut transcript = Transcript::new(&[]);
+                transcript.commit_point(&c_a);
+                let challenge = transcript.get_challenge_scalar();
+                grand_product_challenges.push(challenge);
+                transcript.commit_point(&c_b);
+                let challenge = transcript.get_challenge_scalar();
+                grand_product_challenges.push(challenge);
+            }
+            a_commitments.push(c_a);
+            b_commitments.push(c_b);
+            transcript.commit_point(&c_a);
+            transcript.commit_point(&c_b);
+        }
+
+        let mut all_polys = vec![];
+        for p in grand_products.iter() {
+            let (a, b) = p;
+            all_polys.push(a.clone());
+            all_polys.push(b.clone());
+        }
+
+        let wellformedness_signature = WellformednessArgument::create_signature(
+            all_polys, 
+            &srs
+        );
+
+
+        let mut grand_product_argument = GrandProductArgument::new(grand_products);
+        let c_commitments = grand_product_argument.commit_to_individual_c_polynomials(&srs);
+        let t_commitment = grand_product_argument.commit_to_t_polynomial(&grand_product_challenges, y, &srs);
+        let grand_product_openings = grand_product_argument.open_commitments_for_grand_product(y, z, &srs);
+        let a_zy: Vec<E::Fr> = grand_product_openings.iter().map(|el| el.0.clone()).collect();
+        let proof = grand_product_argument.make_argument(&a_zy, &grand_product_challenges, y, z, &srs);
+
+        GrandProductSignature {
+            a_commitments,
+            b_commitments,
+            c_commitments,
+            t_commitment,
+            grand_product_openings,
+            // a_zy,
+            proof,
+            wellformedness_signature
+        }
+
+    }
+
+
     pub fn new(polynomials: Vec<(Vec<E::Fr>, Vec<E::Fr>)>) -> Self {
         assert!(polynomials.len() > 0);
 

@@ -31,7 +31,7 @@ use crate::{
     SynthesisError
 };
 
-const MIMC_ROUNDS: usize = 2;
+const MIMC_ROUNDS: usize = 322;
 
 fn mimc<E: Engine>(
     mut xl: E::Fr,
@@ -544,8 +544,8 @@ fn test_succinct_sonic_mimc() {
         let s1_srs = perm_structure.create_permutation_special_reference(&srs);
         let s2_srs = perm_structure.calculate_s2_commitment_value(&srs);
 
-        // let info = get_circuit_parameters_for_succinct_sonic::<Bls12, _>(circuit.clone()).expect("Must get circuit info");
-        // println!("{:?}", info);
+        let info = get_circuit_parameters_for_succinct_sonic::<Bls12, _>(circuit.clone()).expect("Must get circuit info");
+        println!("{:?}", info);
 
         println!("creating proof");
         let start = Instant::now();
@@ -609,36 +609,38 @@ fn test_succinct_sonic_mimc() {
         {
             use rand::{XorShiftRng, SeedableRng, Rand, Rng};
             let mut rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
-            
+            let start = Instant::now();
             let (perm_commitments, s_prime_challenges, perm_proof, perm_arg_proof, z_prime, num_poly, s1_naive) = perm_structure.create_permutation_arguments(aggregate.w, aggregate.z, &mut rng, &srs);
             let s2_proof = perm_structure.calculate_s2_proof(aggregate.z, aggregate.w, &srs);
 
-            let n = perm_structure.n;
-            let z = aggregate.z;
-            let y = aggregate.w;
-            let z_inv = z.inverse().unwrap();
-            let z_inv_n_plus_1 = z_inv.pow([(n+1) as u64]);
-            let z_n = z.pow([n as u64]);
-            let y_n = y.pow([n as u64]);
+            println!("Permutation argument done in {:?}", start.elapsed());
 
-            println!("S_1 naive = {}", s1_naive);
+            // let n = perm_structure.n;
+            // let z = aggregate.z;
+            // let y = aggregate.w;
+            // let z_inv = z.inverse().unwrap();
+            // let z_inv_n_plus_1 = z_inv.pow([(n+1) as u64]);
+            // let z_n = z.pow([n as u64]);
+            // let y_n = y.pow([n as u64]);
 
-            let mut s_1 = s1_naive;
-            s_1.mul_assign(&z_inv_n_plus_1);
-            s_1.mul_assign(&y_n);
+            // println!("S_1 naive = {}", s1_naive);
 
-            println!("S_1 multiplied = {}", s_1);
+            // let mut s_1 = s1_naive;
+            // s_1.mul_assign(&z_inv_n_plus_1);
+            // s_1.mul_assign(&y_n);
 
-            let mut s_2 = s2_proof.c_value;
-            s_2.add_assign(&s2_proof.d_value);
-            s_2.mul_assign(&z_n);
+            // println!("S_1 multiplied = {}", s_1);
 
-            s_1.sub_assign(&s_2);
-            println!("S naive = {}", s_1);
+            // let mut s_2 = s2_proof.c_value;
+            // s_2.add_assign(&s2_proof.d_value);
+            // s_2.mul_assign(&z_n);
+
+            // s_1.sub_assign(&s_2);
+            // println!("S naive = {}", s_1);
 
 
             let mut verifier = SuccinctMultiVerifier::<Bls12, _, Permutation3, _>::new(AdaptorCircuit(circuit.clone()), &srs, rng).unwrap();
-            println!("verifying 100 proofs with advice");
+            println!("verifying 100 proofs with succinct advice");
             let start = Instant::now();
             {
                 for (ref proof, ref advice) in &proofs {

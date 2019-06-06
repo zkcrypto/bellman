@@ -9,7 +9,9 @@ use std::marker::PhantomData;
 use crate::sonic::srs::SRS;
 use crate::sonic::util::*;
 use super::wellformed_argument::{WellformednessArgument, WellformednessProof};
-use super::grand_product_argument::{GrandProductArgument, GrandProductProof};
+use super::grand_product_argument::{GrandProductArgument, GrandProductSignature};
+
+use crate::sonic::transcript::{Transcript, TranscriptProtocol};
 
 #[derive(Clone)]
 pub struct SpecializedSRS<E: Engine> {
@@ -41,6 +43,15 @@ pub struct PermutationArgumentProof<E: Engine> {
     pub j: usize,
     pub s_opening: E::G1Affine,
     pub s_zy: E::Fr
+}
+
+#[derive(Clone)]
+pub struct SignatureOfCorrectComputation<E: Engine> {
+    pub s_commitments: Vec<E::G1Affine>,
+    pub s_prime_commitments: Vec<E::G1Affine>,
+    pub perm_argument_proof: PermutationArgumentProof<E>,
+    pub perm_proof: PermutationProof<E>,
+    pub grand_product_signature: GrandProductSignature<E>
 }
 
 fn permute<F: Field>(coeffs: &[F], permutation: & [usize]) -> Vec<F>{
@@ -157,7 +168,6 @@ impl<E: Engine> PermutationArgument<E> {
 
         let mut permuted_coefficients = vec![];
         let mut permuted_at_y_coefficients = vec![];
-
 
         // naive algorithms
         // for every permutation poly 
@@ -311,8 +321,6 @@ impl<E: Engine> PermutationArgument<E> {
         let s_polynomial = s_polynomial.unwrap();
         // evaluate at z
         let s_zy = evaluate_at_consequitive_powers(& s_polynomial[..], z, z);
-        println!("In permutation argument S1_(z, y) = {}", s_zy);
-
 
         let mut s_zy_neg = s_zy;
         s_zy_neg.negate();
@@ -449,82 +457,6 @@ impl<E: Engine> PermutationArgument<E> {
         assert_eq!(randomness.len(), 2);
         assert_eq!(challenges.len(), commitments.len());
 
-        // let g = srs.g_positive_x[0];
-
-        // let h_alpha_x_precomp = srs.h_positive_x_alpha[1].prepare();
-
-        // let h_alpha_precomp = srs.h_positive_x_alpha[0].prepare();
-
-        // let mut h_prep = srs.h_positive_x[0];
-        // h_prep.negate();
-        // let h_prep = h_prep.prepare();
-
-        // let value = proof.v_zy;
-        // let g_v = g.mul(value.into_repr());
-
-        // {
-
-        //     let mut minus_z_prime = z_prime;
-        //     minus_z_prime.negate();
-
-        //     let e_z = proof.e_opening.mul(minus_z_prime.into_repr());
-
-        //     let mut h_alpha_term = e_z;
-
-        //     h_alpha_term.add_assign(&g_v);
-
-        //     let h_alpha_x_term = proof.e_opening;
-            
-        //     let s_r = multiexp(
-        //             commitments.iter(), 
-        //             challenges.iter()
-        //         ).into_affine();
-
-        //     let h_term = s_r;
-
-        //     let valid = E::final_exponentiation(&E::miller_loop(&[
-        //             (&h_alpha_x_term.prepare(), &h_alpha_x_precomp),
-        //             (&h_alpha_term.into_affine().prepare(), &h_alpha_precomp),
-        //             (&h_term.prepare(), &h_prep),
-        //         ])).unwrap() == E::Fqk::one();
-
-        //     if !valid {
-        //         return false;
-        //     }
-        // }
-        // {
-        //     let mut minus_yz = z_prime;
-        //     minus_yz.mul_assign(&y);
-        //     minus_yz.negate();
-
-        //     let f_yz = proof.f_opening.mul(minus_yz.into_repr());
-
-        //     let p2_r = multiexp(
-        //         specialized_srs.p_2.iter(),
-        //         challenges.iter()
-        //     ).into_affine();
-
-        //     let mut h_alpha_term = f_yz;
-
-        //     h_alpha_term.add_assign(&g_v);
-
-        //     let h_alpha_x_term = proof.f_opening;
-            
-        //     let h_term = p2_r;
-
-        //     let valid = E::final_exponentiation(&E::miller_loop(&[
-        //             (&h_alpha_x_term.prepare(), &h_alpha_x_precomp),
-        //             (&h_alpha_term.into_affine().prepare(), &h_alpha_precomp),
-        //             (&h_term.prepare(), &h_prep),
-        //         ])).unwrap() == E::Fqk::one();
-
-        //     if !valid {
-        //         return false;
-        //     }
-        // }
-
-        // true
-
         // e(E,hαx)e(E−z′,hα) = e(􏰗Mj=1Sj′rj,h)e(g−v,hα)
         // e(F,hαx)e(F−yz′,hα) = e(􏰗Mj=1P2jrj,h)e(g−v,hα)
 
@@ -635,6 +567,162 @@ impl<E: Engine> PermutationArgument<E> {
                 (&h_term.prepare(), &h_prep),
             ])).unwrap() == E::Fqk::one()
     }
+
+    pub fn make_signature(
+        coefficients: Vec<Vec<E::Fr>>, 
+        permutations: Vec<Vec<usize>>,
+        y: E::Fr, 
+        z: E::Fr,
+        srs: &SRS<E>
+    ) -> SignatureOfCorrectComputation<E> {
+        let mut argument = PermutationArgument::new(coefficients, permutations);
+        let commitments = argument.commit(y, &srs);
+        let mut transcript = Transcript::new(&[]);
+
+        let mut s_commitments = vec![];
+        let mut s_prime_commitments = vec![];
+        let mut challenges = vec![];
+        for (s, s_prime) in commitments.into_iter() {
+            {
+                let mut transcript = Transcript::new(&[]);
+                transcript.commit_point(&s);
+                transcript.commit_point(&s_prime);
+                let challenge = transcript.get_challenge_scalar();
+                challenges.push(challenge);
+            }
+            transcript.commit_point(&s);
+            transcript.commit_point(&s_prime);
+            s_commitments.push(s);
+            s_prime_commitments.push(s_prime);
+        }
+
+        let z_prime = transcript.get_challenge_scalar();
+        // TODO: create better way to get few distinct challenges from the transcript
+        let mut transcript = Transcript::new(&[]);
+        transcript.commit_scalar(&z_prime);
+        let beta: E::Fr = transcript.get_challenge_scalar();
+        let mut transcript = Transcript::new(&[]);
+        transcript.commit_scalar(&beta);
+        let gamma: E::Fr = transcript.get_challenge_scalar();
+
+        let s_prime_commitments_opening = argument.open_commitments_to_s_prime(&challenges, y, z_prime, &srs);
+
+        let (proof, grand_product_signature) = argument.make_argument_with_transcript(
+            beta, 
+            gamma, 
+            y, 
+            z, 
+            &srs
+        );
+
+        SignatureOfCorrectComputation {
+            s_commitments,
+            s_prime_commitments,
+            perm_argument_proof: proof,
+            perm_proof: s_prime_commitments_opening,
+            grand_product_signature
+        }
+
+    }
+
+    // Argument a permutation argument. Current implementation consumes, cause extra arguments are required
+    pub fn make_argument_with_transcript(self, 
+        beta: E::Fr, 
+        gamma: E::Fr, 
+        y: E::Fr, 
+        z: E::Fr, 
+        srs: &SRS<E>
+    ) -> (PermutationArgumentProof<E>, GrandProductSignature<E>)  {
+        // Sj(P4j)β(P1j)γ is equal to the product of the coefficients of Sj′(P3j)β(P1j)γ
+        // also open s = \sum self.permuted_coefficients(X, y) at z
+
+        let n = self.n;
+        let j = self.non_permuted_coefficients.len();
+
+        let mut s_polynomial: Option<Vec<E::Fr>> = None;
+
+        for c in self.permuted_at_y_coefficients.iter()
+        {
+            if s_polynomial.is_some()  {
+                if let Some(poly) = s_polynomial.as_mut() {
+                    add_polynomials(&mut poly[..], & c[..]);
+                } 
+            } else {
+                s_polynomial = Some(c.clone());
+            }
+        }
+        let s_polynomial = s_polynomial.unwrap();
+        // evaluate at z
+        let s_zy = evaluate_at_consequitive_powers(& s_polynomial[..], z, z);
+
+        let mut s_zy_neg = s_zy;
+        s_zy_neg.negate();
+
+        let s_zy_opening = polynomial_commitment_opening(
+            0, 
+            n,
+            Some(s_zy_neg).iter().chain_ext(s_polynomial.iter()),
+            z, 
+            &srs
+        );
+
+        // Sj(P4j)^β (P1j)^γ is equal to the product of the coefficients of Sj′(P3j)^β (P1j)^γ
+
+        let p_1_values = vec![E::Fr::one(); n];
+        let p_3_values: Vec<E::Fr> = (1..=n).map(|el| {
+                        let mut repr = <<E as ScalarEngine>::Fr as PrimeField>::Repr::default();
+                        repr.as_mut()[0] = el as u64;
+                        let fe = E::Fr::from_repr(repr).unwrap();
+
+                        fe
+                    }).collect();
+
+        let mut grand_products = vec![];
+
+        for (i, ((non_permuted, permuted), permutation)) in self.non_permuted_coefficients.into_iter()
+                                            .zip(self.permuted_coefficients.into_iter())
+                                            .zip(self.permutations.into_iter()).enumerate()
+
+        {
+            // \prod si+βσi+γ = \prod s'i + β*i + γ
+            let mut s_j_combination = non_permuted;
+            {
+                let p_4_values: Vec<E::Fr> = permutation.into_iter().map(|el| {
+                        let mut repr = <<E as ScalarEngine>::Fr as PrimeField>::Repr::default();
+                        repr.as_mut()[0] = el as u64;
+                        let fe = E::Fr::from_repr(repr).unwrap();
+
+                        fe
+                    }).collect();
+                mul_add_polynomials(&mut s_j_combination[..], & p_4_values[..], beta);
+                mul_add_polynomials(&mut s_j_combination[..], & p_1_values[..], gamma);
+            }
+
+            let mut s_prime_j_combination = permuted;
+            {
+                mul_add_polynomials(&mut s_prime_j_combination[..], & p_3_values[..], beta);
+                mul_add_polynomials(&mut s_prime_j_combination[..], & p_1_values[..], gamma);
+            }
+
+            grand_products.push((s_j_combination, s_prime_j_combination));
+        }
+
+        let grand_product_signature = GrandProductArgument::create_signature(
+            grand_products, 
+            y, 
+            z, 
+            &srs
+        );
+
+        let proof = PermutationArgumentProof {
+            j: j,
+            s_opening: s_zy_opening,
+            s_zy: s_zy
+        };
+
+        (proof, grand_product_signature)
+    }
+
 }
 
 #[test]
