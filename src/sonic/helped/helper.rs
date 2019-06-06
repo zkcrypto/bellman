@@ -83,8 +83,6 @@ pub fn create_aggregate_on_srs_using_information<E: Engine, C: Circuit<E>, S: Sy
 
     let z: E::Fr = transcript.get_challenge_scalar();
 
-    // let z = E::Fr::one();
-
     // Compute s(z, Y)
     let (s_poly_negative, s_poly_positive) = {
         let mut tmp = SyEval::new(z, n, q);
@@ -106,11 +104,7 @@ pub fn create_aggregate_on_srs_using_information<E: Engine, C: Circuit<E>, S: Sy
     // Open C at w
     let w: E::Fr = transcript.get_challenge_scalar();
 
-    let w = E::Fr::one();
-
     let value = compute_value::<E>(&w, &s_poly_positive, &s_poly_negative);
-
-    println!("In helper s(z, w) = {}", value);
 
     let opening = {
         let mut value = value;

@@ -166,19 +166,9 @@ impl<E: Engine, C: Circuit<E>, S: SynthesisDriver, R: Rng> SuccinctMultiVerifier
 
         let z: E::Fr = transcript.get_challenge_scalar();
 
-        // let z = E::Fr::one();
-
-        println!("Verifier z = {}", z);
-
         transcript.commit_point(&aggregate.c);
 
         let w: E::Fr = transcript.get_challenge_scalar();
-
-        let w = E::Fr::one();
-
-        println!("Verifier w = {}", w);
-
-        println!("N = {}", self.n);
 
         let szw = {
             // prover will supply s1 and s2, need to calculate 
@@ -196,45 +186,43 @@ impl<E: Engine, C: Circuit<E>, S: SynthesisDriver, R: Rng> SuccinctMultiVerifier
             // this is s2 contribution itself
             let mut s2_part = s2_proof.c_value;
             s2_part.add_assign(&s2_proof.d_value);
-            println!("S2 = {}", s2_part);
             s2_part.mul_assign(&x_n);
 
             // add terms for S2 for verification
 
-            // {
-            //     let random: E::Fr = self.randomness_source.gen();
+            {
+                let random: E::Fr = self.randomness_source.gen();
 
-            //     // e(C,hαx)e(C−yz,hα) = e(O,h)e(g−c,hα) that is 
-            //     // e(C,hαx)e(C^−yz,hα)*e(O,-h)e(g^c,hα) = 1
+                // e(C,hαx)e(C−yz,hα) = e(O,h)e(g−c,hα) that is 
+                // e(C,hαx)e(C^−yz,hα)*e(O,-h)e(g^c,hα) = 1
 
-            //     let mut xy = z;
-            //     xy.mul_assign(&w);
+                let mut xy = z;
+                xy.mul_assign(&w);
 
-            //     self.batch.add_opening(s2_proof.c_opening, random, xy);
-            //     self.batch.add_opening_value(random, s2_proof.c_value);
-            //     self.batch.add_commitment(self.s2_special_reference, random);
+                self.batch.add_opening(s2_proof.c_opening, random, xy);
+                self.batch.add_opening_value(random, s2_proof.c_value);
+                self.batch.add_commitment(self.s2_special_reference, random);
 
-            // }
+            }
 
-            // {
-            //     let random: E::Fr = self.randomness_source.gen();
+            {
+                let random: E::Fr = self.randomness_source.gen();
 
-            //     // e(D,hαx)e(D−y−1z,hα) = e(O,h)e(g−d,hα) that is 
-            //     // e(D,hαx)e(D^−y-1z,hα)*e(O,-h)e(g^d,hα) = 1
+                // e(D,hαx)e(D−y−1z,hα) = e(O,h)e(g−d,hα) that is 
+                // e(D,hαx)e(D^−y-1z,hα)*e(O,-h)e(g^d,hα) = 1
 
-            //     let mut y_inv_by_x = z;
-            //     y_inv_by_x.mul_assign(&w.inverse().unwrap());
+                let mut y_inv_by_x = z;
+                y_inv_by_x.mul_assign(&w.inverse().unwrap());
 
-            //     self.batch.add_opening(s2_proof.d_opening, random, y_inv_by_x);
-            //     self.batch.add_opening_value(random, s2_proof.d_value);
-            //     self.batch.add_commitment(self.s2_special_reference, random);
+                self.batch.add_opening(s2_proof.d_opening, random, y_inv_by_x);
+                self.batch.add_opening_value(random, s2_proof.d_value);
+                self.batch.add_commitment(self.s2_special_reference, random);
 
-            // }
+            }
 
             // now work with s1 part
 
             let mut s1_part = permutation_argument_proof.s_zy;
-            println!("S1 = {}", s1_part);
             s1_part.mul_assign(&x_n_plus_1_inv);
             s1_part.mul_assign(&y_n);
 
@@ -277,8 +265,6 @@ impl<E: Engine, C: Circuit<E>, S: SynthesisDriver, R: Rng> SuccinctMultiVerifier
 
             s
         };
-
-        println!("Succinct s(z, w) = {}", szw);
 
         {
             let random: E::Fr = self.randomness_source.gen();

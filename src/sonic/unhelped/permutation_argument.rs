@@ -57,6 +57,20 @@ fn permute<F: Field>(coeffs: &[F], permutation: & [usize]) -> Vec<F>{
     result
 }
 
+fn permute_inverse<F: Field>(permuted_coeffs: &[F], permutation: & [usize]) -> Vec<F>{
+    assert_eq!(permuted_coeffs.len(), permutation.len());
+    let mut result: Vec<F> = vec![F::zero(); permuted_coeffs.len()];
+    for (i, j) in permutation.iter().enumerate() {
+        // if *j < 1 {
+        //     // if permutation information is missing coefficient itself must be zero!
+        //     assert!(coeffs[i].is_zero());
+        //     continue;
+        // }
+        result[i] = permuted_coeffs[*j - 1];
+    }
+    result
+}
+
 impl<E: Engine> PermutationArgument<E> {
     pub fn new(coefficients: Vec<Vec<E::Fr>>, permutations: Vec<Vec<usize>>) -> Self {
         assert!(coefficients.len() > 0);
@@ -144,20 +158,52 @@ impl<E: Engine> PermutationArgument<E> {
         let mut permuted_coefficients = vec![];
         let mut permuted_at_y_coefficients = vec![];
 
+
+        // naive algorithms
+        // for every permutation poly 
+        // -- go throught all variable_idx
+        // - take coeff from non-permuted coeffs[veriable_idx]
+        // - mul by Y^{permutation[variable_idx]}
+        // - mul by X^{variable_idx + 1}
+
+        // let mut s_contrib = E::Fr::zero();
+        // for permutation_index in 0..m {
+        //     for (variable_index, constraint_power) in permutations[permutation_index].iter().enumerate() {
+        //         let y_power = y.pow([*constraint_power as u64]);
+        //         let x_power = z.pow([(variable_index+1) as u64]);
+        //         let coeff = non_permuted_coeffs[permutation_index][variable_index];
+
+        //         let mut result = coeff;
+        //         result.mul_assign(&x_power);
+        //         result.mul_assign(&y_power);
+        //         s_contrib.add_assign(&result);
+        //     }
+        // }
+
+
+        // this part distributes powers of Y^{constraint} and Y^{variable} for different arguments
         for (c, p) in self.non_permuted_coefficients.iter().zip(self.permutations.iter()) {
-            let mut non_permuted = c.clone();
-            // these are terms of s coefficients in each of the permutations,
-            // permuted by the corresponding permutation
-            let permuted = permute(&non_permuted[..], &p[..]);
+            // this one will have terms coeff[0] * Y^1
+            let mut non_permuted_at_y = c.clone();
 
-            // distribute powers of Y to non-permuted coefficients
-            mut_distribute_consequitive_powers(&mut non_permuted[..], y, y);
+            // permute to later have coeff[i] at spot K for distribution of powers and for argument
+            let permuted = permute(&non_permuted_at_y[..], &p[..]);
+
+            // here will be distributed powers for coeff[i] * Y^K
+            let mut permuted_at_y = permuted.clone();
+
+            // distribute powers of Y to non-permuted coefficients as coeff[0]*Y^1, coeff[0]*Y^2, ...
+            mut_distribute_consequitive_powers(&mut non_permuted_at_y[..], y, y);
             // and commit to S'
-            let s_prime = multiexp(srs.g_positive_x_alpha[0..n].iter(), non_permuted.iter()).into_affine();
+            let s_prime = multiexp(srs.g_positive_x_alpha[0..n].iter(), non_permuted_at_y.iter()).into_affine();
+            drop(non_permuted_at_y);
 
-            // no we can permute pre-distributed powers of Y 
-            let permuted_at_y = permute(&non_permuted[..], &p[..]);
-            drop(non_permuted);
+            // this construction has already moved coeff[i] to the corresponding constraint k, so term is coeff[i]*Y^{K} for place K
+            mut_distribute_consequitive_powers(&mut permuted_at_y[..], y, y);
+
+            // now there is a coefficient coeff[i]*Y^{K} for place K at place K, so we need to move it back to i
+            let permuted_at_y = permute_inverse(&permuted_at_y[..], &p[..]);
+
             // and commit to S
             let s = multiexp(srs.g_positive_x_alpha[0..n].iter(), permuted_at_y.iter()).into_affine();
 
@@ -265,7 +311,7 @@ impl<E: Engine> PermutationArgument<E> {
         let s_polynomial = s_polynomial.unwrap();
         // evaluate at z
         let s_zy = evaluate_at_consequitive_powers(& s_polynomial[..], z, z);
-        println!("In permutation argument S(z, y) = {}", s_zy);
+        println!("In permutation argument S1_(z, y) = {}", s_zy);
 
 
         let mut s_zy_neg = s_zy;

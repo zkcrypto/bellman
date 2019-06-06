@@ -66,13 +66,9 @@ impl<E: Engine, C: Circuit<E>, S: SynthesisDriver, R: Rng> MultiVerifier<E, C, S
 
         let z: E::Fr = transcript.get_challenge_scalar();
 
-        // let z = E::Fr::one();
-
         transcript.commit_point(&aggregate.c);
 
         let w: E::Fr = transcript.get_challenge_scalar();
-
-        let w = E::Fr::one();
 
         let szw = {
             let mut tmp = SxEval::new(w, self.n);

@@ -621,9 +621,13 @@ fn test_succinct_sonic_mimc() {
             let z_n = z.pow([n as u64]);
             let y_n = y.pow([n as u64]);
 
+            println!("S_1 naive = {}", s1_naive);
+
             let mut s_1 = s1_naive;
             s_1.mul_assign(&z_inv_n_plus_1);
             s_1.mul_assign(&y_n);
+
+            println!("S_1 multiplied = {}", s_1);
 
             let mut s_2 = s2_proof.c_value;
             s_2.add_assign(&s2_proof.d_value);

@@ -176,7 +176,6 @@ impl<E: Engine> PermutationStructure<E> {
                         Coeff::Zero => {
                         },
                         Coeff::One => {
-                            println!("A({}), coeff = 1 for place {} in permutation {}", gate_index, place, i);
                             not_empty[i] = true;
                             place_coeff_into[array_position] = one; 
                             place_permutation_into[array_position] = *place;
