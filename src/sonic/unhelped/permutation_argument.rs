@@ -146,14 +146,19 @@ impl<E: Engine> PermutationArgument<E> {
 
         for (c, p) in self.non_permuted_coefficients.iter().zip(self.permutations.iter()) {
             let mut non_permuted = c.clone();
+            // these are terms of s coefficients in each of the permutations,
+            // permuted by the corresponding permutation
             let permuted = permute(&non_permuted[..], &p[..]);
 
+            // distribute powers of Y to non-permuted coefficients
             mut_distribute_consequitive_powers(&mut non_permuted[..], y, y);
+            // and commit to S'
             let s_prime = multiexp(srs.g_positive_x_alpha[0..n].iter(), non_permuted.iter()).into_affine();
 
-            let mut permuted_at_y = permute(&non_permuted[..], &p[..]);
+            // no we can permute pre-distributed powers of Y 
+            let permuted_at_y = permute(&non_permuted[..], &p[..]);
             drop(non_permuted);
-
+            // and commit to S
             let s = multiexp(srs.g_positive_x_alpha[0..n].iter(), permuted_at_y.iter()).into_affine();
 
             result.push((s, s_prime));
@@ -260,6 +265,8 @@ impl<E: Engine> PermutationArgument<E> {
         let s_polynomial = s_polynomial.unwrap();
         // evaluate at z
         let s_zy = evaluate_at_consequitive_powers(& s_polynomial[..], z, z);
+        println!("In permutation argument S(z, y) = {}", s_zy);
+
 
         let mut s_zy_neg = s_zy;
         s_zy_neg.negate();

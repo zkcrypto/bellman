@@ -74,6 +74,75 @@ impl<E: Engine> PermutationStructure<E> {
         S2Eval::calculate_commitment_element(self.n, srs)
     }
 
+    pub fn print_constraints(n:usize, q: usize, coeffs: &Vec<Vec<E::Fr>>, permutations: &Vec<Vec<usize>>) {
+        let m = coeffs.len();
+
+        for constraint_idx in 1..=q {
+            println!("Constraint {}", constraint_idx);
+            let mut terms = vec![];
+            for p_idx in 0..m {
+                if let Some(variable_idx) = permutations[p_idx].iter().position(|&s| s == constraint_idx) {
+                    let coeff = coeffs[p_idx][variable_idx];
+                    terms.push((variable_idx, coeff));
+                }
+            }
+            for (var_idx, coeff) in terms.into_iter() {
+                if var_idx < n + 1 {
+                    print!("{} * A({})", coeff, n - var_idx);
+                } else if var_idx < 2*n + 1 {
+                    print!("{} * B({})", coeff, var_idx - n);
+                } else {
+                    print!("{} * C({})", coeff, var_idx - 2*n);
+                }
+                print!("\n");
+            }
+        }
+    }
+
+    pub fn print_terms_per_variable(n:usize, q: usize, coeffs: &Vec<Vec<E::Fr>>, permutations: &Vec<Vec<usize>>) {
+        let m = coeffs.len();
+        let k = coeffs[0].len();
+
+        for var_idx in 0..k {
+            println!("Terms for X^{}", var_idx + 1);
+            for p_idx in 0..m {
+                println!("In permutation poly {}", p_idx);
+                let constraint_index = permutations[p_idx][var_idx];
+                if constraint_index == 0 {
+                    continue;
+                }
+                let coeff = coeffs[p_idx][var_idx];
+                if var_idx < n + 1 {
+                    print!("{} * A({}) * Y^{}", coeff, n - var_idx, constraint_index);
+                } else if var_idx < 2*n + 1 {
+                    print!("{} * B({}) * Y^{}", coeff, var_idx - n, constraint_index);
+                } else {
+                    print!("{} * C({}) * Y^{}", coeff, var_idx - 2*n, constraint_index);
+                }
+                print!("\n");
+            }
+        }
+    }
+
+    pub fn print_terms_in_permutations(n:usize, q: usize, coeffs: &Vec<Vec<E::Fr>>, permutations: &Vec<Vec<usize>>) {
+        let m = coeffs.len();
+
+        for p_idx in 0..m {
+            println!("Permutation polynomial {}", p_idx);
+            for (var_idx, constraint_idx) in permutations[p_idx].iter().enumerate() {
+                let coeff = coeffs[p_idx][var_idx];
+                if var_idx < n + 1 {
+                    print!("{} * A({})", coeff, n - var_idx);
+                } else if var_idx < 2*n + 1 {
+                    print!("{} * B({})", coeff, var_idx - n);
+                } else {
+                    print!("{} * C({})", coeff, var_idx - 2*n);
+                }
+                print!("\n");
+            }
+        }
+    }
+
     pub fn calculate_s2_proof(&self, x: E::Fr, y: E::Fr, srs: &SRS<E>) -> S2Proof<E> {
         let s2_eval = S2Eval::new(self.n);
 
@@ -107,6 +176,7 @@ impl<E: Engine> PermutationStructure<E> {
                         Coeff::Zero => {
                         },
                         Coeff::One => {
+                            println!("A({}), coeff = 1 for place {} in permutation {}", gate_index, place, i);
                             not_empty[i] = true;
                             place_coeff_into[array_position] = one; 
                             place_permutation_into[array_position] = *place;
@@ -198,6 +268,11 @@ impl<E: Engine> PermutationStructure<E> {
         // TODO: fix
 
         let mut m = M;
+        for i in (0..M).into_iter().rev() {
+            // these are no constant terms
+            assert!(non_permuted_coeffs[i][n].is_zero());
+            assert!(permutations[i][n] == 0);
+        }
 
         for i in (0..M).into_iter().rev() {
             if !not_empty[i] {
@@ -208,6 +283,15 @@ impl<E: Engine> PermutationStructure<E> {
         }
 
         assert!(m != 0);
+
+        // Self::print_constraints(n, self.q, &non_permuted_coeffs, &permutations);
+        // Self::print_terms_per_variable(n, self.q, &non_permuted_coeffs, &permutations);
+        // Self::print_terms_in_permutations(n, self.q, &non_permuted_coeffs, &permutations);
+
+        // for i in 0..m {
+        //     println!("Coeffs = {:?}", non_permuted_coeffs[i]);
+        //     println!("Permutation = {:?}", permutations[i]);
+        // }
 
         // find something faster, although it's still linear
 
@@ -253,7 +337,7 @@ impl<E: Engine> PermutationStructure<E> {
     }
 
     pub fn create_permutation_arguments<R: Rng>(&self, y: E::Fr, z: E::Fr, rng: &mut R, srs: &SRS<E>) 
-    -> (Vec<(E::G1Affine, E::G1Affine)>, Vec<E::Fr>, PermutationProof<E>, PermutationArgumentProof<E>, E::Fr, usize)
+    -> (Vec<(E::G1Affine, E::G1Affine)>, Vec<E::Fr>, PermutationProof<E>, PermutationArgumentProof<E>, E::Fr, usize, E::Fr)
     {
         // we have to form non-permuted coefficients, as well as permutation structures;
         let n = self.n;
@@ -269,6 +353,24 @@ impl<E: Engine> PermutationStructure<E> {
             &permutations, 
             &srs
         );
+
+        // evaluate S naively
+
+        let mut s_contrib = E::Fr::zero();
+        for permutation_index in 0..m {
+            for (variable_index, constraint_power) in permutations[permutation_index].iter().enumerate() {
+                let y_power = y.pow([*constraint_power as u64]);
+                let x_power = z.pow([(variable_index+1) as u64]);
+                let coeff = non_permuted_coeffs[permutation_index][variable_index];
+
+                let mut result = coeff;
+                result.mul_assign(&x_power);
+                result.mul_assign(&y_power);
+                s_contrib.add_assign(&result);
+            }
+        }
+
+        println!("naive s eval = {}", s_contrib);
 
         let mut argument = PermutationArgument::new(non_permuted_coeffs, permutations);
         let challenges = (0..m).map(|_| E::Fr::rand(rng)).collect::<Vec<_>>();
@@ -320,7 +422,7 @@ impl<E: Engine> PermutationStructure<E> {
 
         assert!(valid, "permutation argument must be valid");
 
-        (commitments, challenges, opening, proof, z_prime, m)
+        (commitments, challenges, opening, proof, z_prime, m, s_contrib)
     }
 }
 
@@ -337,7 +439,7 @@ fn test_simple_succinct_sonic() {
 
     impl<E: Engine> Circuit<E> for MyCircuit {
         fn synthesize<CS: ConstraintSystem<E>>(&self, cs: &mut CS) -> Result<(), SynthesisError> {
-            let (a, b, _) = cs.multiply(|| {
+            let (a, b, c) = cs.multiply(|| {
                 Ok((
                     E::Fr::from_str("10").unwrap(),
                     E::Fr::from_str("20").unwrap(),
@@ -346,10 +448,24 @@ fn test_simple_succinct_sonic() {
             })?;
 
             cs.enforce_zero(LinearCombination::zero() + (Coeff::Full(E::Fr::from_str("2").unwrap()), a) - b);
+            cs.enforce_zero(LinearCombination::zero() + (Coeff::Full(E::Fr::from_str("20").unwrap()), a) - c);
+            cs.enforce_zero(LinearCombination::zero() + (Coeff::Full(E::Fr::from_str("10").unwrap()), b) - c);
 
-            let multiplier = cs.alloc_input(|| Ok(E::Fr::from_str("20").unwrap()))?;
+            // let multiplier = cs.alloc_input(|| Ok(E::Fr::from_str("20").unwrap()))?;
 
-            cs.enforce_zero(LinearCombination::from(b) - multiplier);
+            // cs.enforce_zero(LinearCombination::from(b) - multiplier);
+
+            // let (a1, b1, _) = cs.multiply(|| {
+            //     Ok((
+            //         E::Fr::from_str("5").unwrap(),
+            //         E::Fr::from_str("5").unwrap(),
+            //         E::Fr::from_str("25").unwrap(),
+            //     ))
+            // })?;
+
+            // cs.enforce_zero(LinearCombination::zero() + (Coeff::Full(E::Fr::from_str("2").unwrap()), b1) - a);
+            // cs.enforce_zero(LinearCombination::zero() + (Coeff::Full(E::Fr::from_str("4").unwrap()), a1) - b);
+            // cs.enforce_zero(LinearCombination::zero() + (Coeff::Full(E::Fr::from_str("40").unwrap()), b1) - c);
 
             Ok(())
         }
@@ -374,8 +490,46 @@ fn test_simple_succinct_sonic() {
         use crate::sonic::sonic::Permutation3;
         use crate::sonic::unhelped::permutation_structure::*;
 
+        let x: Fr = rng.gen();
+        let y: Fr = rng.gen();
+
+        let x = Fr::one();
+        let mut y = Fr::one();
+        y.double();
+
         let perm_structure = create_permutation_structure::<Bls12, _>(&MyCircuit);
-        perm_structure.create_permutation_arguments(Fr::one(), Fr::one(), rng, &srs);
+        perm_structure.create_permutation_arguments(x, y, rng, &srs);
+        let s2 = S2Eval::new(perm_structure.n);
+        let s2 = s2.evaluate(x, y, &srs);
+        let mut s2_value = s2.c_value;
+        s2_value.add_assign(&s2.d_value);
+
+        let mut expected_s2_value = Fr::zero();
+        let y_inv = y.inverse().unwrap();
+        let mut p1 = y;
+        p1.add_assign(&y_inv);
+        p1.mul_assign(&x);
+        expected_s2_value.add_assign(&p1);
+
+        let mut t0 = y;
+        t0.square();
+
+        let mut t1 = y_inv;
+        t1.square();
+
+        let mut p2 = t0;
+        p2.add_assign(&t1);
+        p2.mul_assign(&x);
+        p2.mul_assign(&x);
+
+        expected_s2_value.add_assign(&p2);
+
+        println!("s2 value = {}", s2_value);
+        println!("expected s2 value = {}", expected_s2_value);
+
+        assert!(expected_s2_value == s2_value);
+
+
 
         println!("N = {}, Q = {}", perm_structure.n, perm_structure.q);
     }

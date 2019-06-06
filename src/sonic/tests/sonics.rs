@@ -31,7 +31,7 @@ use crate::{
     SynthesisError
 };
 
-const MIMC_ROUNDS: usize = 322;
+const MIMC_ROUNDS: usize = 2;
 
 fn mimc<E: Engine>(
     mut xl: E::Fr,
@@ -477,7 +477,8 @@ fn test_succinct_sonic_mimc() {
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
         // Generate the MiMC round constants
-        let constants = (0..MIMC_ROUNDS).map(|_| rng.gen()).collect::<Vec<_>>();
+        // let constants = (0..MIMC_ROUNDS).map(|_| rng.gen()).collect::<Vec<_>>();
+        let constants = (0..MIMC_ROUNDS).map(|_| Fr::one()).collect::<Vec<_>>();
         let samples: usize = 100;
 
         let xl = rng.gen();
@@ -486,7 +487,7 @@ fn test_succinct_sonic_mimc() {
 
         // Create an instance of our circuit (with the
         // witness)
-        let circuit = MiMCDemoNoInputs {
+        let circuit = MiMCDemoNoInputs::<Bls12> {
             xl: Some(xl),
             xr: Some(xr),
             image: Some(image),
@@ -520,17 +521,26 @@ fn test_succinct_sonic_mimc() {
 
                 let multiplier = cs.alloc_input(|| Ok(E::Fr::from_str("20").unwrap()))?;
 
-                let dummy = cs.alloc_input(|| Ok(E::Fr::from_str("200").unwrap()))?;
-
                 cs.enforce_zero(LinearCombination::from(b) - multiplier);
-                cs.enforce_zero(LinearCombination::from(c) - dummy);
+
+                let (a1, b1, _) = cs.multiply(|| {
+                    Ok((
+                        E::Fr::from_str("5").unwrap(),
+                        E::Fr::from_str("5").unwrap(),
+                        E::Fr::from_str("25").unwrap(),
+                    ))
+                })?;
+
+                cs.enforce_zero(LinearCombination::zero() + (Coeff::Full(E::Fr::from_str("2").unwrap()), b1) - a);
+                cs.enforce_zero(LinearCombination::zero() + (Coeff::Full(E::Fr::from_str("4").unwrap()), a1) - b);
+                cs.enforce_zero(LinearCombination::zero() + (Coeff::Full(E::Fr::from_str("40").unwrap()), b1) - c);
 
                 Ok(())
             }
         }
 
+        // let perm_structure = create_permutation_structure::<Bls12, _>(&AdaptorCircuit(circuit.clone()));
         let perm_structure = create_permutation_structure::<Bls12, _>(&AdaptorCircuit(circuit.clone()));
-        // let perm_structure = create_permutation_structure::<Bls12, _>(&MyCircuit);
         let s1_srs = perm_structure.create_permutation_special_reference(&srs);
         let s2_srs = perm_structure.calculate_s2_commitment_value(&srs);
 
@@ -600,8 +610,28 @@ fn test_succinct_sonic_mimc() {
             use rand::{XorShiftRng, SeedableRng, Rand, Rng};
             let mut rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
             
-            let (perm_commitments, s_prime_challenges, perm_proof, perm_arg_proof, z_prime, num_poly) = perm_structure.create_permutation_arguments(aggregate.w, aggregate.z, &mut rng, &srs);
+            let (perm_commitments, s_prime_challenges, perm_proof, perm_arg_proof, z_prime, num_poly, s1_naive) = perm_structure.create_permutation_arguments(aggregate.w, aggregate.z, &mut rng, &srs);
             let s2_proof = perm_structure.calculate_s2_proof(aggregate.z, aggregate.w, &srs);
+
+            let n = perm_structure.n;
+            let z = aggregate.z;
+            let y = aggregate.w;
+            let z_inv = z.inverse().unwrap();
+            let z_inv_n_plus_1 = z_inv.pow([(n+1) as u64]);
+            let z_n = z.pow([n as u64]);
+            let y_n = y.pow([n as u64]);
+
+            let mut s_1 = s1_naive;
+            s_1.mul_assign(&z_inv_n_plus_1);
+            s_1.mul_assign(&y_n);
+
+            let mut s_2 = s2_proof.c_value;
+            s_2.add_assign(&s2_proof.d_value);
+            s_2.mul_assign(&z_n);
+
+            s_1.sub_assign(&s_2);
+            println!("S naive = {}", s_1);
+
 
             let mut verifier = SuccinctMultiVerifier::<Bls12, _, Permutation3, _>::new(AdaptorCircuit(circuit.clone()), &srs, rng).unwrap();
             println!("verifying 100 proofs with advice");
