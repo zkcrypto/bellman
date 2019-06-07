@@ -25,6 +25,7 @@ pub struct SpecializedSRS<E: Engine> {
 #[derive(Clone)]
 pub struct PermutationArgument<E: Engine> {
     non_permuted_coefficients: Vec<Vec<E::Fr>>,
+    non_permuted_at_y_coefficients: Vec<Vec<E::Fr>>,
     permuted_coefficients: Vec<Vec<E::Fr>>,
     permuted_at_y_coefficients: Vec<Vec<E::Fr>>,
     permutations: Vec<Vec<usize>>,
@@ -96,6 +97,7 @@ impl<E: Engine> PermutationArgument<E> {
 
         PermutationArgument {
             non_permuted_coefficients: coefficients,
+            non_permuted_at_y_coefficients: vec![vec![]],
             permuted_coefficients: vec![vec![]],
             permuted_at_y_coefficients: vec![vec![]],
             permutations: permutations,
@@ -166,6 +168,7 @@ impl<E: Engine> PermutationArgument<E> {
 
         let n = self.non_permuted_coefficients[0].len();
 
+        let mut non_permuted_at_y_coefficients = vec![];
         let mut permuted_coefficients = vec![];
         let mut permuted_at_y_coefficients = vec![];
 
@@ -206,7 +209,6 @@ impl<E: Engine> PermutationArgument<E> {
             mut_distribute_consequitive_powers(&mut non_permuted_at_y[..], y, y);
             // and commit to S'
             let s_prime = multiexp(srs.g_positive_x_alpha[0..n].iter(), non_permuted_at_y.iter()).into_affine();
-            drop(non_permuted_at_y);
 
             // this construction has already moved coeff[i] to the corresponding constraint k, so term is coeff[i]*Y^{K} for place K
             mut_distribute_consequitive_powers(&mut permuted_at_y[..], y, y);
@@ -219,10 +221,12 @@ impl<E: Engine> PermutationArgument<E> {
 
             result.push((s, s_prime));
 
+            non_permuted_at_y_coefficients.push(non_permuted_at_y);
             permuted_coefficients.push(permuted);
             permuted_at_y_coefficients.push(permuted_at_y);
         }
 
+        self.non_permuted_at_y_coefficients = non_permuted_at_y_coefficients;
         self.permuted_coefficients = permuted_coefficients;
         self.permuted_at_y_coefficients = permuted_at_y_coefficients;
 
@@ -573,7 +577,8 @@ impl<E: Engine> PermutationArgument<E> {
         permutations: Vec<Vec<usize>>,
         y: E::Fr, 
         z: E::Fr,
-        srs: &SRS<E>
+        srs: &SRS<E>,
+        specialized_srs: &SpecializedSRS<E>,
     ) -> SignatureOfCorrectComputation<E> {
         let mut argument = PermutationArgument::new(coefficients, permutations);
         let commitments = argument.commit(y, &srs);
@@ -597,23 +602,45 @@ impl<E: Engine> PermutationArgument<E> {
         }
 
         let z_prime = transcript.get_challenge_scalar();
-        // TODO: create better way to get few distinct challenges from the transcript
-        let mut transcript = Transcript::new(&[]);
-        transcript.commit_scalar(&z_prime);
-        let beta: E::Fr = transcript.get_challenge_scalar();
-        let mut transcript = Transcript::new(&[]);
-        transcript.commit_scalar(&beta);
-        let gamma: E::Fr = transcript.get_challenge_scalar();
 
         let s_prime_commitments_opening = argument.open_commitments_to_s_prime(&challenges, y, z_prime, &srs);
 
-        let (proof, grand_product_signature) = argument.make_argument_with_transcript(
-            beta, 
-            gamma, 
-            y, 
-            z, 
-            &srs
-        );
+        let (proof, grand_product_signature) = {
+            // TODO: create better way to get few distinct challenges from the transcript
+
+            let (proof, grand_product_signature) = argument.make_argument_with_transcript(
+                &mut transcript,
+                y, 
+                z, 
+                &srs
+            );
+
+            (proof, grand_product_signature)
+        };
+
+        // TODO: sanity check for now,
+        // later eliminate a and b commitments
+        // for (j, (((a, b), s), s_prime)) in grand_product_signature.a_commitments.iter()
+        //                                 .zip(grand_product_signature.b_commitments.iter())
+        //                                 .zip(s_commitments.iter())
+        //                                 .zip(s_prime_commitments.iter())
+        //                                 .enumerate()
+        // {
+        //     // Sj(P4j)β(P1j)γ
+        //     let mut lhs = s.into_projective();
+        //     lhs.add_assign(&specialized_srs.p_4[j].mul(beta.into_repr()));
+        //     lhs.add_assign(&specialized_srs.p_1.mul(gamma.into_repr()));
+
+        //     assert!(lhs.into_affine() == *a);
+
+        //     // Sj′(P3j)β(P1j)γ
+
+        //     let mut rhs = s_prime.into_projective();
+        //     rhs.add_assign(&specialized_srs.p_3.mul(beta.into_repr()));
+        //     rhs.add_assign(&specialized_srs.p_1.mul(gamma.into_repr()));
+
+        //     assert!(rhs.into_affine() == *b);
+        // }
 
         SignatureOfCorrectComputation {
             s_commitments,
@@ -627,12 +654,14 @@ impl<E: Engine> PermutationArgument<E> {
 
     // Argument a permutation argument. Current implementation consumes, cause extra arguments are required
     pub fn make_argument_with_transcript(self, 
-        beta: E::Fr, 
-        gamma: E::Fr, 
+        transcript: &mut Transcript,
         y: E::Fr, 
         z: E::Fr, 
         srs: &SRS<E>
     ) -> (PermutationArgumentProof<E>, GrandProductSignature<E>)  {
+        let beta: E::Fr = transcript.get_challenge_scalar();
+        let gamma: E::Fr = transcript.get_challenge_scalar();
+
         // Sj(P4j)β(P1j)γ is equal to the product of the coefficients of Sj′(P3j)β(P1j)γ
         // also open s = \sum self.permuted_coefficients(X, y) at z
 
@@ -679,13 +708,22 @@ impl<E: Engine> PermutationArgument<E> {
 
         let mut grand_products = vec![];
 
-        for (i, ((non_permuted, permuted), permutation)) in self.non_permuted_coefficients.into_iter()
+        // TODO: Check the validity!
+
+        for ((non_permuted, permuted), permutation) in self.non_permuted_coefficients.into_iter()
                                             .zip(self.permuted_coefficients.into_iter())
-                                            .zip(self.permutations.into_iter()).enumerate()
+                                            .zip(self.permutations.into_iter())
+
+        // for ((non_permuted, permuted), permutation) in self.non_permuted_at_y_coefficients.into_iter()
+        //                             .zip(self.permuted_at_y_coefficients.into_iter())
+        //                             .zip(self.permutations.into_iter())
 
         {
             // \prod si+βσi+γ = \prod s'i + β*i + γ
+
+            // s combination is coeff[sigma(i)]*Y^{sigma(i)} + beta*sigma(i) + gamma
             let mut s_j_combination = non_permuted;
+            // let mut s_j_combination = permuted;
             {
                 let p_4_values: Vec<E::Fr> = permutation.into_iter().map(|el| {
                         let mut repr = <<E as ScalarEngine>::Fr as PrimeField>::Repr::default();
@@ -699,15 +737,35 @@ impl<E: Engine> PermutationArgument<E> {
             }
 
             let mut s_prime_j_combination = permuted;
+            // let mut s_prime_j_combination = non_permuted;
+            // s' combination is coeff[i]*Y^{i} + beta*i + gamma
+
             {
                 mul_add_polynomials(&mut s_prime_j_combination[..], & p_3_values[..], beta);
                 mul_add_polynomials(&mut s_prime_j_combination[..], & p_1_values[..], gamma);
             }
 
+            // Sanity check
+            let product = s_j_combination.iter().fold(E::Fr::one(), |mut sum, x| 
+            {
+                sum.mul_assign(&x);
+
+                sum
+            });
+            let product_prime = s_prime_j_combination.iter().fold(E::Fr::one(), |mut sum, x| 
+            {
+                sum.mul_assign(&x);
+
+                sum
+            });
+
+            assert_eq!(product, product_prime);
+
             grand_products.push((s_j_combination, s_prime_j_combination));
         }
 
         let grand_product_signature = GrandProductArgument::create_signature(
+            transcript,
             grand_products, 
             y, 
             z, 

@@ -30,21 +30,23 @@ impl<E: Engine> WellformednessArgument<E> {
 
     pub fn create_signature(
         all_polys: Vec<Vec<E::Fr>>,
+        wellformed_challenges: Vec<E::Fr>,
         srs: &SRS<E>
     ) -> WellformednessSignature<E> {
         let j = all_polys.len();
         let mut transcript = Transcript::new(&[]);
         let wellformed_argument = WellformednessArgument::new(all_polys);
         let commitments = wellformed_argument.commit(&srs);
-        let mut wellformed_challenges = vec![];
-        for c in commitments.iter() {
-            transcript.commit_point(c);
-        }
+        // let mut wellformed_challenges = vec![];
+        // for c in commitments.iter() {
+        //     transcript.commit_point(c);
+        // }
 
-        for _ in 0..j {
-            let challenge = transcript.get_challenge_scalar();
-            wellformed_challenges.push(challenge);
-        }
+        // // TODO
+        // for _ in 0..j {
+        //     let challenge = transcript.get_challenge_scalar();
+        //     wellformed_challenges.push(challenge);
+        // }
 
         let proof = wellformed_argument.make_argument(wellformed_challenges, &srs);
 

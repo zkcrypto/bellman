@@ -22,11 +22,11 @@ pub struct GrandProductArgument<E: Engine> {
 
 #[derive(Clone)]
 pub struct GrandProductProof<E: Engine> {
-    t_opening: E::G1Affine,
-    e_zinv: E::Fr,
-    e_opening: E::G1Affine,
-    f_y: E::Fr,
-    f_opening: E::G1Affine,
+    pub t_opening: E::G1Affine,
+    pub e_zinv: E::Fr,
+    pub e_opening: E::G1Affine,
+    pub f_y: E::Fr,
+    pub f_opening: E::G1Affine,
 }
 
 #[derive(Clone)]
@@ -43,6 +43,7 @@ pub struct GrandProductSignature<E: Engine> {
 
 impl<E: Engine> GrandProductArgument<E> {
     pub fn create_signature(
+        transcript: &mut Transcript,
         grand_products: Vec<(Vec<E::Fr>, Vec<E::Fr>)>, 
         y: E::Fr,
         z: E::Fr,
@@ -51,27 +52,27 @@ impl<E: Engine> GrandProductArgument<E> {
         let mut a_commitments = vec![]; 
         let mut b_commitments = vec![]; 
 
-        let mut transcript = Transcript::new(&[]);
         let mut grand_product_challenges = vec![];
 
+        // TODO: Remove
         for (a, b) in grand_products.iter() {
             let (c_a, c_b) = GrandProductArgument::commit_for_individual_products(& a[..], & b[..], &srs);
-            {
-                let mut transcript = Transcript::new(&[]);
-                transcript.commit_point(&c_a);
-                let challenge = transcript.get_challenge_scalar();
-                grand_product_challenges.push(challenge);
-                transcript.commit_point(&c_b);
-                let challenge = transcript.get_challenge_scalar();
-                grand_product_challenges.push(challenge);
-            }
             a_commitments.push(c_a);
             b_commitments.push(c_b);
-            transcript.commit_point(&c_a);
-            transcript.commit_point(&c_b);
+        }
+
+        for _ in 0..grand_products.len() {
+            let c = transcript.get_challenge_scalar();
+            grand_product_challenges.push(c);
         }
 
         let mut all_polys = vec![];
+        let mut wellformed_challenges = vec![];
+        for c in 0..(grand_products.len()*2) {
+            let c = transcript.get_challenge_scalar();
+            wellformed_challenges.push(c);
+        }
+
         for p in grand_products.iter() {
             let (a, b) = p;
             all_polys.push(a.clone());
@@ -80,8 +81,21 @@ impl<E: Engine> GrandProductArgument<E> {
 
         let wellformedness_signature = WellformednessArgument::create_signature(
             all_polys, 
+            wellformed_challenges,
             &srs
         );
+
+        // sanity check
+        for (j, (a, b)) in a_commitments.iter()
+                            .zip(b_commitments.iter())
+                            .enumerate()
+        {
+            let a_corr = wellformedness_signature.commitments[2*j];
+            let b_corr = wellformedness_signature.commitments[2*j + 1];
+            
+            assert!(a_corr == *a);
+            assert!(b_corr == *b);
+        }
 
 
         let mut grand_product_argument = GrandProductArgument::new(grand_products);
@@ -121,7 +135,7 @@ impl<E: Engine> GrandProductArgument<E> {
         // c_3 = a_3 * c_2 = a_3 * a_2 * a_1
         // ...
         // c_n = a_n * c_{n-1} = \prod a_i
-        // a_{n+1} = c_{n-1}^-1
+        // a_{n+1} = c_{n}^-1
         // c_{n+1} = 1
         // c_{n+1} = a_{n+2} * c_{n+1} = a_{n+2}
         // ...
@@ -144,8 +158,14 @@ impl<E: Engine> GrandProductArgument<E> {
             }
             assert_eq!(c_poly.len(), n);
             a_poly.extend(p0);
+            assert_eq!(a_poly.len(), n);
             // v = a_{n+1} = c_{n}^-1
-            let v = c_poly[n-1].inverse().unwrap();
+            // let v = c_poly[n-1].inverse().unwrap();
+            let v = c_coeff.inverse().unwrap();
+            // ! IMPORTANT
+            // This line is indeed assigning a_{n+1} to zero instead of v
+            // for the practical purpose later we manually evaluate T polynomial
+            // and assign v to the term X^{n+1}
             a_poly.push(E::Fr::zero());
             // a_poly.push(v);
             // add c_{n+1}
@@ -160,6 +180,7 @@ impl<E: Engine> GrandProductArgument<E> {
             a_poly.extend(p1);
 
             assert_eq!(c_poly[n-1], c_poly[2*n]);
+            assert_eq!(c_poly[n], E::Fr::one());
 
             a_polynomials.push(a_poly);
             c_polynomials.push(c_poly);
@@ -280,7 +301,7 @@ impl<E: Engine> GrandProductArgument<E> {
                                         .zip(challenges.iter())
         {
             let mut a_xy = a.clone();
-            let mut c_xy = c.clone();
+            let c_xy = c.clone();
             let v = *v;
 
             assert_eq!(a_xy.len(), 2*n + 1);
@@ -356,7 +377,7 @@ impl<E: Engine> GrandProductArgument<E> {
 
             val.add_assign(&E::Fr::one());
 
-            // subtract at constant term
+            // subtract a constant term
             assert_eq!(t[2*n+1], val);
 
             t[2*n+1].sub_assign(&val);

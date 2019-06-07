@@ -335,6 +335,25 @@ impl<E: Engine> PermutationStructure<E> {
         specialized_srs
     }
 
+    pub fn make_signature(&self, y: E::Fr, z: E::Fr, srs: &SRS<E>) {
+        let (non_permuted_coeffs, permutations) = self.create_permutation_vectors();
+
+        let specialized_srs = PermutationArgument::make_specialized_srs(
+            &non_permuted_coeffs, 
+            &permutations, 
+            &srs
+        );
+
+        let signature = PermutationArgument::make_signature(
+            non_permuted_coeffs,
+            permutations,
+            y,
+            z,
+            &srs,
+            &specialized_srs
+        );
+    } 
+
     pub fn create_permutation_arguments<R: Rng>(&self, y: E::Fr, z: E::Fr, rng: &mut R, srs: &SRS<E>) 
     -> (Vec<(E::G1Affine, E::G1Affine)>, Vec<E::Fr>, PermutationProof<E>, PermutationArgumentProof<E>, E::Fr, usize, E::Fr)
     {
@@ -496,6 +515,7 @@ fn test_simple_succinct_sonic() {
 
         let perm_structure = create_permutation_structure::<Bls12, _>(&MyCircuit);
         perm_structure.create_permutation_arguments(x, y, rng, &srs);
+        perm_structure.make_signature(x, y, &srs);
         let s2 = S2Eval::new(perm_structure.n);
         let s2 = s2.evaluate(x, y, &srs);
         let mut s2_value = s2.c_value;
@@ -521,12 +541,7 @@ fn test_simple_succinct_sonic() {
 
         expected_s2_value.add_assign(&p2);
 
-        println!("s2 value = {}", s2_value);
-        println!("expected s2 value = {}", expected_s2_value);
-
         assert!(expected_s2_value == s2_value);
-
-
 
         println!("N = {}, Q = {}", perm_structure.n, perm_structure.q);
     }
