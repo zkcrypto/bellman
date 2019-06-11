@@ -116,7 +116,7 @@ pub fn polynomial_commitment_opening<
         I: IntoIterator<Item = &'a E::Fr>
     >(
         largest_negative_power: usize,
-        largest_positive_power: usize,
+        _largest_positive_power: usize,
         polynomial_coefficients: I,
         point: E::Fr,
         srs: &'a SRS<E>,
@@ -221,7 +221,7 @@ pub fn mut_evaluate_at_consequitive_powers<'a, F: Field> (
 
                 let mut acc = F::zero();
 
-                for mut p in coeffs {
+                for p in coeffs {
                     p.mul_assign(&current_power);
                     acc.add_assign(&p);
 
@@ -268,7 +268,7 @@ pub fn mut_distribute_consequitive_powers<'a, F: Field> (
                 let mut current_power = base.pow(&[(i*chunk) as u64]);
                 current_power.mul_assign(&first_power);
 
-                for mut p in coeffs_chunk {
+                for p in coeffs_chunk {
                     p.mul_assign(&current_power);
 
                     current_power.mul_assign(&base);
@@ -464,7 +464,7 @@ where
 
 /// Divides polynomial `a` in `x` by `x - b` with
 /// no remainder using fft.
-pub fn parallel_kate_divison<'a, E: Engine, I: IntoIterator<Item = &'a E::Fr>>(a: I, mut b: E::Fr) -> Vec<E::Fr>
+pub fn parallel_kate_divison<'a, E: Engine, I: IntoIterator<Item = &'a E::Fr>>(a: I, b: E::Fr) -> Vec<E::Fr>
 where
     I::IntoIter: DoubleEndedIterator + ExactSizeIterator,
 {
@@ -1002,7 +1002,7 @@ fn test_mut_eval_at_powers() {
     {
         let mut tmp = x.pow(&[n as u64]);
 
-        for mut coeff in a.iter_mut() {
+        for coeff in a.iter_mut() {
             coeff.mul_assign(&tmp);
             acc.add_assign(&coeff);
             tmp.mul_assign(&x);
@@ -1033,7 +1033,7 @@ fn test_mut_distribute_powers() {
     {
         let mut tmp = x.pow(&[n as u64]);
 
-        for mut coeff in a.iter_mut() {
+        for coeff in a.iter_mut() {
             coeff.mul_assign(&tmp);
             tmp.mul_assign(&x);
         }

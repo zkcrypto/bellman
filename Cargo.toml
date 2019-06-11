@@ -33,7 +33,8 @@ blake2-rfc = {version = "0.2.18", optional = true}
 
 [features]
 #default = ["multicore"]
-default = ["multicore", "gm17", "sonic"]
+default = ["multicore", "sonic"]
+#default = ["multicore", "gm17", "sonic"]
 #default = ["wasm"]
 multicore = ["futures-cpupool", "num_cpus", "crossbeam"]
 sonic = ["tiny-keccak", "blake2-rfc"]

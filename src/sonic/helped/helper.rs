@@ -106,8 +106,6 @@ pub fn create_aggregate_on_srs_using_information<E: Engine, C: Circuit<E>, S: Sy
 
     let value = compute_value::<E>(&w, &s_poly_positive, &s_poly_negative);
 
-    println!("Helper s(z, w) = {}", value);
-
     let opening = {
         let mut value = value;
         value.negate();

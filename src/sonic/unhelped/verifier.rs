@@ -73,8 +73,7 @@ impl<E: Engine, C: Circuit<E>, S: SynthesisDriver, R: Rng> SuccinctMultiVerifier
         &mut self,
         proofs: &[(Proof<E>, SxyAdvice<E>)],
         aggregate: &SuccinctAggregate<E>,
-        srs: &SRS<E>,
-        specialized_srs: &SpecializedSRS<E>
+        srs: &SRS<E>
     )
     {
         let mut transcript = Transcript::new(&[]);
@@ -94,8 +93,6 @@ impl<E: Engine, C: Circuit<E>, S: SynthesisDriver, R: Rng> SuccinctMultiVerifier
         transcript.commit_point(&aggregate.c);
 
         let w: E::Fr = transcript.get_challenge_scalar();
-
-        println!("Verifier: Z = {}, W = {}", z, w);
 
         let szw = {
             // prover will supply s1 and s2, need to calculate 
@@ -246,12 +243,12 @@ impl<E: Engine, C: Circuit<E>, S: SynthesisDriver, R: Rng> SuccinctMultiVerifier
                 // from already known elements
 
                 let beta: E::Fr = transcript.get_challenge_scalar();
-                println!("Beta in verifier = {}", beta);
                 let gamma: E::Fr = transcript.get_challenge_scalar();
-                println!("Gamma in verifier = {}", gamma);
 
                 let mut a_commitments = vec![];
                 let mut b_commitments = vec![];
+
+                let mut wellformedness_argument_commitments = vec![];
 
                 use crate::pairing::CurveAffine;
                 use crate::pairing::ff::PrimeField;
@@ -283,7 +280,12 @@ impl<E: Engine, C: Circuit<E>, S: SynthesisDriver, R: Rng> SuccinctMultiVerifier
 
                     a_commitments.push(a);
                     b_commitments.push(b);
+                    wellformedness_argument_commitments.push(a);
+                    wellformedness_argument_commitments.push(b);
                 }
+
+                // commitments to invidvidual grand products are assembled, now check first part of a grand
+                // product argument
 
                 // Now perform an actual check
                 {
@@ -294,7 +296,7 @@ impl<E: Engine, C: Circuit<E>, S: SynthesisDriver, R: Rng> SuccinctMultiVerifier
                     let h_alpha_x_precomp = srs.h_positive_x_alpha[1].prepare();
                     let h_alpha_precomp = srs.h_positive_x_alpha[0].prepare();
 
-                    let mut h_x_n_plus_one_precomp = srs.h_positive_x[self.n];
+                    let mut h_x_n_plus_one_precomp = srs.h_positive_x[self.n+1];
                     h_x_n_plus_one_precomp.negate();
                     let h_x_n_plus_one_precomp = h_x_n_plus_one_precomp.prepare();
 
@@ -352,41 +354,174 @@ impl<E: Engine, C: Circuit<E>, S: SynthesisDriver, R: Rng> SuccinctMultiVerifier
                         ])).unwrap() == E::Fqk::one();
 
                     // TODO
-                    // assert!(valid, "grand product arguments must be valid for individual commitments");
+                    assert!(valid, "grand product arguments must be valid for individual commitments");
 
                 }
 
+                // Now the second part of the grand product argument
 
-                // TODO: sanity check for now,
-                // later eliminate a and b commitments
-                // for (j, (((a, b), s), s_prime)) in grand_product_signature.a_commitments.iter()
-                //                                 .zip(grand_product_signature.b_commitments.iter())
-                //                                 .zip(s_commitments.iter())
-                //                                 .zip(s_prime_commitments.iter())
-                //                                 .enumerate()
-                // {
-                //     // Sj(P4j)β(P1j)γ
-                //     let mut lhs = s.into_projective();
-                //     lhs.add_assign(&specialized_srs.p_4[j].mul(beta.into_repr()));
-                //     lhs.add_assign(&specialized_srs.p_1.mul(gamma.into_repr()));
+                {
+                    let mut grand_product_challenges = vec![];
 
-                //     assert!(lhs.into_affine() == *a);
+                    for _ in 0..aggregate.signature.grand_product_signature.c_commitments.len() {
+                        let c: E::Fr = transcript.get_challenge_scalar();
+                        grand_product_challenges.push(c);
+                    }
+                    // first re-calculate cj and t(z,y)
 
-                //     // Sj′(P3j)β(P1j)γ
+                    let mut yz = w;
+                    yz.mul_assign(&z);
 
-                //     let mut rhs = s_prime.into_projective();
-                //     rhs.add_assign(&specialized_srs.p_3.mul(beta.into_repr()));
-                //     rhs.add_assign(&specialized_srs.p_1.mul(gamma.into_repr()));
+                    let z_inv = z.inverse().unwrap();
 
-                //     assert!(rhs.into_affine() == *b);
-                // }
+                    let mut t_zy = E::Fr::zero();
+
+                    let mut commitments_points = vec![];
+                    let mut rc_vec = vec![];
+                    let mut ry_vec = vec![];
+
+                    // in grand product arguments n is not a number of gates, but 3n+1 - number of variables + 1
+                    let three_n_plus_1 = 3*self.n + 1;
+
+                    for ((r, commitment), (a, _)) in grand_product_challenges.iter()
+                                                    .zip(aggregate.signature.grand_product_signature.c_commitments.iter())
+                                                    .zip(aggregate.signature.grand_product_signature.grand_product_openings.iter())
+                    {
+                        let (c, v) = commitment;
+                        commitments_points.push(*c);
+                        
+                        // cj = ((aj + vj(yz)n+1)y + zn+2 + zn+1y − z2n+2y)z−1
+                        let mut c_zy = yz.pow([(three_n_plus_1 + 1) as u64]);
+                        c_zy.mul_assign(v);
+                        c_zy.add_assign(a);
+                        c_zy.mul_assign(&w);
+
+                        let mut z_n_plus_1 = z.pow([(three_n_plus_1 + 1) as u64]);
+
+                        let mut z_n_plus_2 = z_n_plus_1;
+                        z_n_plus_2.mul_assign(&z);
+
+                        let mut z_2n_plus_2 = z_n_plus_1;
+                        z_2n_plus_2.square();
+                        z_2n_plus_2.mul_assign(&w);
+
+                        z_n_plus_1.mul_assign(&w);
+
+                        c_zy.add_assign(&z_n_plus_1);
+                        c_zy.add_assign(&z_n_plus_2);
+                        c_zy.sub_assign(&z_2n_plus_2);
+
+                        c_zy.mul_assign(&z_inv);
+
+                        let mut rc = c_zy;
+                        rc.mul_assign(&r);
+                        rc_vec.push(rc);
+
+                        let mut ry = w;
+                        ry.mul_assign(&r);
+                        ry_vec.push(ry);
+
+                        let mut val = rc;
+                        val.sub_assign(&r);
+                        t_zy.add_assign(&val);
+                    }
+
+                    t_zy.add_assign(&aggregate.signature.grand_product_signature.proof.e_zinv);
+                    t_zy.sub_assign(&aggregate.signature.grand_product_signature.proof.f_y);
+
+                    // t(z, y) is now calculated
+
+                    let c_rc = multiexp(
+                        commitments_points.iter(),
+                        rc_vec.iter(),
+                    ).into_affine();
+
+                    let c_ry = multiexp(
+                        commitments_points.iter(),
+                        ry_vec.iter(),
+                    ).into_affine();
+
+                    // e(E,h^alphax)e(E^-z^-1,h^alpha) = e(\sumCj^(rj*cj),h)e(g^-e,h^alpha)
+
+                    {
+                        let random: E::Fr = self.randomness_source.gen();
+
+                        self.batch.add_opening(aggregate.signature.grand_product_signature.proof.e_opening, random, z_inv);
+                        self.batch.add_opening_value(random, aggregate.signature.grand_product_signature.proof.e_zinv);
+                        self.batch.add_commitment(c_rc, random);
+                    }
+
+                    // e(F,h^alphax)e(F^-y,h) = e(\sumCj^(rj&y),h)e(g^-f,h^alpha)
+
+                    {
+                        let random: E::Fr = self.randomness_source.gen();
+
+                        self.batch.add_opening(aggregate.signature.grand_product_signature.proof.f_opening, random, w);
+                        self.batch.add_opening_value(random, aggregate.signature.grand_product_signature.proof.f_y);
+                        self.batch.add_commitment(c_ry, random);
+                    }
+
+                    // e(T′,hαx)e(T′−z,hα) = e(T,h)e(g−t(z,y),hα)
+
+                    {
+                        let random: E::Fr = self.randomness_source.gen();
+
+                        self.batch.add_opening(aggregate.signature.grand_product_signature.proof.t_opening, random, z);
+                        self.batch.add_opening_value(random, t_zy);
+                        self.batch.add_commitment(aggregate.signature.grand_product_signature.t_commitment, random);
+                    }
+                }
+
+                // finally check the wellformedness arguments
+
+                {
+                    let mut wellformedness_challenges = vec![];
+
+                    for _ in 0..wellformedness_argument_commitments.len() {
+                        let c: E::Fr = transcript.get_challenge_scalar();
+                        wellformedness_challenges.push(c);
+                    }
+
+                    let d = srs.d;
+                    let n = 3*self.n + 1; // same as for grand products
+
+                    let alpha_x_d_precomp = srs.h_positive_x_alpha[d].prepare();
+                    // TODO: not strictly required
+                    assert!(n < d);
+                    let d_minus_n = d - n;
+                    let alpha_x_n_minus_d_precomp = srs.h_negative_x_alpha[d_minus_n].prepare();
+                    let mut h_prep = srs.h_positive_x[0];
+                    h_prep.negate();
+                    let h_prep = h_prep.prepare();
+
+                    let a = multiexp(
+                        wellformedness_argument_commitments.iter(),
+                        wellformedness_challenges.iter(),
+                    ).into_affine();
+
+                    let r1: E::Fr = self.randomness_source.gen();
+                    let r2: E::Fr = self.randomness_source.gen();
+
+                    let mut r = r1;
+                    r.add_assign(&r2);
+                    let l_r1 = aggregate.signature.grand_product_signature.wellformedness_signature.proof.l.mul(r1.into_repr()).into_affine();
+                    let r_r2 = aggregate.signature.grand_product_signature.wellformedness_signature.proof.r.mul(r2.into_repr()).into_affine();
+
+                    let a_r = a.mul(r.into_repr()).into_affine();
+
+                    let valid = E::final_exponentiation(&E::miller_loop(&[
+                            (&a_r.prepare(), &h_prep),
+                            (&l_r1.prepare(), &alpha_x_d_precomp),
+                            (&r_r2.prepare(), &alpha_x_n_minus_d_precomp)
+                        ])).unwrap() == E::Fqk::one();
+
+                    assert!(valid, "wellformedness argument must be valid");
+                }
 
             }
 
             szw
         };
-
-        println!("Verifier: S(z,w) = {}", szw);
 
         {
             let random: E::Fr = self.randomness_source.gen();

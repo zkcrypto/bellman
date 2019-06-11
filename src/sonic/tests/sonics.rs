@@ -505,10 +505,9 @@ fn test_succinct_sonic_mimc() {
 
         use crate::sonic::cs::{Circuit, ConstraintSystem, LinearCombination, Coeff};
 
-        // let perm_structure = create_permutation_structure::<Bls12, _>(&AdaptorCircuit(circuit.clone()));
         let perm_structure = create_permutation_structure::<Bls12, _>(&AdaptorCircuit(circuit.clone()));
         let s1_srs = perm_structure.create_permutation_special_reference(&srs);
-        let s2_srs = perm_structure.calculate_s2_commitment_value(&srs);
+        // let s2_srs = perm_structure.calculate_s2_commitment_value(&srs);
 
         let info = get_circuit_parameters_for_succinct_sonic::<Bls12, _>(circuit.clone()).expect("Must get circuit info");
         println!("{:?}", info);
@@ -529,8 +528,6 @@ fn test_succinct_sonic_mimc() {
         let aggregate = create_aggregate_on_srs::<Bls12, _, Permutation3>(&AdaptorCircuit(circuit.clone()), &proofs, &srs, &s1_srs);
         println!("done in {:?}", start.elapsed());
 
-
-        let _ = crate::sonic::helped::helper::create_aggregate_on_srs::<Bls12, _, Permutation3>(&AdaptorCircuit(circuit.clone()), &proofs, &srs);
         // {
         //     let rng = thread_rng();
         //     let mut verifier = MultiVerifier::<Bls12, _, Permutation3, _>::new(AdaptorCircuit(circuit.clone()), &srs, rng).unwrap();
@@ -561,14 +558,7 @@ fn test_succinct_sonic_mimc() {
 
         {
             use rand::{XorShiftRng, SeedableRng, Rand, Rng};
-            let mut rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
-            let start = Instant::now();
-
-            // let aggregate = 
-            // let (perm_commitments, s_prime_challenges, perm_proof, perm_arg_proof, z_prime, num_poly, s1_naive) = perm_structure.create_permutation_arguments(aggregate.w, aggregate.z, &mut rng, &srs);
-            // let s2_proof = perm_structure.calculate_s2_proof(aggregate.z, aggregate.w, &srs);
-
-            // println!("Permutation argument done in {:?}", start.elapsed());
+            let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
             let mut verifier = SuccinctMultiVerifier::<Bls12, _, Permutation3, _>::new(AdaptorCircuit(circuit.clone()), &srs, rng).unwrap();
             println!("verifying 100 proofs with succinct advice");
@@ -581,7 +571,6 @@ fn test_succinct_sonic_mimc() {
                     &proofs,
                     &aggregate,
                     &srs,
-                    &s1_srs
                 );
                 assert_eq!(verifier.check_all(), true); // TODO
             }

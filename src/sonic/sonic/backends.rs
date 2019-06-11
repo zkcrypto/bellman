@@ -18,7 +18,7 @@ pub struct Preprocess<E: Engine> {
 impl<'a, E: Engine> Backend<E> for &'a mut Preprocess<E> {
     type LinearConstraintIndex = ();
 
-    fn get_for_q(&self, q: usize) -> Self::LinearConstraintIndex { () }
+    fn get_for_q(&self, _q: usize) -> Self::LinearConstraintIndex { () }
 
     fn new_k_power(&mut self, index: usize) {
         self.k_map.push(index);
@@ -57,7 +57,8 @@ impl<'a, E: Engine> Backend<E> for &'a mut Wires<E> {
 
     fn new_linear_constraint(&mut self) -> Self::LinearConstraintIndex { () }
 
-    fn get_for_q(&self, q: usize) -> Self::LinearConstraintIndex { () }
+    fn get_for_q(&self, _q: usize) -> Self::LinearConstraintIndex { () }
+
     fn new_multiplication_gate(&mut self) {
         self.a.push(E::Fr::zero());
         self.b.push(E::Fr::zero());
@@ -118,7 +119,7 @@ pub struct CountNandQ<S: SynthesisDriver> {
 impl<'a, E: Engine, S: SynthesisDriver> Backend<E> for &'a mut CountNandQ<S> {
     type LinearConstraintIndex = ();
 
-    fn get_for_q(&self, q: usize) -> Self::LinearConstraintIndex { () }
+    fn get_for_q(&self, _q: usize) -> Self::LinearConstraintIndex { () }
 
     fn new_multiplication_gate(&mut self) {
         self.n += 1;
@@ -151,7 +152,7 @@ impl<'a, E: Engine, S: SynthesisDriver> Backend<E> for &'a mut CountN<S> {
 
     fn new_linear_constraint(&mut self) -> Self::LinearConstraintIndex { () }
 
-    fn get_for_q(&self, q: usize) -> Self::LinearConstraintIndex { () }
+    fn get_for_q(&self, _q: usize) -> Self::LinearConstraintIndex { () }
 
     fn new_multiplication_gate(&mut self) {
         self.n += 1;

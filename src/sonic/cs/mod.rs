@@ -57,7 +57,7 @@ pub trait Backend<E: Engine> {
     fn new_linear_constraint(&mut self) -> Self::LinearConstraintIndex;
 
     /// Insert a term into a linear constraint. TODO: bad name of function
-    fn insert_coefficient(&mut self, _var: Variable, _coeff: Coeff<E>, y: &Self::LinearConstraintIndex) { }
+    fn insert_coefficient(&mut self, _var: Variable, _coeff: Coeff<E>, _y: &Self::LinearConstraintIndex) { }
 
     /// Compute a `LinearConstraintIndex` from `q`.
     fn get_for_q(&self, q: usize) -> Self::LinearConstraintIndex;

@@ -5,7 +5,7 @@
 
 mod s2_proof;
 mod wellformed_argument;
-mod grand_product_argument;
+pub mod grand_product_argument;
 mod permutation_argument;
 mod verifier;
 pub mod permutation_structure;

@@ -383,7 +383,7 @@ impl<E: Engine> PermutationStructure<E> {
 
         for i in 0..m {
             let mut fillers: Vec<usize> = (1..=(3*n+1)).map(|el| el).collect();
-            for (p, c) in permutations[i].iter_mut().zip(non_permuted_coeffs[i].iter()) {
+            for (p, _c) in permutations[i].iter_mut().zip(non_permuted_coeffs[i].iter()) {
                 if *p == 0 {
                     continue;
                     // assert!(c.is_zero());
@@ -638,7 +638,7 @@ fn test_simple_succinct_sonic() {
 
     {
         use rand::{XorShiftRng, SeedableRng, Rand, Rng};
-        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let _rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
         
         use crate::sonic::sonic::Basic;
         use crate::sonic::sonic::AdaptorCircuit;
@@ -672,7 +672,7 @@ fn test_simple_succinct_sonic() {
                 for i in 0..non_permuted_coeffs[j].len() {
                     let sigma_i = permutations[j][i];
                     let coeff_i = non_permuted_coeffs[j][i];
-                    let coeff_sigma_i = non_permuted_coeffs[j][sigma_i - 1];
+                    // let coeff_sigma_i = non_permuted_coeffs[j][sigma_i - 1];
 
                     let y_power = y.pow([sigma_i as u64]);
                     let x_power = z.pow([(i+1) as u64]);

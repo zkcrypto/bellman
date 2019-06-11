@@ -115,11 +115,7 @@ pub fn create_aggregate_on_srs_using_information<E: Engine, C: Circuit<E>, S: Sy
     // Open C at w
     let w: E::Fr = transcript.get_challenge_scalar();
 
-    println!("Aggregate: Z = {}, W = {}", z, w);
-
     let value = compute_value::<E>(&w, &s_poly_positive, &s_poly_negative);
-
-    println!("Aggregate: S(z,w) = {}", value);
 
     let opening = {
         let mut value = value;
