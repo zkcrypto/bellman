@@ -34,8 +34,9 @@ impl<E: Engine> WellformednessArgument<E> {
         srs: &SRS<E>
     ) -> WellformednessSignature<E> {
         let j = all_polys.len();
-        let mut transcript = Transcript::new(&[]);
+        println!("Making wellformedness argument for {} polys", j);
         let wellformed_argument = WellformednessArgument::new(all_polys);
+        // TODO: remove commitments
         let commitments = wellformed_argument.commit(&srs);
         // let mut wellformed_challenges = vec![];
         // for c in commitments.iter() {

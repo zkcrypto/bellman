@@ -106,6 +106,8 @@ pub fn create_aggregate_on_srs_using_information<E: Engine, C: Circuit<E>, S: Sy
 
     let value = compute_value::<E>(&w, &s_poly_positive, &s_poly_negative);
 
+    println!("Helper s(z, w) = {}", value);
+
     let opening = {
         let mut value = value;
         value.negate();
@@ -117,20 +119,6 @@ pub fn create_aggregate_on_srs_using_information<E: Engine, C: Circuit<E>, S: Sy
             w,
             &srs
         )
-
-        // let poly = kate_divison(
-        //     s_poly_negative.iter().rev().chain_ext(Some(value).iter()).chain_ext(s_poly_positive.iter()),
-        //     w,
-        // );
-
-        // let negative_poly = poly[0..n].iter().rev();
-        // let positive_poly = poly[n..].iter();
-        // multiexp(
-        //     srs.g_negative_x[1..(negative_poly.len() + 1)].iter().chain_ext(
-        //         srs.g_positive_x[0..positive_poly.len()].iter()
-        //     ),
-        //     negative_poly.chain_ext(positive_poly)
-        // ).into_affine()
     };
 
     // Let's open up C to every y.
@@ -142,22 +130,6 @@ pub fn create_aggregate_on_srs_using_information<E: Engine, C: Circuit<E>, S: Sy
         let negative_powers_contrib = evaluate_at_consequitive_powers(poly_negative, yinv, yinv);
         value.add_assign(&positive_powers_contrib);
         value.add_assign(&negative_powers_contrib);
-
-        // let mut tmp = yinv;
-        // for &coeff in poly_negative {
-        //     let mut coeff = coeff;
-        //     coeff.mul_assign(&tmp);
-        //     value.add_assign(&coeff);
-        //     tmp.mul_assign(&yinv);
-        // }
-
-        // let mut tmp = *y;
-        // for &coeff in poly_positive {
-        //     let mut coeff = coeff;
-        //     coeff.mul_assign(&tmp);
-        //     value.add_assign(&coeff);
-        //     tmp.mul_assign(&y);
-        // }
 
         value
     }
@@ -180,20 +152,6 @@ pub fn create_aggregate_on_srs_using_information<E: Engine, C: Circuit<E>, S: Sy
                 *y,
                 &srs
             )
-
-            // let poly = kate_divison(
-            //     s_poly_negative.iter().rev().chain_ext(Some(value).iter()).chain_ext(s_poly_positive.iter()),
-            //     *y,
-            // );
-
-            // let negative_poly = poly[0..n].iter().rev();
-            // let positive_poly = poly[n..].iter();
-            // multiexp(
-            //     srs.g_negative_x[1..(negative_poly.len() + 1)].iter().chain_ext(
-            //         srs.g_positive_x[0..positive_poly.len()].iter()
-            //     ),
-            //     negative_poly.chain_ext(positive_poly)
-            // ).into_affine()
         };
 
         c_openings.push((opening, value));
@@ -229,15 +187,6 @@ pub fn create_aggregate_on_srs_using_information<E: Engine, C: Circuit<E>, S: Sy
         mul_add_polynomials(& mut poly_negative[..], &s_poly_negative[..], r);
         mul_add_polynomials(& mut poly_positive[..], &s_poly_positive[..], r);
 
-        // for (mut coeff, target) in s_poly_negative.into_iter().zip(poly_negative.iter_mut()) {
-        //     coeff.mul_assign(&r);
-        //     target.add_assign(&coeff);
-        // }
-
-        // for (mut coeff, target) in s_poly_positive.into_iter().zip(poly_positive.iter_mut()) {
-        //     coeff.mul_assign(&r);
-        //     target.add_assign(&coeff);
-        // }
     }
 
     println!("Re-evaluation of {} S polynomials taken {:?}", y_values.len(), start.elapsed());
@@ -254,19 +203,6 @@ pub fn create_aggregate_on_srs_using_information<E: Engine, C: Circuit<E>, S: Sy
             &srs
         )
 
-        // let poly = kate_divison(
-        //     poly_negative.iter().rev().chain_ext(Some(value).iter()).chain_ext(poly_positive.iter()),
-        //     z,
-        // );
-
-        // let negative_poly = poly[0..n].iter().rev();
-        // let positive_poly = poly[n..].iter();
-        // multiexp(
-        //     srs.g_negative_x[1..(negative_poly.len() + 1)].iter().chain_ext(
-        //         srs.g_positive_x[0..positive_poly.len()].iter()
-        //     ),
-        //     negative_poly.chain_ext(positive_poly)
-        // ).into_affine()
     };
 
     Aggregate {

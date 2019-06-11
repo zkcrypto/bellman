@@ -498,46 +498,12 @@ fn test_succinct_sonic_mimc() {
         use crate::sonic::sonic::AdaptorCircuit;
         use crate::sonic::helped::prover::{create_advice_on_srs, create_proof_on_srs};
         use crate::sonic::helped::{get_circuit_parameters_for_succinct_sonic, MultiVerifier};
-        use crate::sonic::helped::helper::{create_aggregate_on_srs};
         use crate::sonic::sonic::Permutation3;
         use crate::sonic::unhelped::permutation_structure::*;
         use crate::sonic::unhelped::SuccinctMultiVerifier;
+        use crate::sonic::unhelped::{create_aggregate_on_srs};
 
         use crate::sonic::cs::{Circuit, ConstraintSystem, LinearCombination, Coeff};
-
-        struct MyCircuit;
-
-        impl<E: Engine> Circuit<E> for MyCircuit {
-            fn synthesize<CS: ConstraintSystem<E>>(&self, cs: &mut CS) -> Result<(), SynthesisError> {
-                let (a, b, c) = cs.multiply(|| {
-                    Ok((
-                        E::Fr::from_str("10").unwrap(),
-                        E::Fr::from_str("20").unwrap(),
-                        E::Fr::from_str("200").unwrap(),
-                    ))
-                })?;
-
-                cs.enforce_zero(LinearCombination::zero() + (Coeff::Full(E::Fr::from_str("2").unwrap()), a) - b);
-
-                let multiplier = cs.alloc_input(|| Ok(E::Fr::from_str("20").unwrap()))?;
-
-                cs.enforce_zero(LinearCombination::from(b) - multiplier);
-
-                let (a1, b1, _) = cs.multiply(|| {
-                    Ok((
-                        E::Fr::from_str("5").unwrap(),
-                        E::Fr::from_str("5").unwrap(),
-                        E::Fr::from_str("25").unwrap(),
-                    ))
-                })?;
-
-                cs.enforce_zero(LinearCombination::zero() + (Coeff::Full(E::Fr::from_str("2").unwrap()), b1) - a);
-                cs.enforce_zero(LinearCombination::zero() + (Coeff::Full(E::Fr::from_str("4").unwrap()), a1) - b);
-                cs.enforce_zero(LinearCombination::zero() + (Coeff::Full(E::Fr::from_str("40").unwrap()), b1) - c);
-
-                Ok(())
-            }
-        }
 
         // let perm_structure = create_permutation_structure::<Bls12, _>(&AdaptorCircuit(circuit.clone()));
         let perm_structure = create_permutation_structure::<Bls12, _>(&AdaptorCircuit(circuit.clone()));
@@ -560,84 +526,49 @@ fn test_succinct_sonic_mimc() {
         println!("creating aggregate for {} proofs", samples);
         let start = Instant::now();
         let proofs: Vec<_> = (0..samples).map(|_| (proof.clone(), advice.clone())).collect();
-        let aggregate = create_aggregate_on_srs::<Bls12, _, Permutation3>(&AdaptorCircuit(circuit.clone()), &proofs, &srs);
+        let aggregate = create_aggregate_on_srs::<Bls12, _, Permutation3>(&AdaptorCircuit(circuit.clone()), &proofs, &srs, &s1_srs);
         println!("done in {:?}", start.elapsed());
 
-        {
-            let rng = thread_rng();
-            let mut verifier = MultiVerifier::<Bls12, _, Permutation3, _>::new(AdaptorCircuit(circuit.clone()), &srs, rng).unwrap();
-            println!("verifying 1 proof without advice");
-            let start = Instant::now();
-            {
-                for _ in 0..1 {
-                    verifier.add_proof(&proof, &[], |_, _| None);
-                }
-                assert_eq!(verifier.check_all(), true); // TODO
-            }
-            println!("done in {:?}", start.elapsed());
-        }
 
-        {
-            let rng = thread_rng();
-            let mut verifier = MultiVerifier::<Bls12, _, Permutation3, _>::new(AdaptorCircuit(circuit.clone()), &srs, rng).unwrap();
-            println!("verifying {} proofs without advice", samples);
-            let start = Instant::now();
-            {
-                for _ in 0..samples {
-                    verifier.add_proof(&proof, &[], |_, _| None);
-                }
-                assert_eq!(verifier.check_all(), true); // TODO
-            }
-            println!("done in {:?}", start.elapsed());
-        }
+        let _ = crate::sonic::helped::helper::create_aggregate_on_srs::<Bls12, _, Permutation3>(&AdaptorCircuit(circuit.clone()), &proofs, &srs);
+        // {
+        //     let rng = thread_rng();
+        //     let mut verifier = MultiVerifier::<Bls12, _, Permutation3, _>::new(AdaptorCircuit(circuit.clone()), &srs, rng).unwrap();
+        //     println!("verifying 1 proof without advice");
+        //     let start = Instant::now();
+        //     {
+        //         for _ in 0..1 {
+        //             verifier.add_proof(&proof, &[], |_, _| None);
+        //         }
+        //         assert_eq!(verifier.check_all(), true); // TODO
+        //     }
+        //     println!("done in {:?}", start.elapsed());
+        // }
 
-        {
-            let rng = thread_rng();
-            let mut verifier = MultiVerifier::<Bls12, _, Permutation3, _>::new(AdaptorCircuit(circuit.clone()), &srs, rng).unwrap();
-            println!("verifying 100 proofs with advice non-succinct");
-            let start = Instant::now();
-            {
-                for (ref proof, ref advice) in &proofs {
-                    verifier.add_proof_with_advice(proof, &[], advice);
-                }
-                verifier.add_aggregate(&proofs, &aggregate);
-                assert_eq!(verifier.check_all(), true); // TODO
-            }
-            println!("done in {:?}", start.elapsed());
-        }
+        // {
+        //     let rng = thread_rng();
+        //     let mut verifier = MultiVerifier::<Bls12, _, Permutation3, _>::new(AdaptorCircuit(circuit.clone()), &srs, rng).unwrap();
+        //     println!("verifying {} proofs without advice", samples);
+        //     let start = Instant::now();
+        //     {
+        //         for _ in 0..samples {
+        //             verifier.add_proof(&proof, &[], |_, _| None);
+        //         }
+        //         assert_eq!(verifier.check_all(), true); // TODO
+        //     }
+        //     println!("done in {:?}", start.elapsed());
+        // }
 
         {
             use rand::{XorShiftRng, SeedableRng, Rand, Rng};
             let mut rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
             let start = Instant::now();
-            let (perm_commitments, s_prime_challenges, perm_proof, perm_arg_proof, z_prime, num_poly, s1_naive) = perm_structure.create_permutation_arguments(aggregate.w, aggregate.z, &mut rng, &srs);
-            let s2_proof = perm_structure.calculate_s2_proof(aggregate.z, aggregate.w, &srs);
 
-            println!("Permutation argument done in {:?}", start.elapsed());
+            // let aggregate = 
+            // let (perm_commitments, s_prime_challenges, perm_proof, perm_arg_proof, z_prime, num_poly, s1_naive) = perm_structure.create_permutation_arguments(aggregate.w, aggregate.z, &mut rng, &srs);
+            // let s2_proof = perm_structure.calculate_s2_proof(aggregate.z, aggregate.w, &srs);
 
-            // let n = perm_structure.n;
-            // let z = aggregate.z;
-            // let y = aggregate.w;
-            // let z_inv = z.inverse().unwrap();
-            // let z_inv_n_plus_1 = z_inv.pow([(n+1) as u64]);
-            // let z_n = z.pow([n as u64]);
-            // let y_n = y.pow([n as u64]);
-
-            // println!("S_1 naive = {}", s1_naive);
-
-            // let mut s_1 = s1_naive;
-            // s_1.mul_assign(&z_inv_n_plus_1);
-            // s_1.mul_assign(&y_n);
-
-            // println!("S_1 multiplied = {}", s_1);
-
-            // let mut s_2 = s2_proof.c_value;
-            // s_2.add_assign(&s2_proof.d_value);
-            // s_2.mul_assign(&z_n);
-
-            // s_1.sub_assign(&s_2);
-            // println!("S naive = {}", s_1);
-
+            // println!("Permutation argument done in {:?}", start.elapsed());
 
             let mut verifier = SuccinctMultiVerifier::<Bls12, _, Permutation3, _>::new(AdaptorCircuit(circuit.clone()), &srs, rng).unwrap();
             println!("verifying 100 proofs with succinct advice");
@@ -647,16 +578,10 @@ fn test_succinct_sonic_mimc() {
                     verifier.add_proof_with_advice(proof, &[], advice);
                 }
                 verifier.add_aggregate(
-                    &proofs, 
+                    &proofs,
                     &aggregate,
-                    &perm_arg_proof,
-                    &perm_proof,
-                    &s2_proof,
-                    num_poly,
                     &srs,
-                    z_prime,
-                    &perm_commitments,
-                    s_prime_challenges
+                    &s1_srs
                 );
                 assert_eq!(verifier.check_all(), true); // TODO
             }

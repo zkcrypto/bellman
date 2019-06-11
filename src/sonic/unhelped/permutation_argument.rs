@@ -15,10 +15,10 @@ use crate::sonic::transcript::{Transcript, TranscriptProtocol};
 
 #[derive(Clone)]
 pub struct SpecializedSRS<E: Engine> {
-    p_1: E::G1Affine,
-    p_2: Vec<E::G1Affine>,
-    p_3: E::G1Affine,
-    p_4: Vec<E::G1Affine>,
+    pub p_1: E::G1Affine,
+    pub p_2: Vec<E::G1Affine>,
+    pub p_3: E::G1Affine,
+    pub p_4: Vec<E::G1Affine>,
     n: usize
 }
 
@@ -26,8 +26,8 @@ pub struct SpecializedSRS<E: Engine> {
 pub struct PermutationArgument<E: Engine> {
     non_permuted_coefficients: Vec<Vec<E::Fr>>,
     non_permuted_at_y_coefficients: Vec<Vec<E::Fr>>,
-    permuted_coefficients: Vec<Vec<E::Fr>>,
     permuted_at_y_coefficients: Vec<Vec<E::Fr>>,
+    inverse_permuted_at_y_coefficients: Vec<Vec<E::Fr>>,
     permutations: Vec<Vec<usize>>,
     n: usize
 }
@@ -97,9 +97,10 @@ impl<E: Engine> PermutationArgument<E> {
 
         PermutationArgument {
             non_permuted_coefficients: coefficients,
-            non_permuted_at_y_coefficients: vec![vec![]],
-            permuted_coefficients: vec![vec![]],
-            permuted_at_y_coefficients: vec![vec![]],
+            non_permuted_at_y_coefficients: vec![],
+            // permuted_coefficients: vec![],
+            permuted_at_y_coefficients: vec![],
+            inverse_permuted_at_y_coefficients: vec![],
             permutations: permutations,
             n: n
         }
@@ -148,7 +149,9 @@ impl<E: Engine> PermutationArgument<E> {
 
                     fe
                 }).collect();
+
                 let p4 = multiexp(srs.g_positive_x_alpha[0..n].iter(), values.iter()).into_affine();
+
                 p_4.push(p4);
             }
         }
@@ -164,71 +167,59 @@ impl<E: Engine> PermutationArgument<E> {
 
     // commit to s and s' at y. Mutates the state
     pub fn commit(&mut self, y: E::Fr, srs: &SRS<E>) -> Vec<(E::G1Affine, E::G1Affine)> {
+        assert!(self.inverse_permuted_at_y_coefficients.len() == 0);
         let mut result = vec![];
 
         let n = self.non_permuted_coefficients[0].len();
 
         let mut non_permuted_at_y_coefficients = vec![];
-        let mut permuted_coefficients = vec![];
+        // let mut permuted_coefficients = vec![];
         let mut permuted_at_y_coefficients = vec![];
+        let mut inverse_permuted_at_y_coefficients = vec![];
 
         // naive algorithms
         // for every permutation poly 
         // -- go throught all variable_idx
-        // - take coeff from non-permuted coeffs[veriable_idx]
+        // - take coeff from non-permuted coeffs[permutation[variable_idx]]
         // - mul by Y^{permutation[variable_idx]}
         // - mul by X^{variable_idx + 1}
 
-        // let mut s_contrib = E::Fr::zero();
-        // for permutation_index in 0..m {
-        //     for (variable_index, constraint_power) in permutations[permutation_index].iter().enumerate() {
-        //         let y_power = y.pow([*constraint_power as u64]);
-        //         let x_power = z.pow([(variable_index+1) as u64]);
-        //         let coeff = non_permuted_coeffs[permutation_index][variable_index];
-
-        //         let mut result = coeff;
-        //         result.mul_assign(&x_power);
-        //         result.mul_assign(&y_power);
-        //         s_contrib.add_assign(&result);
-        //     }
-        // }
-
-
-        // this part distributes powers of Y^{constraint} and Y^{variable} for different arguments
         for (c, p) in self.non_permuted_coefficients.iter().zip(self.permutations.iter()) {
-            // this one will have terms coeff[0] * Y^1
             let mut non_permuted_at_y = c.clone();
-
-            // permute to later have coeff[i] at spot K for distribution of powers and for argument
-            let permuted = permute(&non_permuted_at_y[..], &p[..]);
-
-            // here will be distributed powers for coeff[i] * Y^K
-            let mut permuted_at_y = permuted.clone();
-
-            // distribute powers of Y to non-permuted coefficients as coeff[0]*Y^1, coeff[0]*Y^2, ...
             mut_distribute_consequitive_powers(&mut non_permuted_at_y[..], y, y);
-            // and commit to S'
             let s_prime = multiexp(srs.g_positive_x_alpha[0..n].iter(), non_permuted_at_y.iter()).into_affine();
 
-            // this construction has already moved coeff[i] to the corresponding constraint k, so term is coeff[i]*Y^{K} for place K
-            mut_distribute_consequitive_powers(&mut permuted_at_y[..], y, y);
+            // if we pretend that non_permuted_at_y[sigma[i]] = coeffs[sigma[i]] * Y^sigma[i],
+            // then inverse_permuted_at_y[i] = coeffs[sigma[i]] * Y^sigma[i]
+            let inverse_permuted_at_y = permute_inverse(&non_permuted_at_y[..], &p[..]);
 
-            // now there is a coefficient coeff[i]*Y^{K} for place K at place K, so we need to move it back to i
-            let permuted_at_y = permute_inverse(&permuted_at_y[..], &p[..]);
+            // let mut t = vec![E::Fr::zero(); inverse_permuted_at_y.len()];
+            // for i in 0..t.len() {
+            //     let coeff = c[i];
+            //     let sigma_i = p[i];
+            //     let y_sigma_i = y.pow([sigma_i as u64]);
+            //     t[i] = coeff;
+            //     t[i].mul_assign(&y_sigma_i);
+            // }
 
             // and commit to S
-            let s = multiexp(srs.g_positive_x_alpha[0..n].iter(), permuted_at_y.iter()).into_affine();
+            let s = multiexp(srs.g_positive_x_alpha[0..n].iter(), inverse_permuted_at_y.iter()).into_affine();
+
+            // let s = multiexp(srs.g_positive_x_alpha[0..n].iter(), t.iter()).into_affine();
 
             result.push((s, s_prime));
 
             non_permuted_at_y_coefficients.push(non_permuted_at_y);
-            permuted_coefficients.push(permuted);
-            permuted_at_y_coefficients.push(permuted_at_y);
+            // permuted_coefficients.push(permuted);
+            // permuted_at_y_coefficients.push(t);
+            // permuted_at_y_coefficients.push(permuted_at_y);
+            inverse_permuted_at_y_coefficients.push(inverse_permuted_at_y);
         }
 
         self.non_permuted_at_y_coefficients = non_permuted_at_y_coefficients;
-        self.permuted_coefficients = permuted_coefficients;
+        // self.permuted_coefficients = permuted_coefficients;
         self.permuted_at_y_coefficients = permuted_at_y_coefficients;
+        self.inverse_permuted_at_y_coefficients = inverse_permuted_at_y_coefficients;
 
         result
     }
@@ -302,6 +293,7 @@ impl<E: Engine> PermutationArgument<E> {
         _specialized_srs: &SpecializedSRS<E>,
         srs: &SRS<E>
     ) -> PermutationArgumentProof<E> {
+        panic!("");
         // Sj(P4j)β(P1j)γ is equal to the product of the coefficients of Sj′(P3j)β(P1j)γ
         // also open s = \sum self.permuted_coefficients(X, y) at z
 
@@ -313,6 +305,7 @@ impl<E: Engine> PermutationArgument<E> {
         let mut s_polynomial: Option<Vec<E::Fr>> = None;
 
         for c in self.permuted_at_y_coefficients.iter()
+        // for c in self.inverse_permuted_at_y_coefficients.iter()
         {
             if s_polynomial.is_some()  {
                 if let Some(poly) = s_polynomial.as_mut() {
@@ -325,6 +318,8 @@ impl<E: Engine> PermutationArgument<E> {
         let s_polynomial = s_polynomial.unwrap();
         // evaluate at z
         let s_zy = evaluate_at_consequitive_powers(& s_polynomial[..], z, z);
+
+        println!("S_zy = {}", s_zy);
 
         let mut s_zy_neg = s_zy;
         s_zy_neg.negate();
@@ -350,32 +345,76 @@ impl<E: Engine> PermutationArgument<E> {
 
         let mut grand_products = vec![];
 
-        for (i, ((non_permuted, permuted), permutation)) in self.non_permuted_coefficients.into_iter()
-                                            .zip(self.permuted_coefficients.into_iter())
-                                            .zip(self.permutations.into_iter()).enumerate()
+        for (((non_permuted, inv_permuted), permutation), permuted) in self.non_permuted_at_y_coefficients.into_iter()
+                                    .zip(self.inverse_permuted_at_y_coefficients.into_iter())
+                                    .zip(self.permutations.into_iter())
+                                    .zip(self.permuted_at_y_coefficients.into_iter())
 
         {
-            // \prod si+βσi+γ = \prod s'i + β*i + γ
-            let mut s_j_combination = non_permuted;
+            // in S combination at the place i there should be term coeff[sigma(i)] * Y^sigma(i), that we can take 
+            // from non-permuted by inverse_permuting it
+            // let mut s_combination = permute_inverse(&non_permuted[..], &permutation);
+            let mut s_combination = inv_permuted;
             {
-                let p_4_values: Vec<E::Fr> = permutation.into_iter().map(|el| {
-                        let mut repr = <<E as ScalarEngine>::Fr as PrimeField>::Repr::default();
-                        repr.as_mut()[0] = el as u64;
-                        let fe = E::Fr::from_repr(repr).unwrap();
+                let p_4_values: Vec<E::Fr> = permutation.clone().into_iter().map(|el| {
+                    let mut repr = <<E as ScalarEngine>::Fr as PrimeField>::Repr::default();
+                    repr.as_mut()[0] = el as u64;
+                    let fe = E::Fr::from_repr(repr).unwrap();
 
-                        fe
-                    }).collect();
-                mul_add_polynomials(&mut s_j_combination[..], & p_4_values[..], beta);
-                mul_add_polynomials(&mut s_j_combination[..], & p_1_values[..], gamma);
+                    fe
+                }).collect();
+                mul_add_polynomials(&mut s_combination[..], & p_4_values[..], beta);
+                mul_add_polynomials(&mut s_combination[..], & p_1_values[..], gamma);
             }
 
-            let mut s_prime_j_combination = permuted;
+            let mut s_combination_may_be = permuted;
             {
-                mul_add_polynomials(&mut s_prime_j_combination[..], & p_3_values[..], beta);
-                mul_add_polynomials(&mut s_prime_j_combination[..], & p_1_values[..], gamma);
+                let p_4_values: Vec<E::Fr> = permutation.clone().into_iter().map(|el| {
+                    let mut repr = <<E as ScalarEngine>::Fr as PrimeField>::Repr::default();
+                    repr.as_mut()[0] = el as u64;
+                    let fe = E::Fr::from_repr(repr).unwrap();
+
+                    fe
+                }).collect();
+                mul_add_polynomials(&mut s_combination_may_be[..], & p_4_values[..], beta);
+                mul_add_polynomials(&mut s_combination_may_be[..], & p_1_values[..], gamma);
             }
 
-            grand_products.push((s_j_combination, s_prime_j_combination));
+            // combination of coeff[i]*Y^i + beta * i + gamma
+            let mut s_prime_combination = non_permuted.clone();
+            {
+
+                mul_add_polynomials(&mut s_prime_combination[..], & p_3_values[..], beta);
+                mul_add_polynomials(&mut s_prime_combination[..], & p_1_values[..], gamma);
+            }
+
+            // Sanity check
+            let s_prime_product = s_prime_combination.iter().fold(E::Fr::one(), |mut sum, x| 
+            {
+                sum.mul_assign(&x);
+
+                sum
+            });
+
+            let s_product = s_combination.iter().fold(E::Fr::one(), |mut sum, x| 
+            {
+                sum.mul_assign(&x);
+
+                sum
+            });
+
+            let s_product_may_be = s_combination_may_be.iter().fold(E::Fr::one(), |mut sum, x| 
+            {
+                sum.mul_assign(&x);
+
+                sum
+            });
+
+            println!("S = {}, S may be = {}, S' = {}", s_product, s_product_may_be, s_prime_product);
+
+            assert_eq!(s_product, s_prime_product, "product of coefficients must be the same");
+
+            grand_products.push((s_combination, s_prime_combination));
         }
 
         let mut a_commitments = vec![]; 
@@ -400,7 +439,7 @@ impl<E: Engine> PermutationArgument<E> {
             let proof = wellformed_argument.make_argument(wellformed_challenges.clone(), &srs);
             let valid = WellformednessArgument::verify(n, &wellformed_challenges, &commitments, &proof, &srs);
 
-            assert!(valid, "wellformedness argument must be valid");
+            // assert!(valid, "wellformedness argument must be valid");
         }
 
         let mut grand_product_argument = GrandProductArgument::new(grand_products);
@@ -416,7 +455,7 @@ impl<E: Engine> PermutationArgument<E> {
             let randomness = (0..j).map(|_| E::Fr::rand(rng)).collect::<Vec<_>>();
 
             let valid = GrandProductArgument::verify_ab_commitment(n, 
-                &randomness, 
+                & randomness, 
                 & a_commitments, 
                 & b_commitments,
                 &grand_product_openings, 
@@ -605,42 +644,42 @@ impl<E: Engine> PermutationArgument<E> {
 
         let s_prime_commitments_opening = argument.open_commitments_to_s_prime(&challenges, y, z_prime, &srs);
 
-        let (proof, grand_product_signature) = {
+        let (proof, grand_product_signature, beta, gamma) = {
             // TODO: create better way to get few distinct challenges from the transcript
 
-            let (proof, grand_product_signature) = argument.make_argument_with_transcript(
+            let (proof, grand_product_signature, beta, gamma) = argument.make_argument_with_transcript(
                 &mut transcript,
                 y, 
                 z, 
                 &srs
             );
 
-            (proof, grand_product_signature)
+            (proof, grand_product_signature, beta, gamma)
         };
 
         // TODO: sanity check for now,
         // later eliminate a and b commitments
-        // for (j, (((a, b), s), s_prime)) in grand_product_signature.a_commitments.iter()
-        //                                 .zip(grand_product_signature.b_commitments.iter())
-        //                                 .zip(s_commitments.iter())
-        //                                 .zip(s_prime_commitments.iter())
-        //                                 .enumerate()
-        // {
-        //     // Sj(P4j)β(P1j)γ
-        //     let mut lhs = s.into_projective();
-        //     lhs.add_assign(&specialized_srs.p_4[j].mul(beta.into_repr()));
-        //     lhs.add_assign(&specialized_srs.p_1.mul(gamma.into_repr()));
+        for (j, (((a, b), s), s_prime)) in grand_product_signature.a_commitments.iter()
+                                        .zip(grand_product_signature.b_commitments.iter())
+                                        .zip(s_commitments.iter())
+                                        .zip(s_prime_commitments.iter())
+                                        .enumerate()
+        {
+            // Sj(P4j)β(P1j)γ
+            let mut lhs = s.into_projective();
+            lhs.add_assign(&specialized_srs.p_4[j].mul(beta.into_repr()));
+            lhs.add_assign(&specialized_srs.p_1.mul(gamma.into_repr()));
 
-        //     assert!(lhs.into_affine() == *a);
+            assert!(lhs.into_affine() == *a);
 
-        //     // Sj′(P3j)β(P1j)γ
+            // Sj′(P3j)β(P1j)γ
 
-        //     let mut rhs = s_prime.into_projective();
-        //     rhs.add_assign(&specialized_srs.p_3.mul(beta.into_repr()));
-        //     rhs.add_assign(&specialized_srs.p_1.mul(gamma.into_repr()));
+            let mut rhs = s_prime.into_projective();
+            rhs.add_assign(&specialized_srs.p_3.mul(beta.into_repr()));
+            rhs.add_assign(&specialized_srs.p_1.mul(gamma.into_repr()));
 
-        //     assert!(rhs.into_affine() == *b);
-        // }
+            assert!(rhs.into_affine() == *b);
+        }
 
         SignatureOfCorrectComputation {
             s_commitments,
@@ -658,9 +697,11 @@ impl<E: Engine> PermutationArgument<E> {
         y: E::Fr, 
         z: E::Fr, 
         srs: &SRS<E>
-    ) -> (PermutationArgumentProof<E>, GrandProductSignature<E>)  {
+    ) -> (PermutationArgumentProof<E>, GrandProductSignature<E>, E::Fr, E::Fr)  {
         let beta: E::Fr = transcript.get_challenge_scalar();
+        println!("Beta in prover = {}", beta);
         let gamma: E::Fr = transcript.get_challenge_scalar();
+        println!("Gamma in prover = {}", gamma);
 
         // Sj(P4j)β(P1j)γ is equal to the product of the coefficients of Sj′(P3j)β(P1j)γ
         // also open s = \sum self.permuted_coefficients(X, y) at z
@@ -670,7 +711,8 @@ impl<E: Engine> PermutationArgument<E> {
 
         let mut s_polynomial: Option<Vec<E::Fr>> = None;
 
-        for c in self.permuted_at_y_coefficients.iter()
+        // for c in self.permuted_at_y_coefficients.iter()
+        for c in self.inverse_permuted_at_y_coefficients.iter()
         {
             if s_polynomial.is_some()  {
                 if let Some(poly) = s_polynomial.as_mut() {
@@ -709,59 +751,54 @@ impl<E: Engine> PermutationArgument<E> {
         let mut grand_products = vec![];
 
         // TODO: Check the validity!
-
-        for ((non_permuted, permuted), permutation) in self.non_permuted_coefficients.into_iter()
-                                            .zip(self.permuted_coefficients.into_iter())
-                                            .zip(self.permutations.into_iter())
-
-        // for ((non_permuted, permuted), permutation) in self.non_permuted_at_y_coefficients.into_iter()
-        //                             .zip(self.permuted_at_y_coefficients.into_iter())
-        //                             .zip(self.permutations.into_iter())
+        for ((non_permuted, inv_permuted), permutation) in self.non_permuted_at_y_coefficients.into_iter()
+                                    .zip(self.inverse_permuted_at_y_coefficients.into_iter())
+                                    .zip(self.permutations.into_iter())
+                                    // .zip(self.permuted_at_y_coefficients.into_iter())
 
         {
-            // \prod si+βσi+γ = \prod s'i + β*i + γ
-
-            // s combination is coeff[sigma(i)]*Y^{sigma(i)} + beta*sigma(i) + gamma
-            let mut s_j_combination = non_permuted;
-            // let mut s_j_combination = permuted;
+            // in S combination at the place i there should be term coeff[sigma(i)] * Y^sigma(i), that we can take 
+            // from non-permuted by inverse_permuting it
+            // let mut s_combination = permute_inverse(&non_permuted[..], &permutation);
+            let mut s_combination = inv_permuted;
             {
                 let p_4_values: Vec<E::Fr> = permutation.into_iter().map(|el| {
-                        let mut repr = <<E as ScalarEngine>::Fr as PrimeField>::Repr::default();
-                        repr.as_mut()[0] = el as u64;
-                        let fe = E::Fr::from_repr(repr).unwrap();
+                    let mut repr = <<E as ScalarEngine>::Fr as PrimeField>::Repr::default();
+                    repr.as_mut()[0] = el as u64;
+                    let fe = E::Fr::from_repr(repr).unwrap();
 
-                        fe
-                    }).collect();
-                mul_add_polynomials(&mut s_j_combination[..], & p_4_values[..], beta);
-                mul_add_polynomials(&mut s_j_combination[..], & p_1_values[..], gamma);
+                    fe
+                }).collect();
+                mul_add_polynomials(&mut s_combination[..], & p_4_values[..], beta);
+                mul_add_polynomials(&mut s_combination[..], & p_1_values[..], gamma);
             }
 
-            let mut s_prime_j_combination = permuted;
-            // let mut s_prime_j_combination = non_permuted;
-            // s' combination is coeff[i]*Y^{i} + beta*i + gamma
-
+            // combination of coeff[i]*Y^i + beta * i + gamma
+            let mut s_prime_combination = non_permuted.clone();
             {
-                mul_add_polynomials(&mut s_prime_j_combination[..], & p_3_values[..], beta);
-                mul_add_polynomials(&mut s_prime_j_combination[..], & p_1_values[..], gamma);
+
+                mul_add_polynomials(&mut s_prime_combination[..], & p_3_values[..], beta);
+                mul_add_polynomials(&mut s_prime_combination[..], & p_1_values[..], gamma);
             }
 
             // Sanity check
-            let product = s_j_combination.iter().fold(E::Fr::one(), |mut sum, x| 
-            {
-                sum.mul_assign(&x);
-
-                sum
-            });
-            let product_prime = s_prime_j_combination.iter().fold(E::Fr::one(), |mut sum, x| 
+            let s_prime_product = s_prime_combination.iter().fold(E::Fr::one(), |mut sum, x| 
             {
                 sum.mul_assign(&x);
 
                 sum
             });
 
-            assert_eq!(product, product_prime);
+            let s_product = s_combination.iter().fold(E::Fr::one(), |mut sum, x| 
+            {
+                sum.mul_assign(&x);
 
-            grand_products.push((s_j_combination, s_prime_j_combination));
+                sum
+            });
+
+            assert_eq!(s_product, s_prime_product, "product of coefficients must be the same");
+
+            grand_products.push((s_combination, s_prime_combination));
         }
 
         let grand_product_signature = GrandProductArgument::create_signature(
@@ -778,7 +815,7 @@ impl<E: Engine> PermutationArgument<E> {
             s_zy: s_zy
         };
 
-        (proof, grand_product_signature)
+        (proof, grand_product_signature, beta, gamma)
     }
 
 }
@@ -791,7 +828,8 @@ fn test_permutation_argument() {
 
     let srs_x = Fr::from_str("23923").unwrap();
     let srs_alpha = Fr::from_str("23728792").unwrap();
-    let srs = SRS::<Bls12>::dummy(830564, srs_x, srs_alpha);
+    // let srs = SRS::<Bls12>::dummy(830564, srs_x, srs_alpha);
+    let srs = SRS::<Bls12>::new(1024, srs_x, srs_alpha);
 
     let n: usize = 1 << 4;
     let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);

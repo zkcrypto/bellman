@@ -9,10 +9,9 @@ mod grand_product_argument;
 mod permutation_argument;
 mod verifier;
 pub mod permutation_structure;
-// mod helper;
-// mod permutation;
-// pub mod padding;
+mod aggregate;
 
 pub use self::wellformed_argument::{WellformednessArgument, WellformednessProof};
 pub use self::permutation_argument::{PermutationArgument, PermutationProof, PermutationArgumentProof};
 pub use self::verifier::SuccinctMultiVerifier;
+pub use self::aggregate::*;

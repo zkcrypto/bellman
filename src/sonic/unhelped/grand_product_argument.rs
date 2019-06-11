@@ -49,6 +49,7 @@ impl<E: Engine> GrandProductArgument<E> {
         z: E::Fr,
         srs: &SRS<E>,
     ) -> GrandProductSignature<E> {
+        println!("Making grand product argument for {} grand products", grand_products.len());
         let mut a_commitments = vec![]; 
         let mut b_commitments = vec![]; 
 
@@ -68,7 +69,7 @@ impl<E: Engine> GrandProductArgument<E> {
 
         let mut all_polys = vec![];
         let mut wellformed_challenges = vec![];
-        for c in 0..(grand_products.len()*2) {
+        for _ in 0..(grand_products.len()*2) {
             let c = transcript.get_challenge_scalar();
             wellformed_challenges.push(c);
         }
@@ -196,21 +197,21 @@ impl<E: Engine> GrandProductArgument<E> {
         }
     }
 
-    // Make a commitment to a polynomial in a form A*B^{x+1} = [a_1...a_{n}, 0, b_1...b_{n}]
-    pub fn commit_for_grand_product(a: &[E::Fr], b: &[E::Fr], srs: &SRS<E>) -> E::G1Affine {
-        assert_eq!(a.len(), b.len());
+    // // Make a commitment to a polynomial in a form A*B^{x+1} = [a_1...a_{n}, 0, b_1...b_{n}]
+    // pub fn commit_for_grand_product(a: &[E::Fr], b: &[E::Fr], srs: &SRS<E>) -> E::G1Affine {
+    //     assert_eq!(a.len(), b.len());
 
-        let n = a.len();
+    //     let n = a.len();
 
-        multiexp(
-                srs.g_positive_x_alpha[0..(2*n+1)].iter(),
-                a.iter()
-                    .chain_ext(Some(E::Fr::zero()).iter())
-                    .chain_ext(b.iter())
-        ).into_affine()
-    }
+    //     multiexp(
+    //             srs.g_positive_x_alpha[0..(2*n+1)].iter(),
+    //             a.iter()
+    //                 .chain_ext(Some(E::Fr::zero()).iter())
+    //                 .chain_ext(b.iter())
+    //     ).into_affine()
+    // }
 
-    // Make a commitment to a polynomial in a form A*B^{x+1} = [a_1...a_{n}, 0, b_1...b_{n}]
+
     pub fn commit_for_individual_products(a: &[E::Fr], b: &[E::Fr], srs: &SRS<E>) -> (E::G1Affine, E::G1Affine) {
         assert_eq!(a.len(), b.len());
 
@@ -536,11 +537,10 @@ impl<E: Engine> GrandProductArgument<E> {
         y: E::Fr,
         z: E::Fr,
         srs: &SRS<E>
-        ) -> bool {
+    ) -> bool {
         assert_eq!(randomness.len(), a_commitments.len());
         assert_eq!(openings.len(), a_commitments.len());
         assert_eq!(b_commitments.len(), a_commitments.len());
-        let d = srs.d;
 
         // e(Dj,hαx)e(D−yz,hα) = e(Aj,h)e(Bj,hxn+1)e(g−aj ,hα)
 
@@ -624,8 +624,6 @@ impl<E: Engine> GrandProductArgument<E> {
         assert_eq!(randomness.len(), 3);
         assert_eq!(a_zy.len(), challenges.len());
         assert_eq!(commitments.len(), challenges.len());
-
-        let d = srs.d;
 
         let g = srs.g_positive_x[0];
 
