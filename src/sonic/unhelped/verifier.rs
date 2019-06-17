@@ -165,16 +165,14 @@ impl<E: Engine, C: Circuit<E>, S: SynthesisDriver, R: Rng> SuccinctMultiVerifier
                 let mut challenges = vec![];
                 for (s, s_prime) in aggregate.signature.s_commitments.iter()
                                     .zip(aggregate.signature.s_prime_commitments.iter()) {
-                    {
-                        let mut transcript = Transcript::new(&[]);
-                        transcript.commit_point(s);
-                        transcript.commit_point(s_prime);
-                        let challenge = transcript.get_challenge_scalar();
-                        challenges.push(challenge);
-                    }
                     transcript.commit_point(s);
                     transcript.commit_point(s_prime);
                 }     
+
+                for _ in 0..aggregate.signature.s_commitments.len() {
+                    let challenge = transcript.get_challenge_scalar();
+                        challenges.push(challenge);
+                }
 
                 let z_prime: E::Fr = transcript.get_challenge_scalar();
 
@@ -242,19 +240,29 @@ impl<E: Engine, C: Circuit<E>, S: SynthesisDriver, R: Rng> SuccinctMultiVerifier
                 // for each of the grand product arguments create a corresponding commitment
                 // from already known elements
 
-                let beta: E::Fr = transcript.get_challenge_scalar();
-                let gamma: E::Fr = transcript.get_challenge_scalar();
+                let mut betas = vec![];
+                let mut gammas = vec![];
 
                 let mut a_commitments = vec![];
                 let mut b_commitments = vec![];
 
+                for _ in 0..aggregate.signature.s_commitments.len() {
+                    let beta: E::Fr = transcript.get_challenge_scalar();
+                    let gamma: E::Fr = transcript.get_challenge_scalar();
+
+                    betas.push(beta);
+                    gammas.push(gamma);
+                }
+                
                 let mut wellformedness_argument_commitments = vec![];
 
                 use crate::pairing::CurveAffine;
                 use crate::pairing::ff::PrimeField;
 
-                for (j, (s, s_prime)) in aggregate.signature.s_commitments.iter()
+                for (j, (((s, s_prime), beta), gamma)) in aggregate.signature.s_commitments.iter()
                                                 .zip(aggregate.signature.s_prime_commitments.iter())
+                                                .zip(betas.iter())
+                                                .zip(gammas.iter())
                                                 .enumerate()
 
                 {
@@ -271,12 +279,6 @@ impl<E: Engine, C: Circuit<E>, S: SynthesisDriver, R: Rng> SuccinctMultiVerifier
                     b.add_assign(&self.s1_special_reference.p_3.mul(beta.into_repr()));
                     b.add_assign(&self.s1_special_reference.p_1.mul(gamma.into_repr()));
                     let b = b.into_affine();
-
-                    // let a_original = aggregate.signature.grand_product_signature.a_commitments[j];
-                    // let b_original = aggregate.signature.grand_product_signature.b_commitments[j];
-
-                    // assert!(a == a_original);
-                    // assert!(b == b_original);
 
                     a_commitments.push(a);
                     b_commitments.push(b);

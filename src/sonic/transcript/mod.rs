@@ -39,6 +39,7 @@ use std::marker::PhantomData;
 pub struct RollingHashTranscript<H: Hasher> {
     buffer: Vec<u8>,
     last_finalized_value: Vec<u8>,
+    repeated_request_nonce: u32,
     _marker: PhantomData<H>
 }
 
@@ -50,6 +51,7 @@ impl<H: Hasher> RollingHashTranscript<H> {
         Self {
             buffer: buffer,
             last_finalized_value: vec![],
+            repeated_request_nonce: 0u32,
             _marker: PhantomData
         }
     }
@@ -86,6 +88,7 @@ impl<H:Hasher> TranscriptProtocol for RollingHashTranscript<H> {
     fn commit_point<G: CurveAffine>(&mut self, point: &G) {
         self.commit_bytes(b"point", point.into_uncompressed().as_ref());
         // self.commit_bytes(b"point", point.into_compressed().as_ref());
+        self.repeated_request_nonce = 0u32;
     }
 
     fn commit_scalar<F: PrimeField>(&mut self, scalar: &F) {
@@ -94,11 +97,12 @@ impl<H:Hasher> TranscriptProtocol for RollingHashTranscript<H> {
         // scalar.into_repr().write_le(&mut v).unwrap();
 
         self.commit_bytes(b"scalar", &v);
+        self.repeated_request_nonce = 0u32;
     }
 
     fn get_challenge_scalar<F: PrimeField>(&mut self) -> F {
         use byteorder::ByteOrder;
-        let mut nonce = 0u32;
+        let mut nonce = self.repeated_request_nonce;
         loop {
             let mut nonce_bytes = vec![0u8; 4];
             byteorder::BigEndian::write_u32(&mut nonce_bytes, nonce);
@@ -108,6 +112,7 @@ impl<H:Hasher> TranscriptProtocol for RollingHashTranscript<H> {
 
             if let Ok(result) = F::from_repr(repr) {
                 // println!("Got a challenge {} for nonce = {}", result, nonce);
+                self.repeated_request_nonce = nonce + 1u32;
                 return result;
             }
             if nonce == (0xffffffff as u32) {

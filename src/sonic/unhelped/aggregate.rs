@@ -74,11 +74,13 @@ pub fn create_aggregate_on_srs_using_information<E: Engine, C: Circuit<E>, S: Sy
     circuit: &C,
     inputs: &[(Proof<E>, SxyAdvice<E>)],
     srs: &SRS<E>,
-    specialized_srs: &SpecializedSRS<E>,
+    _specialized_srs: &SpecializedSRS<E>,
     n: usize,
     q: usize,
 ) -> SuccinctAggregate<E>
 {
+    use std::time::Instant;
+    let start = Instant::now();
     // take few proofs that are to be evaluated at some y_i and make an aggregate from them
     let mut transcript = Transcript::new(&[]);
     let mut y_values: Vec<E::Fr> = Vec::with_capacity(inputs.len());
@@ -148,9 +150,10 @@ pub fn create_aggregate_on_srs_using_information<E: Engine, C: Circuit<E>, S: Sy
         permutations, 
         w, 
         z, 
-        &srs, 
-        &specialized_srs
+        &srs,
     );
+
+    println!("Succinct signature for s(z, Y) taken {:?}", start.elapsed());
 
     // Let's open up C to every y.
     fn compute_value<E: Engine>(y: &E::Fr, poly_positive: &[E::Fr], poly_negative: &[E::Fr]) -> E::Fr {
@@ -165,7 +168,6 @@ pub fn create_aggregate_on_srs_using_information<E: Engine, C: Circuit<E>, S: Sy
         value
     }
 
-    use std::time::Instant;
     let start = Instant::now();
 
     // we still need to re-open previous commitments at the same new z
@@ -190,7 +192,7 @@ pub fn create_aggregate_on_srs_using_information<E: Engine, C: Circuit<E>, S: Sy
         c_openings.push((opening, value));
     }
 
-    println!("Evaluation of s(z, Y) taken {:?}", start.elapsed());
+    println!("Re-Evaluation and re-opening of s(z, Y) taken {:?}", start.elapsed());
 
     // Okay, great. Now we need to open up each S at the same point z to the same value.
     // Since we're opening up all the S's at the same point, we create a bunch of random

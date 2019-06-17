@@ -412,7 +412,7 @@ impl<E: Engine> PermutationArgument<E> {
             let proof = wellformed_argument.make_argument(wellformed_challenges.clone(), &srs);
             let valid = WellformednessArgument::verify(n, &wellformed_challenges, &commitments, &proof, &srs);
 
-            // assert!(valid, "wellformedness argument must be valid");
+            assert!(valid, "wellformedness argument must be valid");
         }
 
         let mut grand_product_argument = GrandProductArgument::new(grand_products);
@@ -590,7 +590,6 @@ impl<E: Engine> PermutationArgument<E> {
         y: E::Fr, 
         z: E::Fr,
         srs: &SRS<E>,
-        specialized_srs: &SpecializedSRS<E>,
     ) -> SignatureOfCorrectComputation<E> {
         let mut argument = PermutationArgument::new(coefficients, permutations);
         let commitments = argument.commit(y, &srs);
@@ -599,60 +598,34 @@ impl<E: Engine> PermutationArgument<E> {
         let mut s_commitments = vec![];
         let mut s_prime_commitments = vec![];
         let mut challenges = vec![];
+        let num_commitments = commitments.len();
         for (s, s_prime) in commitments.into_iter() {
-            {
-                let mut transcript = Transcript::new(&[]);
-                transcript.commit_point(&s);
-                transcript.commit_point(&s_prime);
-                let challenge = transcript.get_challenge_scalar();
-                challenges.push(challenge);
-            }
             transcript.commit_point(&s);
             transcript.commit_point(&s_prime);
             s_commitments.push(s);
             s_prime_commitments.push(s_prime);
         }
 
+        // get challenges for a full batch
+        for _ in 0..num_commitments {
+            let c: E::Fr = transcript.get_challenge_scalar();
+            challenges.push(c);
+        }
+
         let z_prime = transcript.get_challenge_scalar();
 
         let s_prime_commitments_opening = argument.open_commitments_to_s_prime(&challenges, y, z_prime, &srs);
 
-        let (proof, grand_product_signature, beta, gamma) = {
-            // TODO: create better way to get few distinct challenges from the transcript
-
-            let (proof, grand_product_signature, beta, gamma) = argument.make_argument_with_transcript(
+        let (proof, grand_product_signature) = {
+            let (proof, grand_product_signature) = argument.make_argument_with_transcript(
                 &mut transcript,
                 y, 
                 z, 
                 &srs
             );
 
-            (proof, grand_product_signature, beta, gamma)
+            (proof, grand_product_signature)
         };
-
-        // TODO: sanity check for now,
-        // later eliminate a and b commitments
-        for (j, (((a, b), s), s_prime)) in grand_product_signature.a_commitments.iter()
-                                        .zip(grand_product_signature.b_commitments.iter())
-                                        .zip(s_commitments.iter())
-                                        .zip(s_prime_commitments.iter())
-                                        .enumerate()
-        {
-            // Sj(P4j)β(P1j)γ
-            let mut lhs = s.into_projective();
-            lhs.add_assign(&specialized_srs.p_4[j].mul(beta.into_repr()));
-            lhs.add_assign(&specialized_srs.p_1.mul(gamma.into_repr()));
-
-            assert!(lhs.into_affine() == *a);
-
-            // Sj′(P3j)β(P1j)γ
-
-            let mut rhs = s_prime.into_projective();
-            rhs.add_assign(&specialized_srs.p_3.mul(beta.into_repr()));
-            rhs.add_assign(&specialized_srs.p_1.mul(gamma.into_repr()));
-
-            assert!(rhs.into_affine() == *b);
-        }
 
         SignatureOfCorrectComputation {
             s_commitments,
@@ -670,9 +643,18 @@ impl<E: Engine> PermutationArgument<E> {
         y: E::Fr, 
         z: E::Fr, 
         srs: &SRS<E>
-    ) -> (PermutationArgumentProof<E>, GrandProductSignature<E>, E::Fr, E::Fr)  {
-        let beta: E::Fr = transcript.get_challenge_scalar();
-        let gamma: E::Fr = transcript.get_challenge_scalar();
+    ) -> (PermutationArgumentProof<E>, GrandProductSignature<E>)  {
+        // create random beta and gamma for every single permutation argument
+        let mut betas = vec![];
+        let mut gammas = vec![];
+
+        for _ in 0..self.permutations.len() {
+            let beta: E::Fr = transcript.get_challenge_scalar();
+            let gamma: E::Fr = transcript.get_challenge_scalar();
+
+            betas.push(beta);
+            gammas.push(gamma);
+        }
 
         // Sj(P4j)β(P1j)γ is equal to the product of the coefficients of Sj′(P3j)β(P1j)γ
         // also open s = \sum self.permuted_coefficients(X, y) at z
@@ -682,7 +664,6 @@ impl<E: Engine> PermutationArgument<E> {
 
         let mut s_polynomial: Option<Vec<E::Fr>> = None;
 
-        // for c in self.permuted_at_y_coefficients.iter()
         for c in self.inverse_permuted_at_y_coefficients.iter()
         {
             if s_polynomial.is_some()  {
@@ -721,11 +702,12 @@ impl<E: Engine> PermutationArgument<E> {
 
         let mut grand_products = vec![];
 
-        // TODO: Check the validity!
-        for ((non_permuted, inv_permuted), permutation) in self.non_permuted_at_y_coefficients.into_iter()
+        for ((((non_permuted, inv_permuted), permutation), beta), gamma) in 
+                                    self.non_permuted_at_y_coefficients.into_iter()
                                     .zip(self.inverse_permuted_at_y_coefficients.into_iter())
                                     .zip(self.permutations.into_iter())
-                                    // .zip(self.permuted_at_y_coefficients.into_iter())
+                                    .zip(betas.into_iter())
+                                    .zip(gammas.into_iter())
 
         {
             // in S combination at the place i there should be term coeff[sigma(i)] * Y^sigma(i), that we can take 
@@ -787,7 +769,7 @@ impl<E: Engine> PermutationArgument<E> {
             s_zy: s_zy
         };
 
-        (proof, grand_product_signature, beta, gamma)
+        (proof, grand_product_signature)
     }
 
 }

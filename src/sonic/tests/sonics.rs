@@ -33,6 +33,8 @@ use crate::{
 
 const MIMC_ROUNDS: usize = 322;
 
+// const MIMC_ROUNDS: usize = 1000000;
+
 fn mimc<E: Engine>(
     mut xl: E::Fr,
     mut xr: E::Fr,

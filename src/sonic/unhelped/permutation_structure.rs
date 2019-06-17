@@ -475,11 +475,11 @@ impl<E: Engine> PermutationStructure<E> {
 
         println!("Naive S contribution scaled = {}", s_contrib);
 
-        let specialized_srs = PermutationArgument::make_specialized_srs(
-            &non_permuted_coeffs, 
-            &permutations, 
-            &srs
-        );
+        // let specialized_srs = PermutationArgument::make_specialized_srs(
+        //     &non_permuted_coeffs, 
+        //     &permutations, 
+        //     &srs
+        // );
 
         let signature = PermutationArgument::make_signature(
             non_permuted_coeffs,
@@ -487,7 +487,6 @@ impl<E: Engine> PermutationStructure<E> {
             y,
             z,
             &srs,
-            &specialized_srs
         );
 
         signature

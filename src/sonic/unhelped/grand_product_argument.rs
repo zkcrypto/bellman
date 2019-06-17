@@ -31,12 +31,9 @@ pub struct GrandProductProof<E: Engine> {
 
 #[derive(Clone)]
 pub struct GrandProductSignature<E: Engine> {
-    pub a_commitments: Vec<E::G1Affine>,
-    pub b_commitments: Vec<E::G1Affine>,
     pub c_commitments: Vec<(E::G1Affine, E::Fr)>,
     pub t_commitment: E::G1Affine,
     pub grand_product_openings: Vec<(E::Fr, E::G1Affine)>,
-    // pub a_zy: Vec<E::Fr>,
     pub proof: GrandProductProof<E>,
     pub wellformedness_signature: WellformednessSignature<E>,
 }
@@ -49,17 +46,7 @@ impl<E: Engine> GrandProductArgument<E> {
         z: E::Fr,
         srs: &SRS<E>,
     ) -> GrandProductSignature<E> {
-        let mut a_commitments = vec![]; 
-        let mut b_commitments = vec![]; 
-
         let mut grand_product_challenges = vec![];
-
-        // TODO: Remove
-        for (a, b) in grand_products.iter() {
-            let (c_a, c_b) = GrandProductArgument::commit_for_individual_products(& a[..], & b[..], &srs);
-            a_commitments.push(c_a);
-            b_commitments.push(c_b);
-        }
 
         for _ in 0..grand_products.len() {
             let c = transcript.get_challenge_scalar();
@@ -85,19 +72,6 @@ impl<E: Engine> GrandProductArgument<E> {
             &srs
         );
 
-        // sanity check
-        for (j, (a, b)) in a_commitments.iter()
-                            .zip(b_commitments.iter())
-                            .enumerate()
-        {
-            let a_corr = wellformedness_signature.commitments[2*j];
-            let b_corr = wellformedness_signature.commitments[2*j + 1];
-            
-            assert!(a_corr == *a);
-            assert!(b_corr == *b);
-        }
-
-
         let mut grand_product_argument = GrandProductArgument::new(grand_products);
         let c_commitments = grand_product_argument.commit_to_individual_c_polynomials(&srs);
         let t_commitment = grand_product_argument.commit_to_t_polynomial(&grand_product_challenges, y, &srs);
@@ -106,8 +80,6 @@ impl<E: Engine> GrandProductArgument<E> {
         let proof = grand_product_argument.make_argument(&a_zy, &grand_product_challenges, y, z, &srs);
 
         GrandProductSignature {
-            a_commitments,
-            b_commitments,
             c_commitments,
             t_commitment,
             grand_product_openings,
