@@ -38,7 +38,9 @@ use bellman_ce::groth16::{
     verify_proof,
 };
 
-const MIMC_ROUNDS: usize = 322;
+// const MIMC_ROUNDS: usize = 322;
+
+const MIMC_ROUNDS: usize = 1000000;
 
 /// This is an implementation of MiMC, specifically a
 /// variant named `LongsightF322p3` for BLS12-381.
@@ -171,7 +173,7 @@ impl<'a, E: Engine> Circuit<E> for MiMCDemo<'a, E> {
 }
 
 #[test]
-fn test_mimc() {
+fn test_mimc_bls12() {
     // This may not be cryptographically safe, use
     // `OsRng` (for example) in production software.
     let rng = &mut thread_rng();
@@ -198,7 +200,7 @@ fn test_mimc() {
     println!("Creating proofs...");
 
     // Let's benchmark stuff!
-    const SAMPLES: u32 = 50;
+    const SAMPLES: u32 = 1;
     let mut total_proving = Duration::new(0, 0);
     let mut total_verifying = Duration::new(0, 0);
 

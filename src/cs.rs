@@ -20,7 +20,7 @@ pub trait Circuit<E: Engine> {
 }
 
 /// Represents a variable in our constraint system.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 pub struct Variable(pub(crate) Index);
 
 impl Variable {
@@ -39,7 +39,7 @@ impl Variable {
 
 /// Represents the index of either an input variable or
 /// auxillary variable.
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(Copy, Clone, PartialEq, Debug, Hash, Eq)]
 pub enum Index {
     Input(usize),
     Aux(usize)

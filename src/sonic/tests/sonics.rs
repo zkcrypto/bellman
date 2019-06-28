@@ -31,9 +31,9 @@ use crate::{
     SynthesisError
 };
 
-const MIMC_ROUNDS: usize = 322;
+// const MIMC_ROUNDS: usize = 322;
 
-// const MIMC_ROUNDS: usize = 1000000;
+const MIMC_ROUNDS: usize = 1000000;
 
 fn mimc<E: Engine>(
     mut xl: E::Fr,
@@ -471,7 +471,8 @@ fn test_succinct_sonic_mimc() {
     let srs_alpha = Fr::from_str("23728792").unwrap();
     println!("making srs");
     let start = Instant::now();
-    let srs = SRS::<Bls12>::dummy(830564, srs_x, srs_alpha);
+    // let srs = SRS::<Bls12>::dummy(830564, srs_x, srs_alpha);
+    let srs = SRS::<Bls12>::dummy(40000000, srs_x, srs_alpha);
     println!("done in {:?}", start.elapsed());
 
     {

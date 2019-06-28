@@ -132,6 +132,8 @@ pub fn create_aggregate_on_srs_using_information<E: Engine, C: Circuit<E>, S: Sy
         )
     };
 
+    println!("Commit and opening of for s(z, w) taken {:?}", start.elapsed());
+
     // now we need signature of correct computation. For this purpose 
     // verifier already knows specialized SRS, so we can just commit to 
     // s1 and s2 parts of such signature to get `w` and later open at this point!
@@ -141,10 +143,20 @@ pub fn create_aggregate_on_srs_using_information<E: Engine, C: Circuit<E>, S: Sy
     // TODO: Precompute!
     // this will internally synthesize a circuit and structure of permutations
 
+    let start = Instant::now();
+
     let s2_eval = S2Eval::new(n);
     let s2_proof = s2_eval.evaluate(z, w, &srs);
+
+    println!("S2 proof taken {:?}", start.elapsed());
+    let start = Instant::now();
+
     let permutation_structure = create_permutation_structure(circuit);
     let (non_permuted_coeffs, permutations) = permutation_structure.create_permutation_vectors();
+
+    println!("Permutation vectors synthesis taken {:?}", start.elapsed());
+    let start = Instant::now();
+
     let signature = PermutationArgument::make_signature(
         non_permuted_coeffs, 
         permutations, 
