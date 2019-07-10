@@ -6,7 +6,7 @@ use pairing::{Engine, PairingCurveAffine};
 
 use std::cmp::Ordering;
 use std::fmt;
-use rand::{Rand, Rng};
+use rand_core::RngCore;
 use std::num::Wrapping;
 
 const MODULUS_R: Wrapping<u32> = Wrapping(64513);
@@ -20,13 +20,11 @@ impl fmt::Display for Fr {
     }
 }
 
-impl Rand for Fr {
-    fn rand<R: Rng>(rng: &mut R) -> Self {
-        Fr(Wrapping(rng.gen()) % MODULUS_R)
-    }
-}
-
 impl Field for Fr {
+    fn random<R: RngCore>(rng: &mut R) -> Self {
+        Fr(Wrapping(rng.next_u32()) % MODULUS_R)
+    }
+
     fn zero() -> Self {
         Fr(Wrapping(0))
     }
@@ -142,12 +140,6 @@ impl Ord for FrRepr {
 impl PartialOrd for FrRepr {
     fn partial_cmp(&self, other: &FrRepr) -> Option<Ordering> {
         Some(self.cmp(other))
-    }
-}
-
-impl Rand for FrRepr {
-    fn rand<R: Rng>(rng: &mut R) -> Self {
-        FrRepr([rng.gen()])
     }
 }
 
@@ -299,6 +291,10 @@ impl CurveProjective for Fr {
     type Base = Fr;
     type Scalar = Fr;
     type Engine = DummyEngine;
+
+    fn random<R: RngCore>(rng: &mut R) -> Self {
+        <Fr as Field>::random(rng)
+    }
 
     fn zero() -> Self {
         <Fr as Field>::zero()

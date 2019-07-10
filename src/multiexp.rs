@@ -274,14 +274,14 @@ fn test_with_bls12() {
         acc
     }
 
-    use rand::{self, Rand};
+    use rand;
     use pairing::{bls12_381::Bls12, Engine};
 
     const SAMPLES: usize = 1 << 14;
 
     let rng = &mut rand::thread_rng();
-    let v = Arc::new((0..SAMPLES).map(|_| <Bls12 as ScalarEngine>::Fr::rand(rng).into_repr()).collect::<Vec<_>>());
-    let g = Arc::new((0..SAMPLES).map(|_| <Bls12 as Engine>::G1::rand(rng).into_affine()).collect::<Vec<_>>());
+    let v = Arc::new((0..SAMPLES).map(|_| <Bls12 as ScalarEngine>::Fr::random(rng).into_repr()).collect::<Vec<_>>());
+    let g = Arc::new((0..SAMPLES).map(|_| <Bls12 as Engine>::G1::random(rng).into_affine()).collect::<Vec<_>>());
 
     let naive = naive_multiexp(g.clone(), v.clone());
 

@@ -375,16 +375,16 @@ fn parallel_fft<E: ScalarEngine, T: Group<E>>(
 #[test]
 fn polynomial_arith() {
     use pairing::bls12_381::Bls12;
-    use rand::{self, Rand};
+    use rand_core::RngCore;
 
-    fn test_mul<E: ScalarEngine, R: rand::Rng>(rng: &mut R)
+    fn test_mul<E: ScalarEngine, R: RngCore>(rng: &mut R)
     {
         let worker = Worker::new();
 
         for coeffs_a in 0..70 {
             for coeffs_b in 0..70 {
-                let mut a: Vec<_> = (0..coeffs_a).map(|_| Scalar::<E>(E::Fr::rand(rng))).collect();
-                let mut b: Vec<_> = (0..coeffs_b).map(|_| Scalar::<E>(E::Fr::rand(rng))).collect();
+                let mut a: Vec<_> = (0..coeffs_a).map(|_| Scalar::<E>(E::Fr::random(rng))).collect();
+                let mut b: Vec<_> = (0..coeffs_b).map(|_| Scalar::<E>(E::Fr::random(rng))).collect();
 
                 // naive evaluation
                 let mut naive = vec![Scalar(E::Fr::zero()); coeffs_a + coeffs_b];
@@ -423,9 +423,9 @@ fn polynomial_arith() {
 #[test]
 fn fft_composition() {
     use pairing::bls12_381::Bls12;
-    use rand;
+    use rand_core::RngCore;
 
-    fn test_comp<E: ScalarEngine, R: rand::Rng>(rng: &mut R)
+    fn test_comp<E: ScalarEngine, R: RngCore>(rng: &mut R)
     {
         let worker = Worker::new();
 
@@ -434,7 +434,7 @@ fn fft_composition() {
 
             let mut v = vec![];
             for _ in 0..coeffs {
-                v.push(Scalar::<E>(rng.gen()));
+                v.push(Scalar::<E>(E::Fr::random(rng)));
             }
 
             let mut domain = EvaluationDomain::from_coeffs(v.clone()).unwrap();
@@ -462,10 +462,10 @@ fn fft_composition() {
 #[test]
 fn parallel_fft_consistency() {
     use pairing::bls12_381::Bls12;
-    use rand::{self, Rand};
+    use rand_core::RngCore;
     use std::cmp::min;
 
-    fn test_consistency<E: ScalarEngine, R: rand::Rng>(rng: &mut R)
+    fn test_consistency<E: ScalarEngine, R: RngCore>(rng: &mut R)
     {
         let worker = Worker::new();
 
@@ -473,7 +473,7 @@ fn parallel_fft_consistency() {
             for log_d in 0..10 {
                 let d = 1 << log_d;
 
-                let v1 = (0..d).map(|_| Scalar::<E>(E::Fr::rand(rng))).collect::<Vec<_>>();
+                let v1 = (0..d).map(|_| Scalar::<E>(E::Fr::random(rng))).collect::<Vec<_>>();
                 let mut v1 = EvaluationDomain::from_coeffs(v1).unwrap();
                 let mut v2 = EvaluationDomain::from_coeffs(v1.coeffs.clone()).unwrap();
 

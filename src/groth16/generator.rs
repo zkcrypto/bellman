@@ -1,4 +1,4 @@
-use rand::Rng;
+use rand_core::RngCore;
 
 use std::sync::Arc;
 
@@ -35,15 +35,15 @@ pub fn generate_random_parameters<E, C, R>(
     circuit: C,
     rng: &mut R
 ) -> Result<Parameters<E>, SynthesisError>
-    where E: Engine, C: Circuit<E>, R: Rng
+    where E: Engine, C: Circuit<E>, R: RngCore
 {
-    let g1 = rng.gen();
-    let g2 = rng.gen();
-    let alpha = rng.gen();
-    let beta = rng.gen();
-    let gamma = rng.gen();
-    let delta = rng.gen();
-    let tau = rng.gen();
+    let g1 = E::G1::random(rng);
+    let g2 = E::G2::random(rng);
+    let alpha = E::Fr::random(rng);
+    let beta = E::Fr::random(rng);
+    let gamma = E::Fr::random(rng);
+    let delta = E::Fr::random(rng);
+    let tau = E::Fr::random(rng);
 
     generate_parameters::<E, C>(
         circuit,

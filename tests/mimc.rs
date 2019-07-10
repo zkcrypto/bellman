@@ -4,13 +4,13 @@ extern crate pairing;
 extern crate rand;
 
 // For randomness (during paramgen and proof generation)
-use rand::{thread_rng, Rng};
+use rand::thread_rng;
 
 // For benchmarking
 use std::time::{Duration, Instant};
 
 // Bring in some tools for using pairing-friendly curves
-use ff::Field;
+use ff::{Field, ScalarEngine};
 use pairing::Engine;
 
 // We're going to use the BLS12-381 pairing-friendly elliptic curve.
@@ -172,7 +172,7 @@ fn test_mimc() {
     let rng = &mut thread_rng();
 
     // Generate the MiMC round constants
-    let constants = (0..MIMC_ROUNDS).map(|_| rng.gen()).collect::<Vec<_>>();
+    let constants = (0..MIMC_ROUNDS).map(|_| <Bls12 as ScalarEngine>::Fr::random(rng)).collect::<Vec<_>>();
 
     println!("Creating parameters...");
 
@@ -203,8 +203,8 @@ fn test_mimc() {
 
     for _ in 0..SAMPLES {
         // Generate a random preimage and compute the image
-        let xl = rng.gen();
-        let xr = rng.gen();
+        let xl = <Bls12 as ScalarEngine>::Fr::random(rng);
+        let xr = <Bls12 as ScalarEngine>::Fr::random(rng);
         let image = mimc::<Bls12>(xl, xr, &constants);
 
         proof_vec.truncate(0);

@@ -487,7 +487,7 @@ mod test_with_bls12_381 {
     use {Circuit, SynthesisError, ConstraintSystem};
 
     use ff::Field;
-    use rand::{Rand, thread_rng};
+    use rand::{thread_rng};
     use pairing::bls12_381::{Bls12, Fr};
 
     #[test]
@@ -547,8 +547,8 @@ mod test_with_bls12_381 {
         let pvk = prepare_verifying_key::<Bls12>(&params.vk);
 
         for _ in 0..100 {
-            let a = Fr::rand(rng);
-            let b = Fr::rand(rng);
+            let a = Fr::random(rng);
+            let b = Fr::random(rng);
             let mut c = a;
             c.mul_assign(&b);
 

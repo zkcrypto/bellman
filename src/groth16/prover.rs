@@ -1,4 +1,4 @@
-use rand::Rng;
+use rand_core::RngCore;
 
 use std::sync::Arc;
 
@@ -189,10 +189,10 @@ pub fn create_random_proof<E, C, R, P: ParameterSource<E>>(
     params: P,
     rng: &mut R
 ) -> Result<Proof<E>, SynthesisError>
-    where E: Engine, C: Circuit<E>, R: Rng
+    where E: Engine, C: Circuit<E>, R: RngCore
 {
-    let r = rng.gen();
-    let s = rng.gen();
+    let r = E::Fr::random(rng);
+    let s = E::Fr::random(rng);
 
     create_proof::<E, C, P>(circuit, params, r, s)
 }
