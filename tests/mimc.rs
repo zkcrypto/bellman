@@ -38,9 +38,9 @@ use bellman_ce::groth16::{
     verify_proof,
 };
 
-// const MIMC_ROUNDS: usize = 322;
+const MIMC_ROUNDS: usize = 322;
 
-const MIMC_ROUNDS: usize = 1000000;
+// const MIMC_ROUNDS: usize = 1000000;
 
 /// This is an implementation of MiMC, specifically a
 /// variant named `LongsightF322p3` for BLS12-381.
