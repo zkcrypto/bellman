@@ -9,7 +9,7 @@ repository = "https://github.com/ebfull/bellman"
 version = "0.1.0"
 
 [dependencies]
-rand_core = "0.3"
+rand_core = "0.4"
 bit-vec = "0.4.4"
 ff = { path = "../ff" }
 futures = "0.1"
@@ -21,7 +21,7 @@ pairing = { path = "../pairing", optional = true }
 byteorder = "1"
 
 [dev-dependencies]
-rand = "0.5"
+rand = "0.6"
 
 [features]
 groth16 = ["pairing"]
