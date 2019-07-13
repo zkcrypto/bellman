@@ -18,8 +18,8 @@ bit-vec = "0.4.4"
 futures = "0.1"
 cfg-if = "0.1.7"
 
-pairing = {package = "pairing_ce", path = "../pairing" }
-#pairing = {package = "pairing_ce", version = "0.17.0" }
+#pairing = {package = "pairing_ce", path = "../pairing" }
+pairing = {package = "pairing_ce", version = "0.18.0" }
 byteorder = "1"
 
 futures-cpupool = {version = "0.1", optional = true}
