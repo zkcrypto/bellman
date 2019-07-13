@@ -25,6 +25,7 @@ byteorder = "1"
 futures-cpupool = {version = "0.1", optional = true}
 num_cpus = {version = "1", optional = true}
 crossbeam = {version = "0.7.1", optional = true}
+prefetch = {version = "0.2", optional = true}
 
 web-sys = {version = "0.3.17", optional = true, features = ["console", "Performance", "Window"]}
 
@@ -33,8 +34,10 @@ blake2-rfc = {version = "0.2.18", optional = true}
 
 [features]
 default = ["multicore"]
+#default = ["multicore", "nightly"]
 #default = ["wasm"]
 multicore = ["futures-cpupool", "num_cpus", "crossbeam"]
 sonic = ["tiny-keccak", "blake2-rfc"]
 gm17 = []
 wasm = ["web-sys"]
+nightly = ["prefetch"]
