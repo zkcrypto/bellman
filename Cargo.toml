@@ -6,7 +6,7 @@ homepage = "https://github.com/matter-labs/bellman"
 license = "MIT/Apache-2.0"
 name = "bellman_ce"
 repository = "https://github.com/matter-labs/bellman"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2018"
 
 [lib]
@@ -18,8 +18,8 @@ bit-vec = "0.4.4"
 futures = "0.1"
 cfg-if = "0.1.7"
 
-#pairing_ce = { path = "../pairing" }
-pairing_ce = { version = "0.17.0" }
+pairing = {package = "pairing_ce", path = "../pairing" }
+#pairing = {package = "pairing_ce", version = "0.17.0" }
 byteorder = "1"
 
 futures-cpupool = {version = "0.1", optional = true}
@@ -32,9 +32,7 @@ tiny-keccak = {version = "1.4.2", optional = true}
 blake2-rfc = {version = "0.2.18", optional = true}
 
 [features]
-#default = ["multicore"]
-default = ["multicore", "sonic"]
-#default = ["multicore", "gm17", "sonic"]
+default = ["multicore"]
 #default = ["wasm"]
 multicore = ["futures-cpupool", "num_cpus", "crossbeam"]
 sonic = ["tiny-keccak", "blake2-rfc"]

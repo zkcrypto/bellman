@@ -3,7 +3,7 @@
 #[macro_use]
 
 extern crate cfg_if;
-extern crate pairing_ce as pairing_import;
+pub extern crate pairing;
 extern crate rand;
 extern crate bit_vec;
 extern crate byteorder;
@@ -41,10 +41,6 @@ cfg_if! {
             pub use crate::singlecore::*;
         }
     }
-}
-
-pub mod pairing {
-    pub use pairing_import::*;
 }
 
 mod cs;

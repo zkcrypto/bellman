@@ -68,7 +68,7 @@ fn multiexp_inner<Q, D, G, S>(
         let exponents = exponents.clone();
         let density_map = density_map.clone();
 
-        // This looks like a Pippenger’s algorithm
+        // This is a Pippenger’s algorithm
         pool.compute(move || {
             // Accumulate the result
             let mut acc = G::Projective::zero();
@@ -87,6 +87,116 @@ fn multiexp_inner<Q, D, G, S>(
 
             // Sort the bases into buckets
             for (&exp, density) in exponents.iter().zip(density_map.as_ref().iter()) {
+                // Go over density and exponents
+                if density {
+                    if exp == zero {
+                        bases.skip(1)?;
+                    } else if exp == one {
+                        if handle_trivial {
+                            bases.add_assign_mixed(&mut acc)?;
+                        } else {
+                            bases.skip(1)?;
+                        }
+                    } else {
+                        // Place multiplication into the bucket: Separate s * P as 
+                        // (s/2^c) * P + (s mod 2^c) P
+                        // First multiplication is c bits less, so one can do it,
+                        // sum results from different buckets and double it c times,
+                        // then add with (s mod 2^c) P parts
+                        let mut exp = exp;
+                        exp.shr(skip);
+                        let exp = exp.as_ref()[0] % (1 << c);
+
+                        if exp != 0 {
+                            bases.add_assign_mixed(&mut buckets[(exp - 1) as usize])?;
+                        } else {
+                            bases.skip(1)?;
+                        }
+                    }
+                }
+            }
+
+            // Summation by parts
+            // e.g. 3a + 2b + 1c = a +
+            //                    (a) + b +
+            //                    ((a) + b) + c
+            let mut running_sum = G::Projective::zero();
+            for exp in buckets.into_iter().rev() {
+                running_sum.add_assign(&exp);
+                acc.add_assign(&running_sum);
+            }
+
+            Ok(acc)
+        })
+    };
+
+    skip += c;
+
+    if skip >= <G::Engine as ScalarEngine>::Fr::NUM_BITS {
+        // There isn't another region.
+        Box::new(this)
+    } else {
+        // There's another region more significant. Calculate and join it with
+        // this region recursively.
+        Box::new(
+            this.join(multiexp_inner(pool, bases, density_map, exponents, skip, c, false))
+                .map(move |(this, mut higher)| {
+                    for _ in 0..c {
+                        higher.double();
+                    }
+
+                    higher.add_assign(&this);
+
+                    higher
+                })
+        )
+    }
+}
+
+fn multiexp_inner_with_prefetch<Q, D, G, S>(
+    pool: &Worker,
+    bases: S,
+    density_map: D,
+    exponents: Arc<Vec<<G::Scalar as PrimeField>::Repr>>,
+    mut skip: u32,
+    c: u32,
+    handle_trivial: bool
+) -> Box<Future<Item=<G as CurveAffine>::Projective, Error=SynthesisError>>
+    where for<'a> &'a Q: QueryDensity,
+          D: Send + Sync + 'static + Clone + AsRef<Q>,
+          G: CurveAffine,
+          S: SourceBuilder<G>
+{
+    // Perform this region of the multiexp
+    let this = {
+        let bases = bases.clone();
+        let exponents = exponents.clone();
+        let density_map = density_map.clone();
+
+        // This is a Pippenger’s algorithm
+        pool.compute(move || {
+            // Accumulate the result
+            let mut acc = G::Projective::zero();
+
+            // Build a source for the bases
+            let mut bases = bases.new();
+
+            // Create buckets to place remainders s mod 2^c,
+            // it will be 2^c - 1 buckets (no bucket for zeroes)
+
+            // Create space for the buckets
+            let mut buckets = vec![<G as CurveAffine>::Projective::zero(); (1 << c) - 1];
+
+            let zero = <G::Engine as ScalarEngine>::Fr::zero().into_repr();
+            let one = <G::Engine as ScalarEngine>::Fr::one().into_repr();
+            let padding = Arc::new(vec![zero]);
+
+            // Sort the bases into buckets
+            for ((&exp, &next_exp), density) in exponents.iter()
+                        .zip(exponents.iter().skip(1).chain(padding.iter()))
+                        .zip(density_map.as_ref().iter()) {
+                // no matter what happens - prefetch next bucket
+
                 // Go over density and exponents
                 if density {
                     if exp == zero {
