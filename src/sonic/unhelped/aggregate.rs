@@ -2,10 +2,10 @@ use crate::pairing::ff::{Field};
 use crate::pairing::{Engine, CurveProjective};
 use std::marker::PhantomData;
 
-use super::{Proof, SxyAdvice};
-use super::batch::Batch;
-use super::poly::{SxEval, SyEval};
-use super::Parameters;
+use crate::sonic::helped::{Proof, SxyAdvice};
+use crate::sonic::helped::batch::Batch;
+use crate::sonic::helped::poly::{SxEval, SyEval};
+use crate::sonic::helped::Parameters;
 
 use crate::SynthesisError;
 
@@ -15,10 +15,17 @@ use crate::sonic::cs::{Backend, SynthesisDriver};
 use crate::sonic::cs::{Circuit, Variable, Coeff};
 use crate::sonic::srs::SRS;
 use crate::sonic::sonic::CountNandQ;
+use crate::sonic::sonic::M;
+use super::s2_proof::{S2Eval, S2Proof};
+use super::permutation_structure::create_permutation_structure;
+use super::permutation_argument::PermutationArgument;
+use super::permutation_argument::SignatureOfCorrectComputation;
+use super::permutation_argument::SpecializedSRS;
 
 #[derive(Clone)]
-pub struct Aggregate<E: Engine> {
-    // Commitment to s(z, Y)
+pub struct SuccinctAggregate<E: Engine> {
+    pub signature: SignatureOfCorrectComputation<E>,
+    pub s2_proof: S2Proof<E>,
     pub c: E::G1Affine,
     // We have to open each of the S commitments to a random point `z`
     pub s_opening: E::G1Affine,
@@ -29,25 +36,27 @@ pub struct Aggregate<E: Engine> {
 
     pub z: E::Fr,
     pub w: E::Fr,
+
 }
 
-pub fn create_aggregate<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
-    circuit: &C,
-    inputs: &[(Proof<E>, SxyAdvice<E>)],
-    params: &Parameters<E>,
-) -> Aggregate<E>
-{
-    let n = params.vk.n;
-    let q = params.vk.q;
+// pub fn create_aggregate<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
+//     circuit: &C,
+//     inputs: &[(Proof<E>, SxyAdvice<E>)],
+//     params: &Parameters<E>,
+// ) -> SuccinctAggregate<E>
+// {
+//     let n = params.vk.n;
+//     let q = params.vk.q;
 
-    create_aggregate_on_srs_using_information::<E, C, S>(circuit, inputs, &params.srs, n, q)
-}
+//     create_aggregate_on_srs_using_information::<E, C, S>(circuit, inputs, &params.srs, n, q)
+// }
 
 pub fn create_aggregate_on_srs<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
     circuit: &C,
     inputs: &[(Proof<E>, SxyAdvice<E>)],
     srs: &SRS<E>,
-) -> Aggregate<E>
+    specialized_srs: &SpecializedSRS<E>
+) -> SuccinctAggregate<E>
 {
     // TODO: precompute this?
     let (n, q) = {
@@ -58,17 +67,21 @@ pub fn create_aggregate_on_srs<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
         (tmp.n, tmp.q)
     };
 
-    create_aggregate_on_srs_using_information::<E, C, S>(circuit, inputs, srs, n, q)
+    create_aggregate_on_srs_using_information::<E, C, S>(circuit, inputs, srs, specialized_srs, n, q)
 }
 
 pub fn create_aggregate_on_srs_using_information<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
     circuit: &C,
     inputs: &[(Proof<E>, SxyAdvice<E>)],
     srs: &SRS<E>,
+    _specialized_srs: &SpecializedSRS<E>,
     n: usize,
     q: usize,
-) -> Aggregate<E>
+) -> SuccinctAggregate<E>
 {
+    use std::time::Instant;
+    let start = Instant::now();
+    // take few proofs that are to be evaluated at some y_i and make an aggregate from them
     let mut transcript = Transcript::new(&[]);
     let mut y_values: Vec<E::Fr> = Vec::with_capacity(inputs.len());
     for &(ref proof, ref sxyadvice) in inputs {
@@ -83,7 +96,7 @@ pub fn create_aggregate_on_srs_using_information<E: Engine, C: Circuit<E>, S: Sy
 
     let z: E::Fr = transcript.get_challenge_scalar();
 
-    // Compute s(z, Y)
+    // Compute s(z, Y) for opening of the previous commitments at the same `z`
     let (s_poly_negative, s_poly_positive) = {
         let mut tmp = SyEval::new(z, n, q);
         S::synthesize(&mut tmp, circuit).unwrap(); // TODO
@@ -119,6 +132,41 @@ pub fn create_aggregate_on_srs_using_information<E: Engine, C: Circuit<E>, S: Sy
         )
     };
 
+    println!("Commit and opening of for s(z, w) taken {:?}", start.elapsed());
+
+    // now we need signature of correct computation. For this purpose 
+    // verifier already knows specialized SRS, so we can just commit to 
+    // s1 and s2 parts of such signature to get `w` and later open at this point!
+
+    // Commit!
+
+    // TODO: Precompute!
+    // this will internally synthesize a circuit and structure of permutations
+
+    let start = Instant::now();
+
+    let s2_eval = S2Eval::new(n);
+    let s2_proof = s2_eval.evaluate(z, w, &srs);
+
+    println!("S2 proof taken {:?}", start.elapsed());
+    let start = Instant::now();
+
+    let permutation_structure = create_permutation_structure(circuit);
+    let (non_permuted_coeffs, permutations) = permutation_structure.create_permutation_vectors();
+
+    println!("Permutation vectors synthesis taken {:?}", start.elapsed());
+    let start = Instant::now();
+
+    let signature = PermutationArgument::make_signature(
+        non_permuted_coeffs, 
+        permutations, 
+        w, 
+        z, 
+        &srs,
+    );
+
+    println!("Succinct signature for s(z, Y) taken {:?}", start.elapsed());
+
     // Let's open up C to every y.
     fn compute_value<E: Engine>(y: &E::Fr, poly_positive: &[E::Fr], poly_negative: &[E::Fr]) -> E::Fr {
         let mut value = E::Fr::zero();
@@ -132,8 +180,9 @@ pub fn create_aggregate_on_srs_using_information<E: Engine, C: Circuit<E>, S: Sy
         value
     }
 
-    use std::time::Instant;
     let start = Instant::now();
+
+    // we still need to re-open previous commitments at the same new z
 
     let mut c_openings = vec![];
     for y in &y_values {
@@ -155,7 +204,7 @@ pub fn create_aggregate_on_srs_using_information<E: Engine, C: Circuit<E>, S: Sy
         c_openings.push((opening, value));
     }
 
-    println!("Evaluation of s(z, Y) taken {:?}", start.elapsed());
+    println!("Re-Evaluation and re-opening of s(z, Y) taken {:?}", start.elapsed());
 
     // Okay, great. Now we need to open up each S at the same point z to the same value.
     // Since we're opening up all the S's at the same point, we create a bunch of random
@@ -184,7 +233,6 @@ pub fn create_aggregate_on_srs_using_information<E: Engine, C: Circuit<E>, S: Sy
 
         mul_add_polynomials(& mut poly_negative[..], &s_poly_negative[..], r);
         mul_add_polynomials(& mut poly_positive[..], &s_poly_positive[..], r);
-
     }
 
     println!("Re-evaluation of {} S polynomials taken {:?}", y_values.len(), start.elapsed());
@@ -200,21 +248,17 @@ pub fn create_aggregate_on_srs_using_information<E: Engine, C: Circuit<E>, S: Sy
             z,
             &srs
         )
-
     };
 
-    Aggregate {
-        // Commitment to s(z, Y)
+    SuccinctAggregate {
+        signature,
+        s2_proof,
         c,
-        // We have to open each of the S commitments to a random point `z`
         s_opening,
-        // We have to open C to each constituent `y`
         c_openings,
-        // Then we have to finally open C
         opening,
 
         z: z,
-
-        w: w
+        w: w,
     }
 }

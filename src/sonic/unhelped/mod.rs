@@ -5,7 +5,13 @@
 
 mod s2_proof;
 mod wellformed_argument;
-mod grand_product_argument;
+pub mod grand_product_argument;
 mod permutation_argument;
+mod verifier;
+pub mod permutation_structure;
+mod aggregate;
 
 pub use self::wellformed_argument::{WellformednessArgument, WellformednessProof};
+pub use self::permutation_argument::{PermutationArgument, PermutationProof, PermutationArgumentProof};
+pub use self::verifier::SuccinctMultiVerifier;
+pub use self::aggregate::*;

@@ -16,6 +16,7 @@ use crate::sonic::util::*;
 use crate::sonic::cs::{Backend, SynthesisDriver};
 use crate::sonic::cs::{Circuit, Variable, Coeff};
 use crate::sonic::srs::SRS;
+use crate::sonic::sonic::Preprocess;
 
 pub struct MultiVerifier<E: Engine, C: Circuit<E>, S: SynthesisDriver, R: Rng> {
     circuit: C,
@@ -30,28 +31,7 @@ pub struct MultiVerifier<E: Engine, C: Circuit<E>, S: SynthesisDriver, R: Rng> {
 impl<E: Engine, C: Circuit<E>, S: SynthesisDriver, R: Rng> MultiVerifier<E, C, S, R> {
     // This constructor consumes randomness source cause it's later used internally
     pub fn new(circuit: C, srs: &SRS<E>, rng: R) -> Result<Self, SynthesisError> {
-        struct Preprocess<E: Engine> {
-            k_map: Vec<usize>,
-            n: usize,
-            q: usize,
-            _marker: PhantomData<E>
-        }
-
-        impl<'a, E: Engine> Backend<E> for &'a mut Preprocess<E> {
-            fn new_k_power(&mut self, index: usize) {
-                self.k_map.push(index);
-            }
-
-            fn new_multiplication_gate(&mut self) {
-                self.n += 1;
-            }
-
-            fn new_linear_constraint(&mut self) {
-                self.q += 1;
-            }
-        }
-
-        let mut preprocess = Preprocess { k_map: vec![], n: 0, q: 0, _marker: PhantomData };
+        let mut preprocess = Preprocess::new();
 
         S::synthesize(&mut preprocess, &circuit)?;
 

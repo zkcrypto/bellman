@@ -18,7 +18,7 @@ use crate::sonic::cs::{Backend, SynthesisDriver};
 use crate::{Circuit};
 use crate::sonic::sonic::AdaptorCircuit;
 use crate::sonic::srs::SRS;
-use crate::sonic::cs::Nonassigning;
+use crate::sonic::sonic::Nonassigning;
 use super::helper::create_aggregate as create_aggregate_sonic_circuit;
 
 pub fn create_aggregate<E: Engine, C: Circuit<E> + Clone>(

@@ -7,6 +7,7 @@ use std::marker::PhantomData;
 
 use crate::sonic::srs::SRS;
 use crate::sonic::util::*;
+use crate::sonic::transcript::{Transcript, TranscriptProtocol};
 
 #[derive(Clone)]
 pub struct WellformednessArgument<E: Engine> {
@@ -15,11 +16,31 @@ pub struct WellformednessArgument<E: Engine> {
 
 #[derive(Clone)]
 pub struct WellformednessProof<E: Engine> {
-    l: E::G1Affine,
-    r: E::G1Affine
+    pub l: E::G1Affine,
+    pub r: E::G1Affine
+}
+
+#[derive(Clone)]
+pub struct WellformednessSignature<E: Engine> {
+    pub proof: WellformednessProof<E>
 }
 
 impl<E: Engine> WellformednessArgument<E> {
+
+    pub fn create_signature(
+        all_polys: Vec<Vec<E::Fr>>,
+        wellformed_challenges: Vec<E::Fr>,
+        srs: &SRS<E>
+    ) -> WellformednessSignature<E> {
+        let wellformed_argument = WellformednessArgument::new(all_polys);
+    
+        let proof = wellformed_argument.make_argument(wellformed_challenges, &srs);
+
+        WellformednessSignature {
+            proof
+        }
+    }
+
     pub fn new(polynomials: Vec<Vec<E::Fr>>) -> Self {
         assert!(polynomials.len() > 0);
 
@@ -71,18 +92,21 @@ impl<E: Engine> WellformednessArgument<E> {
 
         let d = srs.d;
 
+        // TODO: it's not necessary to have n < d, fix later
+
         assert!(n < d);
 
-        // here the multiplier is x^-d, so largest negative power is -(d - 1), smallest negative power is -(d - n)
+        // here the multiplier is x^-d, so largest negative power is -(d - 1), smallest negative power is - (d - n)
+        // H^{x^k} are labeled from 0 power, so we need to use proper indexes
         let l = multiexp(
-                srs.g_negative_x[(d - n)..d].iter().rev(),
+                srs.g_negative_x[(d - n)..=(d - 1)].iter().rev(),
                 p0.iter()
             ).into_affine();
 
         // here the multiplier is x^d-n, so largest positive power is d, smallest positive power is d - n + 1
 
         let r = multiexp(
-                srs.g_positive_x[(d - n + 1)..].iter().rev(),
+                srs.g_positive_x[(d - n + 1)..=d].iter(),
                 p0.iter()
             ).into_affine();
 
@@ -96,7 +120,10 @@ impl<E: Engine> WellformednessArgument<E> {
         let d = srs.d;
 
         let alpha_x_d_precomp = srs.h_positive_x_alpha[d].prepare();
-        let alpha_x_n_minus_d_precomp = srs.h_negative_x_alpha[d - n].prepare();
+        // TODO: not strictly required
+        assert!(n < d);
+        let d_minus_n = d - n;
+        let alpha_x_n_minus_d_precomp = srs.h_negative_x_alpha[d_minus_n].prepare();
         let mut h_prep = srs.h_positive_x[0];
         h_prep.negate();
         let h_prep = h_prep.prepare();
@@ -138,11 +165,12 @@ fn test_argument() {
 
     let srs_x = Fr::from_str("23923").unwrap();
     let srs_alpha = Fr::from_str("23728792").unwrap();
-    let srs = SRS::<Bls12>::dummy(830564, srs_x, srs_alpha);
+    // let srs = SRS::<Bls12>::dummy(830564, srs_x, srs_alpha);
+    let srs = SRS::<Bls12>::new(128, srs_x, srs_alpha);
 
-    let n: usize = 1 << 16;
+    let n: usize = 1 << 5;
     let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
-    let coeffs = (0..n).map(|_| Fr::rand(rng)).collect::<Vec<_>>();
+    let coeffs = (1..=n).map(|_| Fr::rand(rng)).collect::<Vec<_>>();
 
     let argument = WellformednessArgument::new(vec![coeffs]);
     let challenges = (0..1).map(|_| Fr::rand(rng)).collect::<Vec<_>>();
@@ -168,12 +196,12 @@ fn test_argument_soundness() {
 
     let n: usize = 1 << 8;
     let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
-    let coeffs = (0..n).map(|_| Fr::rand(rng)).collect::<Vec<_>>();
+    let coeffs = (1..=n).map(|_| Fr::rand(rng)).collect::<Vec<_>>();
 
     let argument = WellformednessArgument::new(vec![coeffs]);
     let commitments = argument.commit(&srs);
 
-    let coeffs = (0..n).map(|_| Fr::rand(rng)).collect::<Vec<_>>();
+    let coeffs = (1..=n).map(|_| Fr::rand(rng)).collect::<Vec<_>>();
     let argument = WellformednessArgument::new(vec![coeffs]);
     let challenges = (0..1).map(|_| Fr::rand(rng)).collect::<Vec<_>>();
 

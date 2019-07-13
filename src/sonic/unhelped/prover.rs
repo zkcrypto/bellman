@@ -32,7 +32,6 @@ pub fn create_advice_on_information_and_srs<E: Engine, C: Circuit<E>, S: Synthes
         transcript.commit_point(&proof.t);
         z = transcript.get_challenge_scalar();
     }
-
     let z_inv = z.inverse().ok_or(SynthesisError::DivisionByZero)?;
 
     let (s_poly_negative, s_poly_positive) = {
@@ -56,24 +55,6 @@ pub fn create_advice_on_information_and_srs<E: Engine, C: Circuit<E>, S: Synthes
         szy.add_assign(& evaluate_at_consequitive_powers(& s_poly_positive[..], z, z));
         szy.add_assign(& evaluate_at_consequitive_powers(& s_poly_negative[..], z_inv, z_inv));
     }
-
-    // let mut szy = E::Fr::zero();
-    // {
-    //     let mut tmp = z;
-    //     for &p in &s_poly_positive {
-    //         let mut p = p;
-    //         p.mul_assign(&tmp);
-    //         szy.add_assign(&p);
-    //         tmp.mul_assign(&z);
-    //     }
-    //     let mut tmp = z_inv;
-    //     for &p in &s_poly_negative {
-    //         let mut p = p;
-    //         p.mul_assign(&tmp);
-    //         szy.add_assign(&p);
-    //         tmp.mul_assign(&z_inv);
-    //     }
-    // }
 
     // Compute kate opening
     let opening = {
@@ -326,115 +307,4 @@ pub fn create_proof_on_srs<E: Engine, C: Circuit<E>, S: SynthesisDriver>(
     Ok(Proof {
         r, rz, rzy, t, z_opening, zy_opening
     })
-}
-
-#[test]
-fn my_fun_circuit_test() {
-    use crate::pairing::ff::PrimeField;
-    use crate::pairing::bls12_381::{Bls12, Fr};
-    use super::*;
-    use crate::sonic::cs::{ConstraintSystem, LinearCombination};
-    use crate::sonic::sonic::Basic;
-    use rand::{thread_rng};
-
-    struct MyCircuit;
-
-    impl<E: Engine> Circuit<E> for MyCircuit {
-        fn synthesize<CS: ConstraintSystem<E>>(&self, cs: &mut CS) -> Result<(), SynthesisError> {
-            let (a, b, _) = cs.multiply(|| {
-                Ok((
-                    E::Fr::from_str("10").unwrap(),
-                    E::Fr::from_str("20").unwrap(),
-                    E::Fr::from_str("200").unwrap(),
-                ))
-            })?;
-
-            cs.enforce_zero(LinearCombination::from(a) + a - b);
-
-            //let multiplier = cs.alloc_input(|| Ok(E::Fr::from_str("20").unwrap()))?;
-
-            //cs.enforce_zero(LinearCombination::from(b) - multiplier);
-
-            Ok(())
-        }
-    }
-
-    let srs = SRS::<Bls12>::new(
-        20,
-        Fr::from_str("22222").unwrap(),
-        Fr::from_str("33333333").unwrap(),
-    );
-    let proof = self::create_proof_on_srs::<Bls12, _, Basic>(&MyCircuit, &srs).unwrap();
-
-    use std::time::{Instant};
-    let start = Instant::now();
-    let rng = thread_rng();
-    let mut batch = MultiVerifier::<Bls12, _, Basic, _>::new(MyCircuit, &srs, rng).unwrap();
-
-    for _ in 0..1 {
-        batch.add_proof(&proof, &[/*Fr::from_str("20").unwrap()*/], |_, _| None);
-    }
-
-    assert!(batch.check_all());
-
-    let elapsed = start.elapsed();
-    println!("time to verify: {:?}", elapsed);
-}
-
-#[test]
-fn polynomial_commitment_test() {
-    use crate::pairing::ff::PrimeField;
-    use crate::pairing::ff::PrimeFieldRepr;
-    use crate::pairing::bls12_381::{Bls12, Fr};
-    use super::*;
-    use crate::sonic::cs::{ConstraintSystem, LinearCombination};
-    use crate::sonic::sonic::Basic;
-    use rand::{thread_rng}; 
-    use crate::pairing::{CurveAffine};
-
-    let srs = SRS::<Bls12>::new(
-        20,
-        Fr::from_str("22222").unwrap(),
-        Fr::from_str("33333333").unwrap(),
-    );
-
-    let mut rng = thread_rng();
-    // x^-4 + x^-3 + x^-2 + x^-1 + x + x^2
-    let mut poly = vec![Fr::one(), Fr::one(), Fr::one(), Fr::one(), Fr::zero(), Fr::one(), Fr::one()];
-    // make commitment to the poly
-    let commitment = polynomial_commitment(2, 4, 2, &srs, poly.iter());
-    let point: Fr = rng.gen();
-    let mut tmp = point.inverse().unwrap();
-    tmp.square();
-    let value = evaluate_at_consequitive_powers(&poly, tmp, point);
-    // evaluate f(z)
-    poly[4] = value;
-    poly[4].negate();
-    // f(x) - f(z)
-
-    let opening = polynomial_commitment_opening(4, 2, poly.iter(), point, &srs);
-
-    // e(W , hα x )e(g^{v} * W{-z} , hα ) = e(F , h^{x^{−d +max}} )
-
-    let alpha_x_precomp = srs.h_positive_x_alpha[1].prepare();
-    let alpha_precomp = srs.h_positive_x_alpha[0].prepare();
-    let mut neg_x_n_minus_d_precomp = srs.h_negative_x[srs.d - 2];
-    neg_x_n_minus_d_precomp.negate();
-    let neg_x_n_minus_d_precomp = neg_x_n_minus_d_precomp.prepare();
-    // let neg_x_n_minus_d_precomp = srs.h_negative_x[0].prepare();
-
-    let w = opening.prepare();
-    let mut gv = srs.g_positive_x[0].mul(value.into_repr());
-    let mut z_neg = point;
-    z_neg.negate();
-    let w_minus_z = opening.mul(z_neg.into_repr());
-    gv.add_assign(&w_minus_z);
-
-    let gv = gv.into_affine().prepare();
-
-    assert!(Bls12::final_exponentiation(&Bls12::miller_loop(&[
-            (&w, &alpha_x_precomp),
-            (&gv, &alpha_precomp),
-            (&commitment.prepare(), &neg_x_n_minus_d_precomp),
-        ])).unwrap() == <Bls12 as Engine>::Fqk::one());
 }

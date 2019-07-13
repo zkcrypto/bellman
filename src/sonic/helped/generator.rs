@@ -38,7 +38,7 @@ use crate::multicore::{
 
 use std::marker::PhantomData;
 
-use crate::sonic::cs::{Backend, Basic, SynthesisDriver};
+use crate::sonic::cs::{Backend, SynthesisDriver};
 use crate::sonic::srs::SRS;
 use crate::sonic::cs::LinearCombination as SonicLinearCombination;
 use crate::sonic::cs::Circuit as SonicCircuit;
@@ -47,6 +47,9 @@ use crate::sonic::cs::Variable as SonicVariable;
 use crate::sonic::cs::Coeff;
 use crate::sonic::sonic::{AdaptorCircuit};
 use super::parameters::NUM_BLINDINGS;
+use crate::sonic::sonic::NonassigningSynthesizer;
+use crate::sonic::sonic::PermutationSynthesizer;
+use crate::sonic::sonic::{Basic, Preprocess};
 
 use crate::verbose_flag;
 
@@ -231,121 +234,61 @@ pub fn get_circuit_parameters<E, C>(
     where E: Engine, C: Circuit<E>
 
 {
-    struct NonassigningSynthesizer<E: Engine, B: Backend<E>> {
-        backend: B,
-        current_variable: Option<usize>,
-        _marker: PhantomData<E>,
-        q: usize,
-        n: usize,
-    }
-
-    impl<E: Engine, B: Backend<E>> SonicConstraintSystem<E> for NonassigningSynthesizer<E, B> {
-        const ONE: SonicVariable = SonicVariable::A(1);
-
-        fn alloc<F>(&mut self, _value: F) -> Result<SonicVariable, SynthesisError>
-        where
-            F: FnOnce() -> Result<E::Fr, SynthesisError>
-        {
-            match self.current_variable.take() {
-                Some(index) => {
-                    let var_b = SonicVariable::B(index);
-
-                    self.current_variable = None;
-
-                    Ok(var_b)
-                },
-                None => {
-                    self.n += 1;
-                    let index = self.n;
-                    self.backend.new_multiplication_gate();
-
-                    let var_a = SonicVariable::A(index);
-
-                    self.current_variable = Some(index);
-
-                    Ok(var_a)
-                }
-            }
-        }
-
-        fn alloc_input<F>(&mut self, value: F) -> Result<SonicVariable, SynthesisError>
-        where
-            F: FnOnce() -> Result<E::Fr, SynthesisError>
-        {
-            let input_var = self.alloc(value)?;
-
-            self.enforce_zero(SonicLinearCombination::zero() + input_var);
-            self.backend.new_k_power(self.q);
-
-            Ok(input_var)
-        }
-
-        fn enforce_zero(&mut self, lc: SonicLinearCombination<E>)
-        {
-            self.q += 1;
-            self.backend.new_linear_constraint();
-
-            for (var, coeff) in lc.as_ref() {
-                self.backend.insert_coefficient(*var, *coeff);
-            }
-        }
-
-        fn multiply<F>(&mut self, _values: F) -> Result<(SonicVariable, SonicVariable, SonicVariable), SynthesisError>
-        where
-            F: FnOnce() -> Result<(E::Fr, E::Fr, E::Fr), SynthesisError>
-        {
-            self.n += 1;
-            let index = self.n;
-            self.backend.new_multiplication_gate();
-
-            let a = SonicVariable::A(index);
-            let b = SonicVariable::B(index);
-            let c = SonicVariable::C(index);
-
-            Ok((a, b, c))
-        }
-
-        fn get_value(&self, var: SonicVariable) -> Result<E::Fr, ()> {
-            self.backend.get_var(var).ok_or(())
-        }
-    }
-
-    struct Preprocess<E: Engine> {
-        k_map: Vec<usize>,
-        n: usize,
-        q: usize,
-        _marker: PhantomData<E>
-    }
-
-    impl<'a, E: Engine> Backend<E> for &'a mut Preprocess<E> {
-        fn new_k_power(&mut self, index: usize) {
-            self.k_map.push(index);
-        }
-
-        fn new_multiplication_gate(&mut self) {
-            self.n += 1;
-        }
-
-        fn new_linear_constraint(&mut self) {
-            self.q += 1;
-        }
-    }
-
-    let mut preprocess = Preprocess { k_map: vec![], n: 0, q: 0, _marker: PhantomData };
+    let mut preprocess = Preprocess::new();
 
     let (num_inputs, num_aux, num_constraints) = {
 
-        let mut cs: NonassigningSynthesizer<E, &'_ mut Preprocess<E>> = NonassigningSynthesizer {
-            backend: &mut preprocess,
-            current_variable: None,
-            _marker: PhantomData,
-            q: 0,
-            n: 0,
-        };
+        let mut cs: NonassigningSynthesizer<E, &'_ mut Preprocess<E>> = NonassigningSynthesizer::new(&mut preprocess);
 
         let one = cs.alloc_input(|| Ok(E::Fr::one())).expect("should have no issues");
 
         match (one, <NonassigningSynthesizer<E, &'_ mut Preprocess<E>> as SonicConstraintSystem<E>>::ONE) {
+            (SonicVariable::A(1), SonicVariable::A(1)) => {},
+            _ => return Err(SynthesisError::UnconstrainedVariable)
+        }
+
+        let mut assembly = GeneratorAssembly::<'_, E, _> {
+            cs: &mut cs,
+            num_inputs: 0,
+            num_aux: 0,
+            num_constraints: 0,
+            _marker: PhantomData
+        };
+
+        circuit.synthesize(&mut assembly)?;
+
+        (assembly.num_inputs, assembly.num_aux, assembly.num_constraints)
+    };
+
+    Ok(CircuitParameters {
+        num_inputs: num_inputs,
+        num_aux: num_aux,
+        num_constraints: num_constraints,
+        k_map: preprocess.k_map,
+        n: preprocess.n,
+        q: preprocess.q,
+        _marker: PhantomData
+    })
+}
+
+/// Get circuit information such as number of input, variables, 
+/// constraints, and the corresponding SONIC parameters
+/// k_map, n, q
+pub fn get_circuit_parameters_for_succinct_sonic<E, C>(
+    circuit: C,
+) -> Result<CircuitParameters<E>, SynthesisError>
+    where E: Engine, C: Circuit<E>
+
+{
+    let mut preprocess = Preprocess::new();
+
+    let (num_inputs, num_aux, num_constraints) = {
+
+        let mut cs: PermutationSynthesizer<E, &'_ mut Preprocess<E>> = PermutationSynthesizer::new(&mut preprocess);
+
+        let one = cs.alloc_input(|| Ok(E::Fr::one())).expect("should have no issues");
+
+        match (one, <PermutationSynthesizer<E, &'_ mut Preprocess<E>> as SonicConstraintSystem<E>>::ONE) {
             (SonicVariable::A(1), SonicVariable::A(1)) => {},
             _ => return Err(SynthesisError::UnconstrainedVariable)
         }
@@ -383,7 +326,6 @@ pub fn generate_parameters<E, C>(
 {
     let circuit_parameters = get_circuit_parameters::<E, C>(circuit)?; 
     let min_d = circuit_parameters.n * 4 + 2*NUM_BLINDINGS;
-    println!{"Mid d = {}", min_d};
 
     let srs = generate_srs(alpha, x, min_d)?;
 

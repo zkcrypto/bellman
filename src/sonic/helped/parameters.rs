@@ -250,35 +250,16 @@ impl<E: Engine> VerifyingKey<E> {
     }
 }
 
-use crate::sonic::cs::{Backend, Basic, SynthesisDriver};
+use crate::sonic::cs::{Backend, SynthesisDriver};
 use crate::sonic::srs::SRS;
 use crate::sonic::cs::Circuit as SonicCircuit;
+use crate::sonic::sonic::{Basic, Preprocess};
 use std::marker::PhantomData;
+
 
 impl<E: Engine> VerifyingKey<E> {
     pub fn new<C: SonicCircuit<E>, S: SynthesisDriver>(circuit: C, srs: &SRS<E>) -> Result<Self, SynthesisError> {
-        struct Preprocess<E: Engine> {
-            k_map: Vec<usize>,
-            n: usize,
-            q: usize,
-            _marker: PhantomData<E>
-        }
-
-        impl<'a, E: Engine> Backend<E> for &'a mut Preprocess<E> {
-            fn new_k_power(&mut self, index: usize) {
-                self.k_map.push(index);
-            }
-
-            fn new_multiplication_gate(&mut self) {
-                self.n += 1;
-            }
-
-            fn new_linear_constraint(&mut self) {
-                self.q += 1;
-            }
-        }
-
-        let mut preprocess = Preprocess { k_map: vec![], n: 0, q: 0, _marker: PhantomData };
+        let mut preprocess = Preprocess::new();
 
         S::synthesize(&mut preprocess, &circuit)?;
 

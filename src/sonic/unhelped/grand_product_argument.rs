@@ -8,6 +8,8 @@ use std::marker::PhantomData;
 
 use crate::sonic::srs::SRS;
 use crate::sonic::util::*;
+use crate::sonic::transcript::{Transcript, TranscriptProtocol};
+use super::wellformed_argument::{WellformednessSignature, WellformednessArgument};
 
 #[derive(Clone)]
 pub struct GrandProductArgument<E: Engine> {
@@ -20,14 +22,75 @@ pub struct GrandProductArgument<E: Engine> {
 
 #[derive(Clone)]
 pub struct GrandProductProof<E: Engine> {
-    t_opening: E::G1Affine,
-    e_zinv: E::Fr,
-    e_opening: E::G1Affine,
-    f_y: E::Fr,
-    f_opening: E::G1Affine,
+    pub t_opening: E::G1Affine,
+    pub e_zinv: E::Fr,
+    pub e_opening: E::G1Affine,
+    pub f_y: E::Fr,
+    pub f_opening: E::G1Affine,
+}
+
+#[derive(Clone)]
+pub struct GrandProductSignature<E: Engine> {
+    pub c_commitments: Vec<(E::G1Affine, E::Fr)>,
+    pub t_commitment: E::G1Affine,
+    pub grand_product_openings: Vec<(E::Fr, E::G1Affine)>,
+    pub proof: GrandProductProof<E>,
+    pub wellformedness_signature: WellformednessSignature<E>,
 }
 
 impl<E: Engine> GrandProductArgument<E> {
+    pub fn create_signature(
+        transcript: &mut Transcript,
+        grand_products: Vec<(Vec<E::Fr>, Vec<E::Fr>)>, 
+        y: E::Fr,
+        z: E::Fr,
+        srs: &SRS<E>,
+    ) -> GrandProductSignature<E> {
+        let mut grand_product_challenges = vec![];
+
+        for _ in 0..grand_products.len() {
+            let c = transcript.get_challenge_scalar();
+            grand_product_challenges.push(c);
+        }
+
+        let mut all_polys = vec![];
+        let mut wellformed_challenges = vec![];
+        for _ in 0..(grand_products.len()*2) {
+            let c = transcript.get_challenge_scalar();
+            wellformed_challenges.push(c);
+        }
+
+        for p in grand_products.iter() {
+            let (a, b) = p;
+            all_polys.push(a.clone());
+            all_polys.push(b.clone());
+        }
+
+        let wellformedness_signature = WellformednessArgument::create_signature(
+            all_polys, 
+            wellformed_challenges,
+            &srs
+        );
+
+        let mut grand_product_argument = GrandProductArgument::new(grand_products);
+        let c_commitments = grand_product_argument.commit_to_individual_c_polynomials(&srs);
+        let t_commitment = grand_product_argument.commit_to_t_polynomial(&grand_product_challenges, y, &srs);
+        let grand_product_openings = grand_product_argument.open_commitments_for_grand_product(y, z, &srs);
+        let a_zy: Vec<E::Fr> = grand_product_openings.iter().map(|el| el.0.clone()).collect();
+        let proof = grand_product_argument.make_argument(&a_zy, &grand_product_challenges, y, z, &srs);
+
+        GrandProductSignature {
+            c_commitments,
+            t_commitment,
+            grand_product_openings,
+            // a_zy,
+            proof,
+            wellformedness_signature
+        }
+
+    }
+
+
     pub fn new(polynomials: Vec<(Vec<E::Fr>, Vec<E::Fr>)>) -> Self {
         assert!(polynomials.len() > 0);
 
@@ -44,7 +107,7 @@ impl<E: Engine> GrandProductArgument<E> {
         // c_3 = a_3 * c_2 = a_3 * a_2 * a_1
         // ...
         // c_n = a_n * c_{n-1} = \prod a_i
-        // a_{n+1} = c_{n-1}^-1
+        // a_{n+1} = c_{n}^-1
         // c_{n+1} = 1
         // c_{n+1} = a_{n+2} * c_{n+1} = a_{n+2}
         // ...
@@ -67,10 +130,19 @@ impl<E: Engine> GrandProductArgument<E> {
             }
             assert_eq!(c_poly.len(), n);
             a_poly.extend(p0);
+            assert_eq!(a_poly.len(), n);
+
             // v = a_{n+1} = c_{n}^-1
-            let v = c_poly[n-1].inverse().unwrap();
+            // let v = c_poly[n-1].inverse().unwrap();
+            let v = c_coeff.inverse().unwrap();
+
+            // ! IMPORTANT
+            // This line is indeed assigning a_{n+1} to zero instead of v
+            // for the practical purpose later we manually evaluate T polynomial
+            // and assign v to the term X^{n+1}
             a_poly.push(E::Fr::zero());
             // a_poly.push(v);
+
             // add c_{n+1}
             let mut c_coeff = E::Fr::one();
             c_poly.push(c_coeff);
@@ -83,6 +155,7 @@ impl<E: Engine> GrandProductArgument<E> {
             a_poly.extend(p1);
 
             assert_eq!(c_poly[n-1], c_poly[2*n]);
+            assert_eq!(c_poly[n], E::Fr::one());
 
             a_polynomials.push(a_poly);
             c_polynomials.push(c_poly);
@@ -98,21 +171,21 @@ impl<E: Engine> GrandProductArgument<E> {
         }
     }
 
-    // Make a commitment to a polynomial in a form A*B^{x+1} = [a_1...a_{n}, 0, b_1...b_{n}]
-    pub fn commit_for_grand_product(a: &[E::Fr], b: &[E::Fr], srs: &SRS<E>) -> E::G1Affine {
-        assert_eq!(a.len(), b.len());
+    // // Make a commitment to a polynomial in a form A*B^{x+1} = [a_1...a_{n}, 0, b_1...b_{n}]
+    // pub fn commit_for_grand_product(a: &[E::Fr], b: &[E::Fr], srs: &SRS<E>) -> E::G1Affine {
+    //     assert_eq!(a.len(), b.len());
 
-        let n = a.len();
+    //     let n = a.len();
 
-        multiexp(
-                srs.g_positive_x_alpha[0..(2*n+1)].iter(),
-                a.iter()
-                    .chain_ext(Some(E::Fr::zero()).iter())
-                    .chain_ext(b.iter())
-        ).into_affine()
-    }
+    //     multiexp(
+    //             srs.g_positive_x_alpha[0..(2*n+1)].iter(),
+    //             a.iter()
+    //                 .chain_ext(Some(E::Fr::zero()).iter())
+    //                 .chain_ext(b.iter())
+    //     ).into_affine()
+    // }
 
-    // Make a commitment to a polynomial in a form A*B^{x+1} = [a_1...a_{n}, 0, b_1...b_{n}]
+
     pub fn commit_for_individual_products(a: &[E::Fr], b: &[E::Fr], srs: &SRS<E>) -> (E::G1Affine, E::G1Affine) {
         assert_eq!(a.len(), b.len());
 
@@ -139,29 +212,41 @@ impl<E: Engine> GrandProductArgument<E> {
         let mut results = vec![];
 
         for a_poly in self.a_polynomials.iter() {
-            let a = & a_poly[0..n];
-            let b = & a_poly[(n+1)..];
-            assert_eq!(a.len(), n);
-            assert_eq!(b.len(), n);
-            let mut val = evaluate_at_consequitive_powers(a, yz, yz);
-            {
-                let tmp = yz.pow([(n+2) as u64]);
-                let v = evaluate_at_consequitive_powers(b, tmp, yz);
-                val.add_assign(&v);
-            }
+            assert_eq!(a_poly[n], E::Fr::zero()); // there is no term for n+1 power
+            let val = evaluate_at_consequitive_powers(&a_poly[..], yz, yz);
+
+            // let a = & a_poly[0..n]; // powers [1, n]
+            // let b = & a_poly[(n+1)..]; // there is no n+1 term (numerated as `n`), skip it and start b
+            // assert_eq!(a.len(), n);
+            // assert_eq!(b.len(), n);
+            // let mut val = evaluate_at_consequitive_powers(a, yz, yz);
+            // {
+            //     let tmp = yz.pow([(n+2) as u64]);
+            //     let v = evaluate_at_consequitive_powers(b, tmp, yz);
+            //     val.add_assign(&v);
+            // }
 
             let mut constant_term = val;
             constant_term.negate();
 
-            let opening = polynomial_commitment_opening(
+             let opening = polynomial_commitment_opening(
                 0,
                 2*n + 1,
                 Some(constant_term).iter()
-                    .chain_ext(a.iter())
-                    .chain_ext(Some(E::Fr::zero()).iter())
-                    .chain_ext(b.iter()),
+                    .chain_ext(a_poly.iter()),
                 yz, 
-                &srs);
+                &srs
+            );
+
+            // let opening = polynomial_commitment_opening(
+            //     0,
+            //     2*n + 1,
+            //     Some(constant_term).iter()
+            //         .chain_ext(a.iter())
+            //         .chain_ext(Some(E::Fr::zero()).iter())
+            //         .chain_ext(b.iter()),
+            //     yz, 
+            //     &srs);
 
             results.push((val, opening));
 
@@ -175,11 +260,14 @@ impl<E: Engine> GrandProductArgument<E> {
 
         let mut results = vec![];
 
-        let n = self.c_polynomials[0].len();
+        let two_n_plus_1 = self.c_polynomials[0].len();
 
         for (p, v) in self.c_polynomials.iter().zip(self.v_elements.iter()) {
+            let n = self.n;
+            assert_eq!(p[n], E::Fr::one(), "C_(n+1) must be one");
+
             let c = multiexp(
-                srs.g_positive_x_alpha[0..n].iter(),
+                srs.g_positive_x_alpha[0..two_n_plus_1].iter(),
                 p.iter()
             ).into_affine();
             
@@ -203,7 +291,7 @@ impl<E: Engine> GrandProductArgument<E> {
                                         .zip(challenges.iter())
         {
             let mut a_xy = a.clone();
-            let mut c_xy = c.clone();
+            let c_xy = c.clone();
             let v = *v;
 
             assert_eq!(a_xy.len(), 2*n + 1);
@@ -279,7 +367,7 @@ impl<E: Engine> GrandProductArgument<E> {
 
             val.add_assign(&E::Fr::one());
 
-            // subtract at constant term
+            // subtract a constant term
             assert_eq!(t[2*n+1], val);
 
             t[2*n+1].sub_assign(&val);
@@ -322,6 +410,8 @@ impl<E: Engine> GrandProductArgument<E> {
 
         let z_inv = z.inverse().unwrap();
 
+        let mut t_subcomponent = E::Fr::zero();
+
         for (((a, c), challenge), v) in a_zy.iter()
                                         .zip(c_polynomials.into_iter())
                                         .zip(challenges.iter())
@@ -355,6 +445,9 @@ impl<E: Engine> GrandProductArgument<E> {
 
             let mut ry = y;
             ry.mul_assign(challenge);
+
+            t_subcomponent.add_assign(&rc);
+            t_subcomponent.sub_assign(&challenge);
 
             if e_polynomial.is_some() && f_polynomial.is_some() {
                 if let Some(e_poly) = e_polynomial.as_mut() {
@@ -403,14 +496,23 @@ impl<E: Engine> GrandProductArgument<E> {
         e_val.negate();
         f_val.negate();
 
+        t_subcomponent.add_assign(&e_val);
+        t_subcomponent.sub_assign(&f_val);
+
         let mut t_poly = self.t_polynomial.unwrap();
         assert_eq!(t_poly.len(), 4*n + 3);
+
+        assert!(t_poly[2*n + 1].is_zero());
 
         // largest negative power of t is -2n-1
         let t_zy = {
             let tmp = z_inv.pow([(2*n+1) as u64]);
             evaluate_at_consequitive_powers(&t_poly, tmp, z)
         };
+
+        assert_eq!(t_zy, t_subcomponent);
+
+        assert!(t_poly[2*n + 1].is_zero());
 
         t_poly[2*n + 1].sub_assign(&t_zy);
 
@@ -430,7 +532,8 @@ impl<E: Engine> GrandProductArgument<E> {
         }
     }
 
-    pub fn verify_ab_commitment(n: usize, 
+    pub fn verify_ab_commitment(
+        n: usize, 
         randomness: & Vec<E::Fr>, 
         a_commitments: &Vec<E::G1Affine>,
         b_commitments: &Vec<E::G1Affine>, 
@@ -438,11 +541,10 @@ impl<E: Engine> GrandProductArgument<E> {
         y: E::Fr,
         z: E::Fr,
         srs: &SRS<E>
-        ) -> bool {
+    ) -> bool {
         assert_eq!(randomness.len(), a_commitments.len());
         assert_eq!(openings.len(), a_commitments.len());
         assert_eq!(b_commitments.len(), a_commitments.len());
-        let d = srs.d;
 
         // e(Dj,hαx)e(D−yz,hα) = e(Aj,h)e(Bj,hxn+1)e(g−aj ,hα)
 
@@ -452,7 +554,8 @@ impl<E: Engine> GrandProductArgument<E> {
 
         let h_alpha_precomp = srs.h_positive_x_alpha[0].prepare();
 
-        let mut h_x_n_plus_one_precomp = srs.h_positive_x[n];
+        // H^(x^(n+1)) is n+1 indexed
+        let mut h_x_n_plus_one_precomp = srs.h_positive_x[n+1];
         h_x_n_plus_one_precomp.negate();
         let h_x_n_plus_one_precomp = h_x_n_plus_one_precomp.prepare();
 
@@ -526,8 +629,6 @@ impl<E: Engine> GrandProductArgument<E> {
         assert_eq!(randomness.len(), 3);
         assert_eq!(a_zy.len(), challenges.len());
         assert_eq!(commitments.len(), challenges.len());
-
-        let d = srs.d;
 
         let g = srs.g_positive_x[0];
 
@@ -664,16 +765,37 @@ fn test_grand_product_argument() {
 
     let srs_x = Fr::from_str("23923").unwrap();
     let srs_alpha = Fr::from_str("23728792").unwrap();
-    let srs = SRS::<Bls12>::dummy(830564, srs_x, srs_alpha);
+    // let srs = SRS::<Bls12>::dummy(830564, srs_x, srs_alpha);
+    let srs = SRS::<Bls12>::new(128, srs_x, srs_alpha);
 
-    let n: usize = 1 << 8;
+    let n: usize = 1 << 5;
     let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
-    let coeffs = (0..n).map(|_| Fr::rand(rng)).collect::<Vec<_>>();
+    let coeffs = (1..=n).map(|_| Fr::rand(rng)).collect::<Vec<_>>();
     let mut permutation = coeffs.clone();
     rng.shuffle(&mut permutation);
 
+    let coeffs_product = coeffs.iter().fold(Fr::one(), |mut sum, x| {
+        sum.mul_assign(&x);
+
+        sum
+    });
+
+    let permutation_product = permutation.iter().fold(Fr::one(), |mut sum, x| {
+        sum.mul_assign(&x);
+
+        sum
+    });
+
+    assert_eq!(coeffs_product, permutation_product);
+    assert!(!coeffs_product.is_zero());
+
     let a_commitment = multiexp(srs.g_positive_x_alpha[0..n].iter(), coeffs.iter()).into_affine();
     let b_commitment = multiexp(srs.g_positive_x_alpha[0..n].iter(), permutation.iter()).into_affine();
+
+    let (a, b) = GrandProductArgument::commit_for_individual_products(&coeffs[..], &permutation[..], &srs);
+
+    assert_eq!(a_commitment, a);
+    assert_eq!(b_commitment, b);
 
     let mut argument = GrandProductArgument::new(vec![(coeffs, permutation)]);
 
@@ -693,14 +815,16 @@ fn test_grand_product_argument() {
 
     let randomness = (0..1).map(|_| Fr::rand(rng)).collect::<Vec<_>>();
 
-    let valid = GrandProductArgument::verify_ab_commitment(n, 
+    let valid = GrandProductArgument::verify_ab_commitment(
+        n, 
         &randomness, 
         &vec![a_commitment], 
         &vec![b_commitment], 
         &grand_product_openings, 
         y,
         z,
-        &srs);
+        &srs
+    );
 
     assert!(valid, "grand product commitments should be valid");
 

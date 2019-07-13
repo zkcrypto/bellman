@@ -3,6 +3,7 @@ use crate::pairing::{
     CurveProjective,
     CurveAffine,
     GroupDecodingError,
+    RawEncodable,
     EncodedPoint
 };
 
@@ -87,6 +88,23 @@ impl Field for Fr {
 
     fn frobenius_map(&mut self, _: usize) {
         // identity
+    }
+}
+
+impl RawEncodable for Fr {
+    fn into_raw_uncompressed_le(&self) -> Self::Uncompressed {
+        Self::Uncompressed::empty()
+    }
+
+    fn from_raw_uncompressed_le_unchecked(
+            _encoded: &Self::Uncompressed, 
+            _infinity: bool
+    ) -> Result<Self, GroupDecodingError> {
+        Ok(<Self as Field>::zero())
+    }
+
+    fn from_raw_uncompressed_le(encoded: &Self::Uncompressed, _infinity: bool) -> Result<Self, GroupDecodingError> {
+        Self::from_raw_uncompressed_le_unchecked(&encoded, _infinity)
     }
 }
 
@@ -247,12 +265,24 @@ impl PrimeField for Fr {
         }
     }
 
+    fn from_raw_repr(repr: FrRepr) -> Result<Self, PrimeFieldDecodingError> {
+        if repr.0[0] >= (MODULUS_R.0 as u64) {
+            Err(PrimeFieldDecodingError::NotInField(format!("{}", repr)))
+        } else {
+            Ok(Fr(Wrapping(repr.0[0] as u32)))
+        }
+    }
+
     fn into_repr(&self) -> FrRepr {
         FrRepr::from(*self)
     }
 
     fn char() -> FrRepr {
         Fr(MODULUS_R).into()
+    }
+
+    fn into_raw_repr(&self) -> FrRepr {
+        FrRepr::from(*self)
     }
 
     fn multiplicative_generator() -> Fr {

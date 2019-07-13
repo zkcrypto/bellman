@@ -10,18 +10,19 @@ Initial SONIC proof system integration using the code from the [original impleme
 - Code cleanup
 - Migration for smart-contract compatible transcripts
 
-## TODO Plan
+## Current state
 
-- [x] Test with public inputs
-- [x] Test on BN256 
-- [x] Parallelize using existing primitives
-- [x] Implement polynomial parallelized evaluation
-- [x] Make custom transcriptor that is easy to transform into the smart-contract
-- [x] Basic Ethereum smart-contract
-- [x] Add blinding factors
-- [ ] Implement unhelped version
-  - [x] Implement a part of S poly precomputation (S2)
-  - [x] Implement a "well formed" argument 
-  - [x] Implement a coefficients product argument
-  - [ ] Implement a premutation argument
-  - [ ] Implement synthesizer for proper form of S polynomial
+Beta - fast and valid, but breaking API changes are expected
+
+## Completed
+
+- Basic proof modes (helped/unhelped)
+- Succinct `S` polynomial evaluation using permutation argument
+- High-level API for non-succinct mode that can produce "large enough" SRS from a "global" SRS
+- Proving/verifying keys that have additional information about the circuit such as number of gates, linear constraints and public inputs
+- Implement non-assigning backends for faster estimation of circuit parameters in un-cached cases
+
+## TODO Plan
+- [ ] Make caching proving/verifying key for succinct mode
+- [ ] Fix high-level API for both modes
+- [ ] Re-structure the package itself

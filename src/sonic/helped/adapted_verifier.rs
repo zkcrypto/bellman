@@ -18,7 +18,7 @@ use crate::sonic::cs::{Backend, SynthesisDriver};
 use crate::{Circuit};
 use crate::sonic::sonic::AdaptorCircuit;
 use crate::sonic::srs::SRS;
-use crate::sonic::cs::Nonassigning;
+use crate::sonic::sonic::Nonassigning;
 use super::verifier::verify_aggregate_on_srs as verify_aggregate_on_srs_sonic_circuit;
 use super::verifier::verify_proofs_on_srs as verify_proofs_on_srs_sonic_circuit;
 

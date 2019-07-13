@@ -2,13 +2,13 @@ use crate::pairing::ff::{Field};
 use crate::pairing::{Engine, CurveProjective};
 use std::marker::PhantomData;
 
-mod batch;
-mod poly;
+pub mod batch;
+pub mod poly;
 pub mod prover;
 pub mod verifier;
 pub mod helper;
-mod parameters;
-mod generator;
+pub mod parameters;
+pub mod generator;
 mod adapted_prover;
 mod adapted_verifier;
 mod adapted_helper;
@@ -23,7 +23,8 @@ pub use self::generator::{
     generate_parameters_on_srs_and_information, 
     generate_random_parameters, 
     generate_srs,
-    get_circuit_parameters
+    get_circuit_parameters,
+    get_circuit_parameters_for_succinct_sonic
 };
 pub use self::parameters::{
     Proof, 
