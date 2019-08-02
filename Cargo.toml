@@ -1,6 +1,7 @@
 [package]
 authors = ["Sean Bowe <ewillbefull@gmail.com>"]
 description = "zk-SNARK library"
+readme = "README.md"
 documentation = "https://github.com/ebfull/bellman"
 homepage = "https://github.com/ebfull/bellman"
 license = "MIT/Apache-2.0"
