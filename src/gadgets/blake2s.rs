@@ -404,7 +404,7 @@ pub fn blake2s<E: Engine, CS: ConstraintSystem<E>>(
         )?;
     }
 
-    Ok(h.iter().flat_map(|b| b.into_bits()).collect())
+    Ok(h.into_iter().flat_map(|b| b.into_bits()).collect())
 }
 
 #[cfg(test)]

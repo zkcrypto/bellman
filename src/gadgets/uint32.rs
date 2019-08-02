@@ -72,8 +72,10 @@ impl UInt32 {
         Ok(UInt32 { bits, value })
     }
 
-    pub fn into_bits_be(&self) -> Vec<Boolean> {
-        self.bits.iter().rev().cloned().collect()
+    pub fn into_bits_be(self) -> Vec<Boolean> {
+        let mut ret = self.bits;
+        ret.reverse();
+        ret
     }
 
     pub fn from_bits_be(bits: &[Boolean]) -> Self {
@@ -101,8 +103,8 @@ impl UInt32 {
     }
 
     /// Turns this `UInt32` into its little-endian byte order representation.
-    pub fn into_bits(&self) -> Vec<Boolean> {
-        self.bits.clone()
+    pub fn into_bits(self) -> Vec<Boolean> {
+        self.bits
     }
 
     /// Converts a little-endian byte order representation of bits into a
