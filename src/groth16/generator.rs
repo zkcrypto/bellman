@@ -451,7 +451,7 @@ where
     };
 
     Ok(Parameters {
-        vk: vk,
+        vk,
         h: Arc::new(h.into_iter().map(|e| e.into_affine()).collect()),
         l: Arc::new(l.into_iter().map(|e| e.into_affine()).collect()),
 

@@ -91,6 +91,7 @@ impl<E: ScalarEngine> Add<(E::Fr, Variable)> for LinearCombination<E> {
 impl<E: ScalarEngine> Sub<(E::Fr, Variable)> for LinearCombination<E> {
     type Output = LinearCombination<E>;
 
+    #[allow(clippy::suspicious_arithmetic_impl)]
     fn sub(self, (mut coeff, var): (E::Fr, Variable)) -> LinearCombination<E> {
         coeff.negate();
 
@@ -213,7 +214,7 @@ impl Error for SynthesisError {
 
 impl fmt::Display for SynthesisError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
-        if let &SynthesisError::IoError(ref e) = self {
+        if let SynthesisError::IoError(ref e) = *self {
             write!(f, "I/O error: ")?;
             e.fmt(f)
         } else {
@@ -278,7 +279,7 @@ pub trait ConstraintSystem<E: ScalarEngine>: Sized {
     fn get_root(&mut self) -> &mut Self::Root;
 
     /// Begin a namespace for this constraint system.
-    fn namespace<'a, NR, N>(&'a mut self, name_fn: N) -> Namespace<'a, E, Self::Root>
+    fn namespace<NR, N>(&mut self, name_fn: N) -> Namespace<'_, E, Self::Root>
     where
         NR: Into<String>,
         N: FnOnce() -> NR,

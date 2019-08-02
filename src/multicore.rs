@@ -23,7 +23,7 @@ mod implementation {
         // CPUs configured.
         pub(crate) fn new_with_cpus(cpus: usize) -> Worker {
             Worker {
-                cpus: cpus,
+                cpus,
                 pool: CpuPool::new(cpus),
             }
         }

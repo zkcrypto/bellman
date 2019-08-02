@@ -14,7 +14,7 @@ pub struct MultiEq<E: Engine, CS: ConstraintSystem<E>> {
 impl<E: Engine, CS: ConstraintSystem<E>> MultiEq<E, CS> {
     pub fn new(cs: CS) -> Self {
         MultiEq {
-            cs: cs,
+            cs,
             ops: 0,
             bits_used: 0,
             lhs: LinearCombination::zero(),

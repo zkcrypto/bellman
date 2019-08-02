@@ -49,7 +49,7 @@ pub fn verify_proof<'a, E: Engine>(
             (&acc.into_affine().prepare(), &pvk.neg_gamma_g2),
             (&proof.c.prepare(), &pvk.neg_delta_g2),
         ]
-        .into_iter(),
+        .iter(),
     ))
     .unwrap()
         == pvk.alpha_g1_beta_g2)

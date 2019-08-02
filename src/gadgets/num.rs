@@ -78,7 +78,7 @@ impl<E: Engine> AllocatedNum<E> {
             E: Engine,
             CS: ConstraintSystem<E>,
         {
-            assert!(v.len() > 0);
+            assert!(!v.is_empty());
 
             // Let's keep this simple for now and just AND them all
             // manually
@@ -132,7 +132,7 @@ impl<E: Engine> AllocatedNum<E> {
                 current_run.push(a_bit.clone());
                 result.push(a_bit);
             } else {
-                if current_run.len() > 0 {
+                if !current_run.is_empty() {
                     // This is the start of a run of zeros, but we need
                     // to k-ary AND against `last_run` first.
 
@@ -183,7 +183,7 @@ impl<E: Engine> AllocatedNum<E> {
         cs.enforce(|| "unpacking constraint", |lc| lc, |lc| lc, |_| lc);
 
         // Convert into booleans, and reverse for little-endian bit order
-        Ok(result.into_iter().map(|b| Boolean::from(b)).rev().collect())
+        Ok(result.into_iter().map(Boolean::from).rev().collect())
     }
 
     /// Convert the allocated number into its little-endian representation.
@@ -208,7 +208,7 @@ impl<E: Engine> AllocatedNum<E> {
 
         cs.enforce(|| "unpacking constraint", |lc| lc, |lc| lc, |_| lc);
 
-        Ok(bits.into_iter().map(|b| Boolean::from(b)).collect())
+        Ok(bits.into_iter().map(Boolean::from).collect())
     }
 
     pub fn mul<CS>(&self, mut cs: CS, other: &Self) -> Result<Self, SynthesisError>
@@ -238,7 +238,7 @@ impl<E: Engine> AllocatedNum<E> {
         );
 
         Ok(AllocatedNum {
-            value: value,
+            value,
             variable: var,
         })
     }
@@ -270,7 +270,7 @@ impl<E: Engine> AllocatedNum<E> {
         );
 
         Ok(AllocatedNum {
-            value: value,
+            value,
             variable: var,
         })
     }

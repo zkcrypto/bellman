@@ -26,15 +26,19 @@ pub struct EvaluationDomain<E: ScalarEngine, G: Group<E>> {
     minv: E::Fr,
 }
 
-impl<E: ScalarEngine, G: Group<E>> EvaluationDomain<E, G> {
-    pub fn as_ref(&self) -> &[G] {
+impl<E: ScalarEngine, G: Group<E>> AsRef<[G]> for EvaluationDomain<E, G> {
+    fn as_ref(&self) -> &[G] {
         &self.coeffs
     }
+}
 
-    pub fn as_mut(&mut self) -> &mut [G] {
+impl<E: ScalarEngine, G: Group<E>> AsMut<[G]> for EvaluationDomain<E, G> {
+    fn as_mut(&mut self) -> &mut [G] {
         &mut self.coeffs
     }
+}
 
+impl<E: ScalarEngine, G: Group<E>> EvaluationDomain<E, G> {
     pub fn into_coeffs(self) -> Vec<G> {
         self.coeffs
     }
@@ -64,9 +68,9 @@ impl<E: ScalarEngine, G: Group<E>> EvaluationDomain<E, G> {
         coeffs.resize(m, G::group_zero());
 
         Ok(EvaluationDomain {
-            coeffs: coeffs,
-            exp: exp,
-            omega: omega,
+            coeffs,
+            exp,
+            omega,
             omegainv: omega.inverse().unwrap(),
             geninv: E::Fr::multiplicative_generator().inverse().unwrap(),
             minv: E::Fr::from_str(&format!("{}", m))
@@ -291,7 +295,7 @@ fn serial_fft<E: ScalarEngine, T: Group<E>>(a: &mut [T], omega: &E::Fr, log_n: u
 
     let mut m = 1;
     for _ in 0..log_n {
-        let w_m = omega.pow(&[(n / (2 * m)) as u64]);
+        let w_m = omega.pow(&[u64::from(n / (2 * m))]);
 
         let mut k = 0;
         while k < n {
@@ -337,12 +341,12 @@ fn parallel_fft<E: ScalarEngine, T: Group<E>>(
                 let omega_step = omega.pow(&[(j as u64) << log_new_n]);
 
                 let mut elt = E::Fr::one();
-                for i in 0..(1 << log_new_n) {
+                for (i, tmp) in tmp.iter_mut().enumerate() {
                     for s in 0..num_cpus {
                         let idx = (i + (s << log_new_n)) % (1 << log_n);
                         let mut t = a[idx];
                         t.group_mul_assign(&elt);
-                        tmp[i].group_add_assign(&t);
+                        tmp.group_add_assign(&t);
                         elt.mul_assign(&omega_step);
                     }
                     elt.mul_assign(&omega_j);

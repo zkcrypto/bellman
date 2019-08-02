@@ -60,7 +60,7 @@ impl AllocatedBit {
 
         Ok(AllocatedBit {
             variable: var,
-            value: value,
+            value,
         })
     }
 
@@ -93,7 +93,7 @@ impl AllocatedBit {
 
         Ok(AllocatedBit {
             variable: var,
-            value: value,
+            value,
         })
     }
 
@@ -302,7 +302,7 @@ pub fn field_into_boolean_vec_le<E: Engine, CS: ConstraintSystem<E>, F: PrimeFie
 ) -> Result<Vec<Boolean>, SynthesisError> {
     let v = field_into_allocated_bits_le::<E, CS, F>(cs, value)?;
 
-    Ok(v.into_iter().map(|e| Boolean::from(e)).collect())
+    Ok(v.into_iter().map(Boolean::from).collect())
 }
 
 pub fn field_into_allocated_bits_le<E: Engine, CS: ConstraintSystem<E>, F: PrimeField>(
@@ -412,24 +412,24 @@ impl Boolean {
     }
 
     pub fn get_value(&self) -> Option<bool> {
-        match self {
-            &Boolean::Constant(c) => Some(c),
-            &Boolean::Is(ref v) => v.get_value(),
-            &Boolean::Not(ref v) => v.get_value().map(|b| !b),
+        match *self {
+            Boolean::Constant(c) => Some(c),
+            Boolean::Is(ref v) => v.get_value(),
+            Boolean::Not(ref v) => v.get_value().map(|b| !b),
         }
     }
 
     pub fn lc<E: Engine>(&self, one: Variable, coeff: E::Fr) -> LinearCombination<E> {
-        match self {
-            &Boolean::Constant(c) => {
+        match *self {
+            Boolean::Constant(c) => {
                 if c {
                     LinearCombination::<E>::zero() + (coeff, one)
                 } else {
                     LinearCombination::<E>::zero()
                 }
             }
-            &Boolean::Is(ref v) => LinearCombination::<E>::zero() + (coeff, v.get_variable()),
-            &Boolean::Not(ref v) => {
+            Boolean::Is(ref v) => LinearCombination::<E>::zero() + (coeff, v.get_variable()),
+            Boolean::Not(ref v) => {
                 LinearCombination::<E>::zero() + (coeff, one) - (coeff, v.get_variable())
             }
         }
@@ -442,10 +442,10 @@ impl Boolean {
 
     /// Return a negated interpretation of this boolean.
     pub fn not(&self) -> Self {
-        match self {
-            &Boolean::Constant(c) => Boolean::Constant(!c),
-            &Boolean::Is(ref v) => Boolean::Not(v.clone()),
-            &Boolean::Not(ref v) => Boolean::Is(v.clone()),
+        match *self {
+            Boolean::Constant(c) => Boolean::Constant(!c),
+            Boolean::Is(ref v) => Boolean::Not(v.clone()),
+            Boolean::Not(ref v) => Boolean::Is(v.clone()),
         }
     }
 

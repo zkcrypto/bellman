@@ -66,7 +66,7 @@ fn proc_lc<E: Engine>(terms: &[(Variable, E::Fr)]) -> BTreeMap<OrderedVariable, 
     let mut map = BTreeMap::new();
     for &(var, coeff) in terms {
         map.entry(OrderedVariable(var))
-            .or_insert(E::Fr::zero())
+            .or_insert_with(E::Fr::zero)
             .add_assign(&coeff);
     }
 
@@ -157,7 +157,7 @@ impl<E: Engine> TestConstraintSystem<E> {
         };
 
         let powers_of_two = (0..E::Fr::NUM_BITS)
-            .map(|i| E::Fr::from_str("2").unwrap().pow(&[i as u64]))
+            .map(|i| E::Fr::from_str("2").unwrap().pow(&[u64::from(i)]))
             .collect::<Vec<_>>();
 
         let pp = |s: &mut String, lc: &LinearCombination<E>| {
@@ -286,7 +286,7 @@ impl<E: Engine> TestConstraintSystem<E> {
             }
         }
 
-        return true;
+        true
     }
 
     pub fn num_inputs(&self) -> usize {
