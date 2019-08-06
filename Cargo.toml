@@ -10,6 +10,7 @@ version = "0.1.0"
 
 [dependencies]
 bit-vec = "0.4.4"
+blake2s_simd = "0.5"
 ff = { path = "../ff" }
 futures = "0.1"
 futures-cpupool = { version = "0.1", optional = true }
@@ -21,7 +22,10 @@ rand_core = "0.5"
 byteorder = "1"
 
 [dev-dependencies]
+hex-literal = "0.1"
 rand = "0.7"
+rand_xorshift = "0.2"
+sha2 = "0.8"
 
 [features]
 groth16 = ["pairing"]

@@ -6,6 +6,7 @@ extern crate rand_core;
 
 extern crate futures;
 extern crate bit_vec;
+extern crate blake2s_simd;
 extern crate byteorder;
 
 #[cfg(feature = "multicore")]
@@ -16,8 +17,19 @@ extern crate futures_cpupool;
 extern crate num_cpus;
 
 #[cfg(test)]
+#[macro_use]
+extern crate hex_literal;
+
+#[cfg(test)]
 extern crate rand;
 
+#[cfg(test)]
+extern crate rand_xorshift;
+
+#[cfg(test)]
+extern crate sha2;
+
+pub mod gadgets;
 pub mod multicore;
 mod multiexp;
 pub mod domain;
