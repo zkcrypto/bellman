@@ -1,19 +1,10 @@
-use pairing::{
-    Engine,
-};
+use pairing::Engine;
 
-use crate::{
-    SynthesisError,
-    ConstraintSystem
-};
+use crate::{ConstraintSystem, SynthesisError};
 
-use super::boolean::{
-    Boolean
-};
+use super::boolean::Boolean;
 
-use super::uint32::{
-    UInt32
-};
+use super::uint32::UInt32;
 
 use super::multieq::MultiEq;
 
@@ -65,7 +56,7 @@ const SIGMA: [[usize; 16]; 10] = [
     [12, 5, 1, 15, 14, 13, 4, 10, 0, 7, 6, 3, 9, 2, 8, 11],
     [13, 11, 7, 14, 12, 1, 3, 9, 5, 0, 15, 4, 8, 6, 2, 10],
     [6, 15, 14, 9, 11, 3, 0, 8, 12, 2, 13, 7, 1, 4, 10, 5],
-    [10, 2, 8, 4, 7, 6, 1, 5, 15, 11, 9, 14, 3, 12, 13, 0]
+    [10, 2, 8, 4, 7, 6, 1, 5, 15, 11, 9, 14, 3, 12, 13, 0],
 ];
 
 /*
@@ -98,17 +89,30 @@ fn mixing_g<E: Engine, CS: ConstraintSystem<E>, M>(
     c: usize,
     d: usize,
     x: &UInt32,
-    y: &UInt32
+    y: &UInt32,
 ) -> Result<(), SynthesisError>
-    where M: ConstraintSystem<E, Root=MultiEq<E, CS>>
+where
+    M: ConstraintSystem<E, Root = MultiEq<E, CS>>,
 {
-    v[a] = UInt32::addmany(cs.namespace(|| "mixing step 1"), &[v[a].clone(), v[b].clone(), x.clone()])?;
+    v[a] = UInt32::addmany(
+        cs.namespace(|| "mixing step 1"),
+        &[v[a].clone(), v[b].clone(), x.clone()],
+    )?;
     v[d] = v[d].xor(cs.namespace(|| "mixing step 2"), &v[a])?.rotr(R1);
-    v[c] = UInt32::addmany(cs.namespace(|| "mixing step 3"), &[v[c].clone(), v[d].clone()])?;
+    v[c] = UInt32::addmany(
+        cs.namespace(|| "mixing step 3"),
+        &[v[c].clone(), v[d].clone()],
+    )?;
     v[b] = v[b].xor(cs.namespace(|| "mixing step 4"), &v[c])?.rotr(R2);
-    v[a] = UInt32::addmany(cs.namespace(|| "mixing step 5"), &[v[a].clone(), v[b].clone(), y.clone()])?;
+    v[a] = UInt32::addmany(
+        cs.namespace(|| "mixing step 5"),
+        &[v[a].clone(), v[b].clone(), y.clone()],
+    )?;
     v[d] = v[d].xor(cs.namespace(|| "mixing step 6"), &v[a])?.rotr(R3);
-    v[c] = UInt32::addmany(cs.namespace(|| "mixing step 7"), &[v[c].clone(), v[d].clone()])?;
+    v[c] = UInt32::addmany(
+        cs.namespace(|| "mixing step 7"),
+        &[v[c].clone(), v[d].clone()],
+    )?;
     v[b] = v[b].xor(cs.namespace(|| "mixing step 8"), &v[c])?.rotr(R4);
 
     Ok(())
@@ -162,15 +166,13 @@ fn mixing_g<E: Engine, CS: ConstraintSystem<E>, M>(
        END FUNCTION.
 */
 
-
 fn blake2s_compression<E: Engine, CS: ConstraintSystem<E>>(
     mut cs: CS,
     h: &mut [UInt32],
     m: &[UInt32],
     t: u64,
-    f: bool
-) -> Result<(), SynthesisError>
-{
+    f: bool,
+) -> Result<(), SynthesisError> {
     assert_eq!(h.len(), 8);
     assert_eq!(m.len(), 16);
 
@@ -196,10 +198,16 @@ fn blake2s_compression<E: Engine, CS: ConstraintSystem<E>>(
     assert_eq!(v.len(), 16);
 
     v[12] = v[12].xor(cs.namespace(|| "first xor"), &UInt32::constant(t as u32))?;
-    v[13] = v[13].xor(cs.namespace(|| "second xor"), &UInt32::constant((t >> 32) as u32))?;
+    v[13] = v[13].xor(
+        cs.namespace(|| "second xor"),
+        &UInt32::constant((t >> 32) as u32),
+    )?;
 
     if f {
-        v[14] = v[14].xor(cs.namespace(|| "third xor"), &UInt32::constant(u32::max_value()))?;
+        v[14] = v[14].xor(
+            cs.namespace(|| "third xor"),
+            &UInt32::constant(u32::max_value()),
+        )?;
     }
 
     {
@@ -210,20 +218,92 @@ fn blake2s_compression<E: Engine, CS: ConstraintSystem<E>>(
 
             let s = SIGMA[i % 10];
 
-            mixing_g(cs.namespace(|| "mixing invocation 1"), &mut v, 0, 4,  8, 12, &m[s[ 0]], &m[s[ 1]])?;
-            mixing_g(cs.namespace(|| "mixing invocation 2"), &mut v, 1, 5,  9, 13, &m[s[ 2]], &m[s[ 3]])?;
-            mixing_g(cs.namespace(|| "mixing invocation 3"), &mut v, 2, 6, 10, 14, &m[s[ 4]], &m[s[ 5]])?;
-            mixing_g(cs.namespace(|| "mixing invocation 4"), &mut v, 3, 7, 11, 15, &m[s[ 6]], &m[s[ 7]])?;
+            mixing_g(
+                cs.namespace(|| "mixing invocation 1"),
+                &mut v,
+                0,
+                4,
+                8,
+                12,
+                &m[s[0]],
+                &m[s[1]],
+            )?;
+            mixing_g(
+                cs.namespace(|| "mixing invocation 2"),
+                &mut v,
+                1,
+                5,
+                9,
+                13,
+                &m[s[2]],
+                &m[s[3]],
+            )?;
+            mixing_g(
+                cs.namespace(|| "mixing invocation 3"),
+                &mut v,
+                2,
+                6,
+                10,
+                14,
+                &m[s[4]],
+                &m[s[5]],
+            )?;
+            mixing_g(
+                cs.namespace(|| "mixing invocation 4"),
+                &mut v,
+                3,
+                7,
+                11,
+                15,
+                &m[s[6]],
+                &m[s[7]],
+            )?;
 
-            mixing_g(cs.namespace(|| "mixing invocation 5"), &mut v, 0, 5, 10, 15, &m[s[ 8]], &m[s[ 9]])?;
-            mixing_g(cs.namespace(|| "mixing invocation 6"), &mut v, 1, 6, 11, 12, &m[s[10]], &m[s[11]])?;
-            mixing_g(cs.namespace(|| "mixing invocation 7"), &mut v, 2, 7,  8, 13, &m[s[12]], &m[s[13]])?;
-            mixing_g(cs.namespace(|| "mixing invocation 8"), &mut v, 3, 4,  9, 14, &m[s[14]], &m[s[15]])?;
+            mixing_g(
+                cs.namespace(|| "mixing invocation 5"),
+                &mut v,
+                0,
+                5,
+                10,
+                15,
+                &m[s[8]],
+                &m[s[9]],
+            )?;
+            mixing_g(
+                cs.namespace(|| "mixing invocation 6"),
+                &mut v,
+                1,
+                6,
+                11,
+                12,
+                &m[s[10]],
+                &m[s[11]],
+            )?;
+            mixing_g(
+                cs.namespace(|| "mixing invocation 7"),
+                &mut v,
+                2,
+                7,
+                8,
+                13,
+                &m[s[12]],
+                &m[s[13]],
+            )?;
+            mixing_g(
+                cs.namespace(|| "mixing invocation 8"),
+                &mut v,
+                3,
+                4,
+                9,
+                14,
+                &m[s[14]],
+                &m[s[15]],
+            )?;
         }
     }
 
     for i in 0..8 {
-        let mut cs = cs.namespace(|| format!("h[{i}] ^ v[{i}] ^ v[{i} + 8]", i=i));
+        let mut cs = cs.namespace(|| format!("h[{i}] ^ v[{i}] ^ v[{i} + 8]", i = i));
 
         h[i] = h[i].xor(cs.namespace(|| "first xor"), &v[i])?;
         h[i] = h[i].xor(cs.namespace(|| "second xor"), &v[i + 8])?;
@@ -262,9 +342,8 @@ fn blake2s_compression<E: Engine, CS: ConstraintSystem<E>>(
 pub fn blake2s<E: Engine, CS: ConstraintSystem<E>>(
     mut cs: CS,
     input: &[Boolean],
-    personalization: &[u8]
-) -> Result<Vec<Boolean>, SynthesisError>
-{
+    personalization: &[u8],
+) -> Result<Vec<Boolean>, SynthesisError> {
     use byteorder::{ByteOrder, LittleEndian};
 
     assert_eq!(personalization.len(), 8);
@@ -279,8 +358,12 @@ pub fn blake2s<E: Engine, CS: ConstraintSystem<E>>(
     h.push(UInt32::constant(0x9B05688C));
 
     // Personalization is stored here
-    h.push(UInt32::constant(0x1F83D9AB ^ LittleEndian::read_u32(&personalization[0..4])));
-    h.push(UInt32::constant(0x5BE0CD19 ^ LittleEndian::read_u32(&personalization[4..8])));
+    h.push(UInt32::constant(
+        0x1F83D9AB ^ LittleEndian::read_u32(&personalization[0..4]),
+    ));
+    h.push(UInt32::constant(
+        0x5BE0CD19 ^ LittleEndian::read_u32(&personalization[4..8]),
+    ));
 
     let mut blocks: Vec<Vec<UInt32>> = vec![];
 
@@ -312,7 +395,13 @@ pub fn blake2s<E: Engine, CS: ConstraintSystem<E>>(
     {
         let cs = cs.namespace(|| "final block");
 
-        blake2s_compression(cs, &mut h, &blocks[blocks.len() - 1], (input.len() / 8) as u64, true)?;
+        blake2s_compression(
+            cs,
+            &mut h,
+            &blocks[blocks.len() - 1],
+            (input.len() / 8) as u64,
+            true,
+        )?;
     }
 
     Ok(h.iter().flat_map(|b| b.into_bits()).collect())
@@ -321,14 +410,14 @@ pub fn blake2s<E: Engine, CS: ConstraintSystem<E>>(
 #[cfg(test)]
 mod test {
     use blake2s_simd::Params as Blake2sParams;
-    use pairing::bls12_381::{Bls12};
+    use pairing::bls12_381::Bls12;
     use rand_core::{RngCore, SeedableRng};
     use rand_xorshift::XorShiftRng;
 
-    use crate::gadgets::boolean::{Boolean, AllocatedBit};
-    use crate::gadgets::test::TestConstraintSystem;
     use super::blake2s;
-    use crate::{ConstraintSystem};
+    use crate::gadgets::boolean::{AllocatedBit, Boolean};
+    use crate::gadgets::test::TestConstraintSystem;
+    use crate::ConstraintSystem;
 
     #[test]
     fn test_blank_hash() {
@@ -356,7 +445,13 @@ mod test {
     #[test]
     fn test_blake2s_constraints() {
         let mut cs = TestConstraintSystem::<Bls12>::new();
-        let input_bits: Vec<_> = (0..512).map(|i| AllocatedBit::alloc(cs.namespace(|| format!("input bit {}", i)), Some(true)).unwrap().into()).collect();
+        let input_bits: Vec<_> = (0..512)
+            .map(|i| {
+                AllocatedBit::alloc(cs.namespace(|| format!("input bit {}", i)), Some(true))
+                    .unwrap()
+                    .into()
+            })
+            .collect();
         blake2s(&mut cs, &input_bits, b"12345678").unwrap();
         assert!(cs.is_satisfied());
         assert_eq!(cs.num_constraints(), 21518);
@@ -369,14 +464,17 @@ mod test {
 
         let mut cs = TestConstraintSystem::<Bls12>::new();
         let mut rng = XorShiftRng::from_seed([
-            0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06, 0xbc,
-            0xe5,
+            0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06,
+            0xbc, 0xe5,
         ]);
         let input_bits: Vec<_> = (0..512)
-          .map(|_| Boolean::constant(rng.next_u32() % 2 != 0))
-          .chain((0..512)
-                        .map(|i| AllocatedBit::alloc(cs.namespace(|| format!("input bit {}", i)), Some(true)).unwrap().into()))
-          .collect();
+            .map(|_| Boolean::constant(rng.next_u32() % 2 != 0))
+            .chain((0..512).map(|i| {
+                AllocatedBit::alloc(cs.namespace(|| format!("input bit {}", i)), Some(true))
+                    .unwrap()
+                    .into()
+            }))
+            .collect();
         blake2s(&mut cs, &input_bits, b"12345678").unwrap();
         assert!(cs.is_satisfied());
         assert_eq!(cs.num_constraints(), 21518);
@@ -386,10 +484,12 @@ mod test {
     fn test_blake2s_constant_constraints() {
         let mut cs = TestConstraintSystem::<Bls12>::new();
         let mut rng = XorShiftRng::from_seed([
-            0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06, 0xbc,
-            0xe5,
+            0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06,
+            0xbc, 0xe5,
         ]);
-        let input_bits: Vec<_> = (0..512).map(|_| Boolean::constant(rng.next_u32() % 2 != 0)).collect();
+        let input_bits: Vec<_> = (0..512)
+            .map(|_| Boolean::constant(rng.next_u32() % 2 != 0))
+            .collect();
         blake2s(&mut cs, &input_bits, b"12345678").unwrap();
         assert_eq!(cs.num_constraints(), 0);
     }
@@ -397,13 +497,15 @@ mod test {
     #[test]
     fn test_blake2s() {
         let mut rng = XorShiftRng::from_seed([
-            0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06, 0xbc,
-            0xe5,
+            0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06,
+            0xbc, 0xe5,
         ]);
 
-        for input_len in (0..32).chain((32..256).filter(|a| a % 8 == 0))
-        {
-            let mut h = Blake2sParams::new().hash_length(32).personal(b"12345678").to_state();
+        for input_len in (0..32).chain((32..256).filter(|a| a % 8 == 0)) {
+            let mut h = Blake2sParams::new()
+                .hash_length(32)
+                .personal(b"12345678")
+                .to_state();
 
             let data: Vec<u8> = (0..input_len).map(|_| rng.next_u32() as u8).collect();
 
@@ -419,7 +521,11 @@ mod test {
                 for bit_i in 0..8 {
                     let cs = cs.namespace(|| format!("input bit {} {}", byte_i, bit_i));
 
-                    input_bits.push(AllocatedBit::alloc(cs, Some((input_byte >> bit_i) & 1u8 == 1u8)).unwrap().into());
+                    input_bits.push(
+                        AllocatedBit::alloc(cs, Some((input_byte >> bit_i) & 1u8 == 1u8))
+                            .unwrap()
+                            .into(),
+                    );
                 }
             }
 
@@ -427,17 +533,19 @@ mod test {
 
             assert!(cs.is_satisfied());
 
-            let mut s = hash_result.as_ref().iter()
-                                            .flat_map(|&byte| (0..8).map(move |i| (byte >> i) & 1u8 == 1u8));
+            let mut s = hash_result
+                .as_ref()
+                .iter()
+                .flat_map(|&byte| (0..8).map(move |i| (byte >> i) & 1u8 == 1u8));
 
             for b in r {
                 match b {
                     Boolean::Is(b) => {
                         assert!(s.next().unwrap() == b.get_value().unwrap());
-                    },
+                    }
                     Boolean::Not(b) => {
                         assert!(s.next().unwrap() != b.get_value().unwrap());
-                    },
+                    }
                     Boolean::Constant(b) => {
                         assert!(input_len == 0);
                         assert!(s.next().unwrap() == b);

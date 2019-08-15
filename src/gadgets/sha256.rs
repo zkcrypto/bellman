@@ -1,6 +1,6 @@
-use super::uint32::UInt32;
-use super::multieq::MultiEq;
 use super::boolean::Boolean;
+use super::multieq::MultiEq;
+use super::uint32::UInt32;
 use crate::{ConstraintSystem, SynthesisError};
 use pairing::Engine;
 
@@ -12,37 +12,35 @@ const ROUND_CONSTANTS: [u32; 64] = [
     0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
     0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
     0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
-    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
 ];
 
 const IV: [u32; 8] = [
-    0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
-    0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
+    0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
 ];
 
 pub fn sha256_block_no_padding<E, CS>(
     mut cs: CS,
-    input: &[Boolean]
+    input: &[Boolean],
 ) -> Result<Vec<Boolean>, SynthesisError>
-    where E: Engine, CS: ConstraintSystem<E>
+where
+    E: Engine,
+    CS: ConstraintSystem<E>,
 {
     assert_eq!(input.len(), 512);
 
-    Ok(sha256_compression_function(
-        &mut cs,
-        &input,
-        &get_sha256_iv()
-    )?
-    .into_iter()
-    .flat_map(|e| e.into_bits_be())
-    .collect())
+    Ok(
+        sha256_compression_function(&mut cs, &input, &get_sha256_iv())?
+            .into_iter()
+            .flat_map(|e| e.into_bits_be())
+            .collect(),
+    )
 }
 
-pub fn sha256<E, CS>(
-    mut cs: CS,
-    input: &[Boolean]
-) -> Result<Vec<Boolean>, SynthesisError>
-    where E: Engine, CS: ConstraintSystem<E>
+pub fn sha256<E, CS>(mut cs: CS, input: &[Boolean]) -> Result<Vec<Boolean>, SynthesisError>
+where
+    E: Engine,
+    CS: ConstraintSystem<E>,
 {
     assert!(input.len() % 8 == 0);
 
@@ -62,16 +60,10 @@ pub fn sha256<E, CS>(
 
     let mut cur = get_sha256_iv();
     for (i, block) in padded.chunks(512).enumerate() {
-        cur = sha256_compression_function(
-            cs.namespace(|| format!("block {}", i)),
-            block,
-            &cur
-        )?;
+        cur = sha256_compression_function(cs.namespace(|| format!("block {}", i)), block, &cur)?;
     }
 
-    Ok(cur.into_iter()
-    .flat_map(|e| e.into_bits_be())
-    .collect())
+    Ok(cur.into_iter().flat_map(|e| e.into_bits_be()).collect())
 }
 
 fn get_sha256_iv() -> Vec<UInt32> {
@@ -81,16 +73,19 @@ fn get_sha256_iv() -> Vec<UInt32> {
 fn sha256_compression_function<E, CS>(
     cs: CS,
     input: &[Boolean],
-    current_hash_value: &[UInt32]
+    current_hash_value: &[UInt32],
 ) -> Result<Vec<UInt32>, SynthesisError>
-    where E: Engine, CS: ConstraintSystem<E>
+where
+    E: Engine,
+    CS: ConstraintSystem<E>,
 {
     assert_eq!(input.len(), 512);
     assert_eq!(current_hash_value.len(), 8);
 
-    let mut w = input.chunks(32)
-                     .map(|e| UInt32::from_bits_be(e))
-                     .collect::<Vec<_>>();
+    let mut w = input
+        .chunks(32)
+        .map(|e| UInt32::from_bits_be(e))
+        .collect::<Vec<_>>();
 
     // We can save some constraints by combining some of
     // the constraints in different u32 additions
@@ -100,30 +95,18 @@ fn sha256_compression_function<E, CS>(
         let cs = &mut cs.namespace(|| format!("w extension {}", i));
 
         // s0 := (w[i-15] rightrotate 7) xor (w[i-15] rightrotate 18) xor (w[i-15] rightshift 3)
-        let mut s0 = w[i-15].rotr(7);
-        s0 = s0.xor(
-            cs.namespace(|| "first xor for s0"),
-            &w[i-15].rotr(18)
-        )?;
-        s0 = s0.xor(
-            cs.namespace(|| "second xor for s0"),
-            &w[i-15].shr(3)
-        )?;
+        let mut s0 = w[i - 15].rotr(7);
+        s0 = s0.xor(cs.namespace(|| "first xor for s0"), &w[i - 15].rotr(18))?;
+        s0 = s0.xor(cs.namespace(|| "second xor for s0"), &w[i - 15].shr(3))?;
 
         // s1 := (w[i-2] rightrotate 17) xor (w[i-2] rightrotate 19) xor (w[i-2] rightshift 10)
-        let mut s1 = w[i-2].rotr(17);
-        s1 = s1.xor(
-            cs.namespace(|| "first xor for s1"),
-            &w[i-2].rotr(19)
-        )?;
-        s1 = s1.xor(
-            cs.namespace(|| "second xor for s1"),
-            &w[i-2].shr(10)
-        )?;
+        let mut s1 = w[i - 2].rotr(17);
+        s1 = s1.xor(cs.namespace(|| "first xor for s1"), &w[i - 2].rotr(19))?;
+        s1 = s1.xor(cs.namespace(|| "second xor for s1"), &w[i - 2].shr(10))?;
 
         let tmp = UInt32::addmany(
             cs.namespace(|| "computation of w[i]"),
-            &[w[i-16].clone(), s0, w[i-7].clone(), s1]
+            &[w[i - 16].clone(), s0, w[i - 7].clone(), s1],
         )?;
 
         // w[i] := w[i-16] + s0 + w[i-7] + s1
@@ -134,29 +117,21 @@ fn sha256_compression_function<E, CS>(
 
     enum Maybe {
         Deferred(Vec<UInt32>),
-        Concrete(UInt32)
+        Concrete(UInt32),
     }
 
     impl Maybe {
-        fn compute<E, CS, M>(
-            self,
-            cs: M,
-            others: &[UInt32]
-        ) -> Result<UInt32, SynthesisError>
-            where E: Engine,
-                  CS: ConstraintSystem<E>,
-                  M: ConstraintSystem<E, Root=MultiEq<E, CS>>
+        fn compute<E, CS, M>(self, cs: M, others: &[UInt32]) -> Result<UInt32, SynthesisError>
+        where
+            E: Engine,
+            CS: ConstraintSystem<E>,
+            M: ConstraintSystem<E, Root = MultiEq<E, CS>>,
         {
             Ok(match self {
-                Maybe::Concrete(ref v) => {
-                    return Ok(v.clone())
-                },
+                Maybe::Concrete(ref v) => return Ok(v.clone()),
                 Maybe::Deferred(mut v) => {
                     v.extend(others.into_iter().cloned());
-                    UInt32::addmany(
-                        cs,
-                        &v
-                    )?
+                    UInt32::addmany(cs, &v)?
                 }
             })
         }
@@ -177,22 +152,11 @@ fn sha256_compression_function<E, CS>(
         // S1 := (e rightrotate 6) xor (e rightrotate 11) xor (e rightrotate 25)
         let new_e = e.compute(cs.namespace(|| "deferred e computation"), &[])?;
         let mut s1 = new_e.rotr(6);
-        s1 = s1.xor(
-            cs.namespace(|| "first xor for s1"),
-            &new_e.rotr(11)
-        )?;
-        s1 = s1.xor(
-            cs.namespace(|| "second xor for s1"),
-            &new_e.rotr(25)
-        )?;
+        s1 = s1.xor(cs.namespace(|| "first xor for s1"), &new_e.rotr(11))?;
+        s1 = s1.xor(cs.namespace(|| "second xor for s1"), &new_e.rotr(25))?;
 
         // ch := (e and f) xor ((not e) and g)
-        let ch = UInt32::sha256_ch(
-            cs.namespace(|| "ch"),
-            &new_e,
-            &f,
-            &g
-        )?;
+        let ch = UInt32::sha256_ch(cs.namespace(|| "ch"), &new_e, &f, &g)?;
 
         // temp1 := h + S1 + ch + k[i] + w[i]
         let temp1 = vec![
@@ -200,28 +164,17 @@ fn sha256_compression_function<E, CS>(
             s1,
             ch,
             UInt32::constant(ROUND_CONSTANTS[i]),
-            w[i].clone()
+            w[i].clone(),
         ];
 
         // S0 := (a rightrotate 2) xor (a rightrotate 13) xor (a rightrotate 22)
         let new_a = a.compute(cs.namespace(|| "deferred a computation"), &[])?;
         let mut s0 = new_a.rotr(2);
-        s0 = s0.xor(
-            cs.namespace(|| "first xor for s0"),
-            &new_a.rotr(13)
-        )?;
-        s0 = s0.xor(
-            cs.namespace(|| "second xor for s0"),
-            &new_a.rotr(22)
-        )?;
+        s0 = s0.xor(cs.namespace(|| "first xor for s0"), &new_a.rotr(13))?;
+        s0 = s0.xor(cs.namespace(|| "second xor for s0"), &new_a.rotr(22))?;
 
         // maj := (a and b) xor (a and c) xor (b and c)
-        let maj = UInt32::sha256_maj(
-            cs.namespace(|| "maj"),
-            &new_a,
-            &b,
-            &c
-        )?;
+        let maj = UInt32::sha256_maj(cs.namespace(|| "maj"), &new_a, &b, &c)?;
 
         // temp2 := S0 + maj
         let temp2 = vec![s0, maj];
@@ -244,7 +197,13 @@ fn sha256_compression_function<E, CS>(
         d = c;
         c = b;
         b = new_a;
-        a = Maybe::Deferred(temp1.iter().cloned().chain(temp2.iter().cloned()).collect::<Vec<_>>());
+        a = Maybe::Deferred(
+            temp1
+                .iter()
+                .cloned()
+                .chain(temp2.iter().cloned())
+                .collect::<Vec<_>>(),
+        );
     }
 
     /*
@@ -261,42 +220,42 @@ fn sha256_compression_function<E, CS>(
 
     let h0 = a.compute(
         cs.namespace(|| "deferred h0 computation"),
-        &[current_hash_value[0].clone()]
+        &[current_hash_value[0].clone()],
     )?;
 
     let h1 = UInt32::addmany(
         cs.namespace(|| "new h1"),
-        &[current_hash_value[1].clone(), b]
+        &[current_hash_value[1].clone(), b],
     )?;
 
     let h2 = UInt32::addmany(
         cs.namespace(|| "new h2"),
-        &[current_hash_value[2].clone(), c]
+        &[current_hash_value[2].clone(), c],
     )?;
 
     let h3 = UInt32::addmany(
         cs.namespace(|| "new h3"),
-        &[current_hash_value[3].clone(), d]
+        &[current_hash_value[3].clone(), d],
     )?;
 
     let h4 = e.compute(
         cs.namespace(|| "deferred h4 computation"),
-        &[current_hash_value[4].clone()]
+        &[current_hash_value[4].clone()],
     )?;
 
     let h5 = UInt32::addmany(
         cs.namespace(|| "new h5"),
-        &[current_hash_value[5].clone(), f]
+        &[current_hash_value[5].clone(), f],
     )?;
 
     let h6 = UInt32::addmany(
         cs.namespace(|| "new h6"),
-        &[current_hash_value[6].clone(), g]
+        &[current_hash_value[6].clone(), g],
     )?;
 
     let h7 = UInt32::addmany(
         cs.namespace(|| "new h7"),
-        &[current_hash_value[7].clone(), h]
+        &[current_hash_value[7].clone(), h],
     )?;
 
     Ok(vec![h0, h1, h2, h3, h4, h5, h6, h7])
@@ -306,8 +265,8 @@ fn sha256_compression_function<E, CS>(
 mod test {
     use super::*;
     use crate::gadgets::boolean::AllocatedBit;
-    use pairing::bls12_381::Bls12;
     use crate::gadgets::test::TestConstraintSystem;
+    use pairing::bls12_381::Bls12;
     use rand_core::{RngCore, SeedableRng};
     use rand_xorshift::XorShiftRng;
 
@@ -318,11 +277,7 @@ mod test {
         let mut cs = TestConstraintSystem::<Bls12>::new();
         let mut input_bits: Vec<_> = (0..512).map(|_| Boolean::Constant(false)).collect();
         input_bits[0] = Boolean::Constant(true);
-        let out = sha256_compression_function(
-            &mut cs,
-            &input_bits,
-            &iv
-        ).unwrap();
+        let out = sha256_compression_function(&mut cs, &input_bits, &iv).unwrap();
         let out_bits: Vec<_> = out.into_iter().flat_map(|e| e.into_bits_be()).collect();
 
         assert!(cs.is_satisfied());
@@ -343,27 +298,26 @@ mod test {
     #[test]
     fn test_full_block() {
         let mut rng = XorShiftRng::from_seed([
-            0x59, 0x62, 0xbe, 0x3d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06, 0xbc,
-            0xe5,
+            0x59, 0x62, 0xbe, 0x3d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06,
+            0xbc, 0xe5,
         ]);
 
         let iv = get_sha256_iv();
 
         let mut cs = TestConstraintSystem::<Bls12>::new();
-        let input_bits: Vec<_> = (0..512).map(|i| {
-            Boolean::from(
-                AllocatedBit::alloc(
-                    cs.namespace(|| format!("input bit {}", i)),
-                    Some(rng.next_u32() % 2 != 0)
-                ).unwrap()
-            )
-        }).collect();
+        let input_bits: Vec<_> = (0..512)
+            .map(|i| {
+                Boolean::from(
+                    AllocatedBit::alloc(
+                        cs.namespace(|| format!("input bit {}", i)),
+                        Some(rng.next_u32() % 2 != 0),
+                    )
+                    .unwrap(),
+                )
+            })
+            .collect();
 
-        sha256_compression_function(
-            cs.namespace(|| "sha256"),
-            &input_bits,
-            &iv
-        ).unwrap();
+        sha256_compression_function(cs.namespace(|| "sha256"), &input_bits, &iv).unwrap();
 
         assert!(cs.is_satisfied());
         assert_eq!(cs.num_constraints() - 512, 25840);
@@ -374,12 +328,11 @@ mod test {
         use sha2::{Digest, Sha256};
 
         let mut rng = XorShiftRng::from_seed([
-            0x59, 0x62, 0xbe, 0x3d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06, 0xbc,
-            0xe5,
+            0x59, 0x62, 0xbe, 0x3d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06,
+            0xbc, 0xe5,
         ]);
 
-        for input_len in (0..32).chain((32..256).filter(|a| a % 8 == 0))
-        {
+        for input_len in (0..32).chain((32..256).filter(|a| a % 8 == 0)) {
             let mut h = Sha256::new();
             let data: Vec<u8> = (0..input_len).map(|_| rng.next_u32() as u8).collect();
             h.input(&data);
@@ -392,7 +345,11 @@ mod test {
                 for bit_i in (0..8).rev() {
                     let cs = cs.namespace(|| format!("input bit {} {}", byte_i, bit_i));
 
-                    input_bits.push(AllocatedBit::alloc(cs, Some((input_byte >> bit_i) & 1u8 == 1u8)).unwrap().into());
+                    input_bits.push(
+                        AllocatedBit::alloc(cs, Some((input_byte >> bit_i) & 1u8 == 1u8))
+                            .unwrap()
+                            .into(),
+                    );
                 }
             }
 
@@ -400,17 +357,19 @@ mod test {
 
             assert!(cs.is_satisfied());
 
-            let mut s = hash_result.as_ref().iter()
-                                            .flat_map(|&byte| (0..8).rev().map(move |i| (byte >> i) & 1u8 == 1u8));
+            let mut s = hash_result
+                .as_ref()
+                .iter()
+                .flat_map(|&byte| (0..8).rev().map(move |i| (byte >> i) & 1u8 == 1u8));
 
             for b in r {
                 match b {
                     Boolean::Is(b) => {
                         assert!(s.next().unwrap() == b.get_value().unwrap());
-                    },
+                    }
                     Boolean::Not(b) => {
                         assert!(s.next().unwrap() != b.get_value().unwrap());
-                    },
+                    }
                     Boolean::Constant(b) => {
                         assert!(input_len == 0);
                         assert!(s.next().unwrap() == b);

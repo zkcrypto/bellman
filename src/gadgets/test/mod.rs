@@ -1,13 +1,7 @@
 use ff::{Field, PrimeField, PrimeFieldRepr};
 use pairing::Engine;
 
-use crate::{
-    LinearCombination,
-    SynthesisError,
-    ConstraintSystem,
-    Variable,
-    Index
-};
+use crate::{ConstraintSystem, Index, LinearCombination, SynthesisError, Variable};
 
 use std::collections::HashMap;
 use std::fmt::Write;
@@ -22,7 +16,7 @@ use blake2s_simd::{Params as Blake2sParams, State as Blake2sState};
 enum NamedObject {
     Constraint(usize),
     Var(Variable),
-    Namespace
+    Namespace,
 }
 
 /// Constraint system for testing purposes.
@@ -33,10 +27,10 @@ pub struct TestConstraintSystem<E: Engine> {
         LinearCombination<E>,
         LinearCombination<E>,
         LinearCombination<E>,
-        String
+        String,
     )>,
     inputs: Vec<(E::Fr, String)>,
-    aux: Vec<(E::Fr, String)>
+    aux: Vec<(E::Fr, String)>,
 }
 
 #[derive(Clone, Copy)]
@@ -48,7 +42,7 @@ impl PartialEq for OrderedVariable {
         match (self.0.get_unchecked(), other.0.get_unchecked()) {
             (Index::Input(ref a), Index::Input(ref b)) => a == b,
             (Index::Aux(ref a), Index::Aux(ref b)) => a == b,
-            _ => false
+            _ => false,
         }
     }
 }
@@ -63,20 +57,17 @@ impl Ord for OrderedVariable {
             (Index::Input(ref a), Index::Input(ref b)) => a.cmp(b),
             (Index::Aux(ref a), Index::Aux(ref b)) => a.cmp(b),
             (Index::Input(_), Index::Aux(_)) => Ordering::Less,
-            (Index::Aux(_), Index::Input(_)) => Ordering::Greater
+            (Index::Aux(_), Index::Input(_)) => Ordering::Greater,
         }
     }
 }
 
-fn proc_lc<E: Engine>(
-    terms: &[(Variable, E::Fr)],
-) -> BTreeMap<OrderedVariable, E::Fr>
-{
+fn proc_lc<E: Engine>(terms: &[(Variable, E::Fr)]) -> BTreeMap<OrderedVariable, E::Fr> {
     let mut map = BTreeMap::new();
     for &(var, coeff) in terms {
         map.entry(OrderedVariable(var))
-           .or_insert(E::Fr::zero())
-           .add_assign(&coeff);
+            .or_insert(E::Fr::zero())
+            .add_assign(&coeff);
     }
 
     // Remove terms that have a zero coefficient to normalize
@@ -94,11 +85,7 @@ fn proc_lc<E: Engine>(
     map
 }
 
-fn hash_lc<E: Engine>(
-    terms: &[(Variable, E::Fr)],
-    h: &mut Blake2sState
-)
-{
+fn hash_lc<E: Engine>(terms: &[(Variable, E::Fr)], h: &mut Blake2sState) {
     let map = proc_lc::<E>(terms);
 
     let mut buf = [0u8; 9 + 32];
@@ -110,13 +97,13 @@ fn hash_lc<E: Engine>(
             Index::Input(i) => {
                 buf[0] = b'I';
                 BigEndian::write_u64(&mut buf[1..9], i as u64);
-            },
+            }
             Index::Aux(i) => {
                 buf[0] = b'A';
                 BigEndian::write_u64(&mut buf[1..9], i as u64);
             }
         }
-        
+
         coeff.into_repr().write_be(&mut buf[9..]).unwrap();
 
         h.update(&buf);
@@ -126,15 +113,14 @@ fn hash_lc<E: Engine>(
 fn eval_lc<E: Engine>(
     terms: &[(Variable, E::Fr)],
     inputs: &[(E::Fr, String)],
-    aux: &[(E::Fr, String)]
-) -> E::Fr
-{
+    aux: &[(E::Fr, String)],
+) -> E::Fr {
     let mut acc = E::Fr::zero();
 
     for &(var, ref coeff) in terms {
         let mut tmp = match var.get_unchecked() {
             Index::Input(index) => inputs[index].0,
-            Index::Aux(index) => aux[index].0
+            Index::Aux(index) => aux[index].0,
         };
 
         tmp.mul_assign(&coeff);
@@ -147,14 +133,17 @@ fn eval_lc<E: Engine>(
 impl<E: Engine> TestConstraintSystem<E> {
     pub fn new() -> TestConstraintSystem<E> {
         let mut map = HashMap::new();
-        map.insert("ONE".into(), NamedObject::Var(TestConstraintSystem::<E>::one()));
+        map.insert(
+            "ONE".into(),
+            NamedObject::Var(TestConstraintSystem::<E>::one()),
+        );
 
         TestConstraintSystem {
             named_objects: map,
             current_namespace: vec![],
             constraints: vec![],
             inputs: vec![(E::Fr::one(), "ONE".into())],
-            aux: vec![]
+            aux: vec![],
         }
     }
 
@@ -167,9 +156,9 @@ impl<E: Engine> TestConstraintSystem<E> {
             tmp
         };
 
-        let powers_of_two = (0..E::Fr::NUM_BITS).map(|i| {
-            E::Fr::from_str("2").unwrap().pow(&[i as u64])
-        }).collect::<Vec<_>>();
+        let powers_of_two = (0..E::Fr::NUM_BITS)
+            .map(|i| E::Fr::from_str("2").unwrap().pow(&[i as u64]))
+            .collect::<Vec<_>>();
 
         let pp = |s: &mut String, lc: &LinearCombination<E>| {
             write!(s, "(").unwrap();
@@ -196,7 +185,7 @@ impl<E: Engine> TestConstraintSystem<E> {
                 match var.0.get_unchecked() {
                     Index::Input(i) => {
                         write!(s, "`{}`", &self.inputs[i].1).unwrap();
-                    },
+                    }
                     Index::Aux(i) => {
                         write!(s, "`{}`", &self.aux[i].1).unwrap();
                     }
@@ -259,45 +248,41 @@ impl<E: Engine> TestConstraintSystem<E> {
             a.mul_assign(&b);
 
             if a != c {
-                return Some(&*path)
+                return Some(&*path);
             }
         }
 
         None
     }
 
-    pub fn is_satisfied(&self) -> bool
-    {
+    pub fn is_satisfied(&self) -> bool {
         self.which_is_unsatisfied().is_none()
     }
 
-    pub fn num_constraints(&self) -> usize
-    {
+    pub fn num_constraints(&self) -> usize {
         self.constraints.len()
     }
 
-    pub fn set(&mut self, path: &str, to: E::Fr)
-    {
+    pub fn set(&mut self, path: &str, to: E::Fr) {
         match self.named_objects.get(path) {
-            Some(&NamedObject::Var(ref v)) => {
-                match v.get_unchecked() {
-                    Index::Input(index) => self.inputs[index].0 = to,
-                    Index::Aux(index) => self.aux[index].0 = to
-                }
-            }
-            Some(e) => panic!("tried to set path `{}` to value, but `{:?}` already exists there.", path, e),
-            _ => panic!("no variable exists at path: {}", path)
+            Some(&NamedObject::Var(ref v)) => match v.get_unchecked() {
+                Index::Input(index) => self.inputs[index].0 = to,
+                Index::Aux(index) => self.aux[index].0 = to,
+            },
+            Some(e) => panic!(
+                "tried to set path `{}` to value, but `{:?}` already exists there.",
+                path, e
+            ),
+            _ => panic!("no variable exists at path: {}", path),
         }
     }
 
-    pub fn verify(&self, expected: &[E::Fr]) -> bool
-    {
+    pub fn verify(&self, expected: &[E::Fr]) -> bool {
         assert_eq!(expected.len() + 1, self.inputs.len());
 
-        for (a, b) in self.inputs.iter().skip(1).zip(expected.iter())
-        {
+        for (a, b) in self.inputs.iter().skip(1).zip(expected.iter()) {
             if &a.0 != b {
-                return false
+                return false;
             }
         }
 
@@ -308,8 +293,7 @@ impl<E: Engine> TestConstraintSystem<E> {
         self.inputs.len()
     }
 
-    pub fn get_input(&mut self, index: usize, path: &str) -> E::Fr
-    {
+    pub fn get_input(&mut self, index: usize, path: &str) -> E::Fr {
         let (assignment, name) = self.inputs[index].clone();
 
         assert_eq!(path, name);
@@ -317,17 +301,17 @@ impl<E: Engine> TestConstraintSystem<E> {
         assignment
     }
 
-    pub fn get(&mut self, path: &str) -> E::Fr
-    {
+    pub fn get(&mut self, path: &str) -> E::Fr {
         match self.named_objects.get(path) {
-            Some(&NamedObject::Var(ref v)) => {
-                match v.get_unchecked() {
-                    Index::Input(index) => self.inputs[index].0,
-                    Index::Aux(index) => self.aux[index].0
-                }
-            }
-            Some(e) => panic!("tried to get value of path `{}`, but `{:?}` exists there (not a variable)", path, e),
-            _ => panic!("no variable exists at path: {}", path)
+            Some(&NamedObject::Var(ref v)) => match v.get_unchecked() {
+                Index::Input(index) => self.inputs[index].0,
+                Index::Aux(index) => self.aux[index].0,
+            },
+            Some(e) => panic!(
+                "tried to get value of path `{}`, but `{:?}` exists there (not a variable)",
+                path, e
+            ),
+            _ => panic!("no variable exists at path: {}", path),
         }
     }
 
@@ -348,8 +332,7 @@ fn compute_path(ns: &[String], this: String) -> String {
     let mut name = String::new();
 
     let mut needs_separation = false;
-    for ns in ns.iter().chain(Some(&this).into_iter())
-    {
+    for ns in ns.iter().chain(Some(&this).into_iter()) {
         if needs_separation {
             name += "/";
         }
@@ -364,12 +347,11 @@ fn compute_path(ns: &[String], this: String) -> String {
 impl<E: Engine> ConstraintSystem<E> for TestConstraintSystem<E> {
     type Root = Self;
 
-    fn alloc<F, A, AR>(
-        &mut self,
-        annotation: A,
-        f: F
-    ) -> Result<Variable, SynthesisError>
-        where F: FnOnce() -> Result<E::Fr, SynthesisError>, A: FnOnce() -> AR, AR: Into<String>
+    fn alloc<F, A, AR>(&mut self, annotation: A, f: F) -> Result<Variable, SynthesisError>
+    where
+        F: FnOnce() -> Result<E::Fr, SynthesisError>,
+        A: FnOnce() -> AR,
+        AR: Into<String>,
     {
         let index = self.aux.len();
         let path = compute_path(&self.current_namespace, annotation().into());
@@ -380,12 +362,11 @@ impl<E: Engine> ConstraintSystem<E> for TestConstraintSystem<E> {
         Ok(var)
     }
 
-    fn alloc_input<F, A, AR>(
-        &mut self,
-        annotation: A,
-        f: F
-    ) -> Result<Variable, SynthesisError>
-        where F: FnOnce() -> Result<E::Fr, SynthesisError>, A: FnOnce() -> AR, AR: Into<String>
+    fn alloc_input<F, A, AR>(&mut self, annotation: A, f: F) -> Result<Variable, SynthesisError>
+    where
+        F: FnOnce() -> Result<E::Fr, SynthesisError>,
+        A: FnOnce() -> AR,
+        AR: Into<String>,
     {
         let index = self.inputs.len();
         let path = compute_path(&self.current_namespace, annotation().into());
@@ -396,17 +377,13 @@ impl<E: Engine> ConstraintSystem<E> for TestConstraintSystem<E> {
         Ok(var)
     }
 
-    fn enforce<A, AR, LA, LB, LC>(
-        &mut self,
-        annotation: A,
-        a: LA,
-        b: LB,
-        c: LC
-    )
-        where A: FnOnce() -> AR, AR: Into<String>,
-              LA: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
-              LB: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
-              LC: FnOnce(LinearCombination<E>) -> LinearCombination<E>
+    fn enforce<A, AR, LA, LB, LC>(&mut self, annotation: A, a: LA, b: LB, c: LC)
+    where
+        A: FnOnce() -> AR,
+        AR: Into<String>,
+        LA: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
+        LB: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
+        LC: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
     {
         let path = compute_path(&self.current_namespace, annotation().into());
         let index = self.constraints.len();
@@ -420,7 +397,9 @@ impl<E: Engine> ConstraintSystem<E> for TestConstraintSystem<E> {
     }
 
     fn push_namespace<NR, N>(&mut self, name_fn: N)
-    where NR: Into<String>, N: FnOnce() -> NR
+    where
+        NR: Into<String>,
+        N: FnOnce() -> NR,
     {
         let name = name_fn().into();
         let path = compute_path(&self.current_namespace, name.clone());
@@ -428,13 +407,11 @@ impl<E: Engine> ConstraintSystem<E> for TestConstraintSystem<E> {
         self.current_namespace.push(name);
     }
 
-    fn pop_namespace(&mut self)
-    {
+    fn pop_namespace(&mut self) {
         assert!(self.current_namespace.pop().is_some());
     }
 
-    fn get_root(&mut self) -> &mut Self::Root
-    {
+    fn get_root(&mut self) -> &mut Self::Root {
         self
     }
 }
@@ -447,28 +424,26 @@ fn test_cs() {
     let mut cs = TestConstraintSystem::<Bls12>::new();
     assert!(cs.is_satisfied());
     assert_eq!(cs.num_constraints(), 0);
-    let a = cs.namespace(|| "a").alloc(|| "var", || Ok(Fr::from_str("10").unwrap())).unwrap();
-    let b = cs.namespace(|| "b").alloc(|| "var", || Ok(Fr::from_str("4").unwrap())).unwrap();
-    let c = cs.alloc(|| "product", || Ok(Fr::from_str("40").unwrap())).unwrap();
+    let a = cs
+        .namespace(|| "a")
+        .alloc(|| "var", || Ok(Fr::from_str("10").unwrap()))
+        .unwrap();
+    let b = cs
+        .namespace(|| "b")
+        .alloc(|| "var", || Ok(Fr::from_str("4").unwrap()))
+        .unwrap();
+    let c = cs
+        .alloc(|| "product", || Ok(Fr::from_str("40").unwrap()))
+        .unwrap();
 
-    cs.enforce(
-        || "mult",
-        |lc| lc + a,
-        |lc| lc + b,
-        |lc| lc + c
-    );
+    cs.enforce(|| "mult", |lc| lc + a, |lc| lc + b, |lc| lc + c);
     assert!(cs.is_satisfied());
     assert_eq!(cs.num_constraints(), 1);
 
     cs.set("a/var", Fr::from_str("4").unwrap());
 
     let one = TestConstraintSystem::<Bls12>::one();
-    cs.enforce(
-        || "eq",
-        |lc| lc + a,
-        |lc| lc + one,
-        |lc| lc + b
-    );
+    cs.enforce(|| "eq", |lc| lc + a, |lc| lc + one, |lc| lc + b);
 
     assert!(!cs.is_satisfied());
     assert!(cs.which_is_unsatisfied() == Some("mult"));

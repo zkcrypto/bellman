@@ -1,17 +1,15 @@
 pub mod test;
 
-pub mod boolean;
-pub mod multieq;
-pub mod uint32;
 pub mod blake2s;
-pub mod num;
+pub mod boolean;
 pub mod lookup;
+pub mod multieq;
 pub mod multipack;
+pub mod num;
 pub mod sha256;
+pub mod uint32;
 
-use crate::{
-    SynthesisError
-};
+use crate::SynthesisError;
 
 // TODO: This should probably be removed and we
 // should use existing helper methods on `Option`
@@ -27,7 +25,7 @@ impl<T> Assignment<T> for Option<T> {
     fn get(&self) -> Result<&T, SynthesisError> {
         match *self {
             Some(ref v) => Ok(v),
-            None => Err(SynthesisError::AssignmentMissing)
+            None => Err(SynthesisError::AssignmentMissing),
         }
     }
 }

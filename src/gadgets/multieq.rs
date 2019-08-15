@@ -1,14 +1,9 @@
 use ff::{Field, PrimeField};
 use pairing::Engine;
 
-use crate::{
-    SynthesisError,
-    ConstraintSystem,
-    LinearCombination,
-    Variable
-};
+use crate::{ConstraintSystem, LinearCombination, SynthesisError, Variable};
 
-pub struct MultiEq<E: Engine, CS: ConstraintSystem<E>>{
+pub struct MultiEq<E: Engine, CS: ConstraintSystem<E>> {
     cs: CS,
     ops: usize,
     bits_used: usize,
@@ -23,12 +18,11 @@ impl<E: Engine, CS: ConstraintSystem<E>> MultiEq<E, CS> {
             ops: 0,
             bits_used: 0,
             lhs: LinearCombination::zero(),
-            rhs: LinearCombination::zero()
+            rhs: LinearCombination::zero(),
         }
     }
 
-    fn accumulate(&mut self)
-    {
+    fn accumulate(&mut self) {
         let ops = self.ops;
         let lhs = self.lhs.clone();
         let rhs = self.rhs.clone();
@@ -36,7 +30,7 @@ impl<E: Engine, CS: ConstraintSystem<E>> MultiEq<E, CS> {
             || format!("multieq {}", ops),
             |_| lhs,
             |lc| lc + CS::one(),
-            |_| rhs
+            |_| rhs,
         );
         self.lhs = LinearCombination::zero();
         self.rhs = LinearCombination::zero();
@@ -48,9 +42,8 @@ impl<E: Engine, CS: ConstraintSystem<E>> MultiEq<E, CS> {
         &mut self,
         num_bits: usize,
         lhs: &LinearCombination<E>,
-        rhs: &LinearCombination<E>
-    )
-    {
+        rhs: &LinearCombination<E>,
+    ) {
         // Check if we will exceed the capacity
         if (E::Fr::CAPACITY as usize) <= (self.bits_used + num_bits) {
             self.accumulate();
@@ -68,67 +61,60 @@ impl<E: Engine, CS: ConstraintSystem<E>> MultiEq<E, CS> {
 impl<E: Engine, CS: ConstraintSystem<E>> Drop for MultiEq<E, CS> {
     fn drop(&mut self) {
         if self.bits_used > 0 {
-           self.accumulate();
+            self.accumulate();
         }
     }
 }
 
-impl<E: Engine, CS: ConstraintSystem<E>> ConstraintSystem<E> for MultiEq<E, CS>
-{
+impl<E: Engine, CS: ConstraintSystem<E>> ConstraintSystem<E> for MultiEq<E, CS> {
     type Root = Self;
 
     fn one() -> Variable {
         CS::one()
     }
 
-    fn alloc<F, A, AR>(
-        &mut self,
-        annotation: A,
-        f: F
-    ) -> Result<Variable, SynthesisError>
-        where F: FnOnce() -> Result<E::Fr, SynthesisError>, A: FnOnce() -> AR, AR: Into<String>
+    fn alloc<F, A, AR>(&mut self, annotation: A, f: F) -> Result<Variable, SynthesisError>
+    where
+        F: FnOnce() -> Result<E::Fr, SynthesisError>,
+        A: FnOnce() -> AR,
+        AR: Into<String>,
     {
         self.cs.alloc(annotation, f)
     }
 
-    fn alloc_input<F, A, AR>(
-        &mut self,
-        annotation: A,
-        f: F
-    ) -> Result<Variable, SynthesisError>
-        where F: FnOnce() -> Result<E::Fr, SynthesisError>, A: FnOnce() -> AR, AR: Into<String>
+    fn alloc_input<F, A, AR>(&mut self, annotation: A, f: F) -> Result<Variable, SynthesisError>
+    where
+        F: FnOnce() -> Result<E::Fr, SynthesisError>,
+        A: FnOnce() -> AR,
+        AR: Into<String>,
     {
         self.cs.alloc_input(annotation, f)
     }
 
-    fn enforce<A, AR, LA, LB, LC>(
-        &mut self,
-        annotation: A,
-        a: LA,
-        b: LB,
-        c: LC
-    )
-        where A: FnOnce() -> AR, AR: Into<String>,
-              LA: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
-              LB: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
-              LC: FnOnce(LinearCombination<E>) -> LinearCombination<E>
+    fn enforce<A, AR, LA, LB, LC>(&mut self, annotation: A, a: LA, b: LB, c: LC)
+    where
+        A: FnOnce() -> AR,
+        AR: Into<String>,
+        LA: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
+        LB: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
+        LC: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
     {
         self.cs.enforce(annotation, a, b, c)
     }
 
     fn push_namespace<NR, N>(&mut self, name_fn: N)
-        where NR: Into<String>, N: FnOnce() -> NR
+    where
+        NR: Into<String>,
+        N: FnOnce() -> NR,
     {
         self.cs.get_root().push_namespace(name_fn)
     }
 
-    fn pop_namespace(&mut self)
-    {
+    fn pop_namespace(&mut self) {
         self.cs.get_root().pop_namespace()
     }
 
-    fn get_root(&mut self) -> &mut Self::Root
-    {
+    fn get_root(&mut self) -> &mut Self::Root {
         self
     }
 }

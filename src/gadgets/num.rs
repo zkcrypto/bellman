@@ -1,78 +1,61 @@
 use ff::{BitIterator, Field, PrimeField, PrimeFieldRepr};
 use pairing::Engine;
 
-use crate::{
-    SynthesisError,
-    ConstraintSystem,
-    LinearCombination,
-    Variable
-};
+use crate::{ConstraintSystem, LinearCombination, SynthesisError, Variable};
 
-use super::{
-    Assignment
-};
+use super::Assignment;
 
-use super::boolean::{
-    self,
-    Boolean,
-    AllocatedBit
-};
+use super::boolean::{self, AllocatedBit, Boolean};
 
 pub struct AllocatedNum<E: Engine> {
     value: Option<E::Fr>,
-    variable: Variable
+    variable: Variable,
 }
 
 impl<E: Engine> Clone for AllocatedNum<E> {
     fn clone(&self) -> Self {
         AllocatedNum {
             value: self.value,
-            variable: self.variable
+            variable: self.variable,
         }
     }
 }
 
 impl<E: Engine> AllocatedNum<E> {
-    pub fn alloc<CS, F>(
-        mut cs: CS,
-        value: F,
-    ) -> Result<Self, SynthesisError>
-        where CS: ConstraintSystem<E>,
-              F: FnOnce() -> Result<E::Fr, SynthesisError>
+    pub fn alloc<CS, F>(mut cs: CS, value: F) -> Result<Self, SynthesisError>
+    where
+        CS: ConstraintSystem<E>,
+        F: FnOnce() -> Result<E::Fr, SynthesisError>,
     {
         let mut new_value = None;
-        let var = cs.alloc(|| "num", || {
-            let tmp = value()?;
+        let var = cs.alloc(
+            || "num",
+            || {
+                let tmp = value()?;
 
-            new_value = Some(tmp);
+                new_value = Some(tmp);
 
-            Ok(tmp)
-        })?;
+                Ok(tmp)
+            },
+        )?;
 
         Ok(AllocatedNum {
             value: new_value,
-            variable: var
+            variable: var,
         })
     }
 
-    pub fn inputize<CS>(
-        &self,
-        mut cs: CS
-    ) -> Result<(), SynthesisError>
-        where CS: ConstraintSystem<E>
+    pub fn inputize<CS>(&self, mut cs: CS) -> Result<(), SynthesisError>
+    where
+        CS: ConstraintSystem<E>,
     {
-        let input = cs.alloc_input(
-            || "input variable",
-            || {
-                Ok(*self.value.get()?)
-            }
-        )?;
+        let input = cs.alloc_input(|| "input variable", || Ok(*self.value.get()?))?;
 
         cs.enforce(
             || "enforce input is correct",
             |lc| lc + input,
             |lc| lc + CS::one(),
-            |lc| lc + self.variable
+            |lc| lc + self.variable,
         );
 
         Ok(())
@@ -83,18 +66,17 @@ impl<E: Engine> AllocatedNum<E> {
     /// order, requiring that the representation
     /// strictly exists "in the field" (i.e., a
     /// congruency is not allowed.)
-    pub fn into_bits_le_strict<CS>(
-        &self,
-        mut cs: CS
-    ) -> Result<Vec<Boolean>, SynthesisError>
-        where CS: ConstraintSystem<E>
+    pub fn into_bits_le_strict<CS>(&self, mut cs: CS) -> Result<Vec<Boolean>, SynthesisError>
+    where
+        CS: ConstraintSystem<E>,
     {
         pub fn kary_and<E, CS>(
             mut cs: CS,
-            v: &[AllocatedBit]
+            v: &[AllocatedBit],
         ) -> Result<AllocatedBit, SynthesisError>
-            where E: Engine,
-                  CS: ConstraintSystem<E>
+        where
+            E: Engine,
+            CS: ConstraintSystem<E>,
         {
             assert!(v.len() > 0);
 
@@ -109,7 +91,7 @@ impl<E: Engine> AllocatedNum<E> {
                     cur = Some(AllocatedBit::and(
                         cs.namespace(|| format!("and {}", i)),
                         cur.as_ref().unwrap(),
-                        v
+                        v,
                     )?);
                 }
             }
@@ -145,10 +127,7 @@ impl<E: Engine> AllocatedNum<E> {
             if b {
                 // This is part of a run of ones. Let's just
                 // allocate the boolean with the expected value.
-                let a_bit = AllocatedBit::alloc(
-                    cs.namespace(|| format!("bit {}", i)),
-                    a_bit
-                )?;
+                let a_bit = AllocatedBit::alloc(cs.namespace(|| format!("bit {}", i)), a_bit)?;
                 // ... and add it to the current run of ones.
                 current_run.push(a_bit.clone());
                 result.push(a_bit);
@@ -162,7 +141,7 @@ impl<E: Engine> AllocatedNum<E> {
                     }
                     last_run = Some(kary_and(
                         cs.namespace(|| format!("run ending at {}", i)),
-                        &current_run
+                        &current_run,
                     )?);
                     current_run.truncate(0);
                 }
@@ -175,7 +154,7 @@ impl<E: Engine> AllocatedNum<E> {
                 let a_bit = AllocatedBit::alloc_conditionally(
                     cs.namespace(|| format!("bit {}", i)),
                     a_bit,
-                    &last_run.as_ref().expect("char always starts with a one")
+                    &last_run.as_ref().expect("char always starts with a one"),
                 )?;
                 result.push(a_bit);
             }
@@ -201,12 +180,7 @@ impl<E: Engine> AllocatedNum<E> {
 
         lc = lc - self.variable;
 
-        cs.enforce(
-            || "unpacking constraint",
-            |lc| lc,
-            |lc| lc,
-            |_| lc
-        );
+        cs.enforce(|| "unpacking constraint", |lc| lc, |lc| lc, |_| lc);
 
         // Convert into booleans, and reverse for little-endian bit order
         Ok(result.into_iter().map(|b| Boolean::from(b)).rev().collect())
@@ -215,16 +189,11 @@ impl<E: Engine> AllocatedNum<E> {
     /// Convert the allocated number into its little-endian representation.
     /// Note that this does not strongly enforce that the commitment is
     /// "in the field."
-    pub fn into_bits_le<CS>(
-        &self,
-        mut cs: CS
-    ) -> Result<Vec<Boolean>, SynthesisError>
-        where CS: ConstraintSystem<E>
+    pub fn into_bits_le<CS>(&self, mut cs: CS) -> Result<Vec<Boolean>, SynthesisError>
+    where
+        CS: ConstraintSystem<E>,
     {
-        let bits = boolean::field_into_allocated_bits_le(
-            &mut cs,
-            self.value
-        )?;
+        let bits = boolean::field_into_allocated_bits_le(&mut cs, self.value)?;
 
         let mut lc = LinearCombination::zero();
         let mut coeff = E::Fr::one();
@@ -237,94 +206,91 @@ impl<E: Engine> AllocatedNum<E> {
 
         lc = lc - self.variable;
 
-        cs.enforce(
-            || "unpacking constraint",
-            |lc| lc,
-            |lc| lc,
-            |_| lc
-        );
+        cs.enforce(|| "unpacking constraint", |lc| lc, |lc| lc, |_| lc);
 
         Ok(bits.into_iter().map(|b| Boolean::from(b)).collect())
     }
 
-    pub fn mul<CS>(
-        &self,
-        mut cs: CS,
-        other: &Self
-    ) -> Result<Self, SynthesisError>
-        where CS: ConstraintSystem<E>
+    pub fn mul<CS>(&self, mut cs: CS, other: &Self) -> Result<Self, SynthesisError>
+    where
+        CS: ConstraintSystem<E>,
     {
         let mut value = None;
 
-        let var = cs.alloc(|| "product num", || {
-            let mut tmp = *self.value.get()?;
-            tmp.mul_assign(other.value.get()?);
+        let var = cs.alloc(
+            || "product num",
+            || {
+                let mut tmp = *self.value.get()?;
+                tmp.mul_assign(other.value.get()?);
 
-            value = Some(tmp);
+                value = Some(tmp);
 
-            Ok(tmp)
-        })?;
+                Ok(tmp)
+            },
+        )?;
 
         // Constrain: a * b = ab
         cs.enforce(
             || "multiplication constraint",
             |lc| lc + self.variable,
             |lc| lc + other.variable,
-            |lc| lc + var
+            |lc| lc + var,
         );
 
         Ok(AllocatedNum {
             value: value,
-            variable: var
+            variable: var,
         })
     }
 
-    pub fn square<CS>(
-        &self,
-        mut cs: CS
-    ) -> Result<Self, SynthesisError>
-        where CS: ConstraintSystem<E>
+    pub fn square<CS>(&self, mut cs: CS) -> Result<Self, SynthesisError>
+    where
+        CS: ConstraintSystem<E>,
     {
         let mut value = None;
 
-        let var = cs.alloc(|| "squared num", || {
-            let mut tmp = *self.value.get()?;
-            tmp.square();
+        let var = cs.alloc(
+            || "squared num",
+            || {
+                let mut tmp = *self.value.get()?;
+                tmp.square();
 
-            value = Some(tmp);
+                value = Some(tmp);
 
-            Ok(tmp)
-        })?;
+                Ok(tmp)
+            },
+        )?;
 
         // Constrain: a * a = aa
         cs.enforce(
             || "squaring constraint",
             |lc| lc + self.variable,
             |lc| lc + self.variable,
-            |lc| lc + var
+            |lc| lc + var,
         );
 
         Ok(AllocatedNum {
             value: value,
-            variable: var
+            variable: var,
         })
     }
 
-    pub fn assert_nonzero<CS>(
-        &self,
-        mut cs: CS
-    ) -> Result<(), SynthesisError>
-        where CS: ConstraintSystem<E>
+    pub fn assert_nonzero<CS>(&self, mut cs: CS) -> Result<(), SynthesisError>
+    where
+        CS: ConstraintSystem<E>,
     {
-        let inv = cs.alloc(|| "ephemeral inverse", || {
-            let tmp = *self.value.get()?;
-            
-            if tmp.is_zero() {
-                Err(SynthesisError::DivisionByZero)
-            } else {
-                Ok(tmp.inverse().unwrap())
-            }
-        })?;
+        let inv = cs.alloc(
+            || "ephemeral inverse",
+            || {
+                let tmp = *self.value.get()?;
+
+                if tmp.is_zero() {
+                    Err(SynthesisError::DivisionByZero)
+                } else {
+                    Ok(tmp.inverse().unwrap())
+                }
+            },
+        )?;
 
         // Constrain a * inv = 1, which is only valid
         // iff a has a multiplicative inverse, untrue
@@ -333,7 +299,7 @@ impl<E: Engine> AllocatedNum<E> {
             || "nonzero assertion constraint",
             |lc| lc + self.variable,
             |lc| lc + inv,
-            |lc| lc + CS::one()
+            |lc| lc + CS::one(),
         );
 
         Ok(())
@@ -346,44 +312,39 @@ impl<E: Engine> AllocatedNum<E> {
         mut cs: CS,
         a: &Self,
         b: &Self,
-        condition: &Boolean
+        condition: &Boolean,
     ) -> Result<(Self, Self), SynthesisError>
-        where CS: ConstraintSystem<E>
+    where
+        CS: ConstraintSystem<E>,
     {
-        let c = Self::alloc(
-            cs.namespace(|| "conditional reversal result 1"),
-            || {
-                if *condition.get_value().get()? {
-                    Ok(*b.value.get()?)
-                } else {
-                    Ok(*a.value.get()?)
-                }
+        let c = Self::alloc(cs.namespace(|| "conditional reversal result 1"), || {
+            if *condition.get_value().get()? {
+                Ok(*b.value.get()?)
+            } else {
+                Ok(*a.value.get()?)
             }
-        )?;
+        })?;
 
         cs.enforce(
             || "first conditional reversal",
             |lc| lc + a.variable - b.variable,
             |_| condition.lc(CS::one(), E::Fr::one()),
-            |lc| lc + a.variable - c.variable
+            |lc| lc + a.variable - c.variable,
         );
 
-        let d = Self::alloc(
-            cs.namespace(|| "conditional reversal result 2"),
-            || {
-                if *condition.get_value().get()? {
-                    Ok(*a.value.get()?)
-                } else {
-                    Ok(*b.value.get()?)
-                }
+        let d = Self::alloc(cs.namespace(|| "conditional reversal result 2"), || {
+            if *condition.get_value().get()? {
+                Ok(*a.value.get()?)
+            } else {
+                Ok(*b.value.get()?)
             }
-        )?;
+        })?;
 
         cs.enforce(
             || "second conditional reversal",
             |lc| lc + b.variable - a.variable,
             |_| condition.lc(CS::one(), E::Fr::one()),
-            |lc| lc + b.variable - d.variable
+            |lc| lc + b.variable - d.variable,
         );
 
         Ok((c, d))
@@ -400,14 +361,14 @@ impl<E: Engine> AllocatedNum<E> {
 
 pub struct Num<E: Engine> {
     value: Option<E::Fr>,
-    lc: LinearCombination<E>
+    lc: LinearCombination<E>,
 }
 
 impl<E: Engine> From<AllocatedNum<E>> for Num<E> {
     fn from(num: AllocatedNum<E>) -> Num<E> {
         Num {
             value: num.value,
-            lc: LinearCombination::<E>::zero() + num.variable
+            lc: LinearCombination::<E>::zero() + num.variable,
         }
     }
 }
@@ -416,7 +377,7 @@ impl<E: Engine> Num<E> {
     pub fn zero() -> Self {
         Num {
             value: Some(E::Fr::zero()),
-            lc: LinearCombination::zero()
+            lc: LinearCombination::zero(),
         }
     }
 
@@ -428,13 +389,7 @@ impl<E: Engine> Num<E> {
         LinearCombination::zero() + (coeff, &self.lc)
     }
 
-    pub fn add_bool_with_coeff(
-        self,
-        one: Variable,
-        bit: &Boolean,
-        coeff: E::Fr
-    ) -> Self
-    {
+    pub fn add_bool_with_coeff(self, one: Variable, bit: &Boolean, coeff: E::Fr) -> Self {
         let newval = match (self.value, bit.get_value()) {
             (Some(mut curval), Some(bval)) => {
                 if bval {
@@ -442,27 +397,27 @@ impl<E: Engine> Num<E> {
                 }
 
                 Some(curval)
-            },
-            _ => None
+            }
+            _ => None,
         };
 
         Num {
             value: newval,
-            lc: self.lc + &bit.lc(one, coeff)
+            lc: self.lc + &bit.lc(one, coeff),
         }
     }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::{ConstraintSystem};
+    use crate::ConstraintSystem;
     use ff::{BitIterator, Field, PrimeField};
     use pairing::bls12_381::{Bls12, Fr};
     use rand_core::SeedableRng;
     use rand_xorshift::XorShiftRng;
 
-    use crate::gadgets::test::*;
     use super::{AllocatedNum, Boolean};
+    use crate::gadgets::test::*;
 
     #[test]
     fn test_allocated_num() {
@@ -491,8 +446,10 @@ mod test {
     fn test_num_multiplication() {
         let mut cs = TestConstraintSystem::<Bls12>::new();
 
-        let n = AllocatedNum::alloc(cs.namespace(|| "a"), || Ok(Fr::from_str("12").unwrap())).unwrap();
-        let n2 = AllocatedNum::alloc(cs.namespace(|| "b"), || Ok(Fr::from_str("10").unwrap())).unwrap();
+        let n =
+            AllocatedNum::alloc(cs.namespace(|| "a"), || Ok(Fr::from_str("12").unwrap())).unwrap();
+        let n2 =
+            AllocatedNum::alloc(cs.namespace(|| "b"), || Ok(Fr::from_str("10").unwrap())).unwrap();
         let n3 = n.mul(&mut cs, &n2).unwrap();
 
         assert!(cs.is_satisfied());
@@ -505,8 +462,8 @@ mod test {
     #[test]
     fn test_num_conditional_reversal() {
         let mut rng = XorShiftRng::from_seed([
-            0x59, 0x62, 0xbe, 0x3d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06, 0xbc,
-            0xe5,
+            0x59, 0x62, 0xbe, 0x3d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06,
+            0xbc, 0xe5,
         ]);
         {
             let mut cs = TestConstraintSystem::<Bls12>::new();
@@ -573,14 +530,17 @@ mod test {
         cs.set("bit 254/boolean", Fr::one());
 
         // this makes the conditional boolean constraint fail
-        assert_eq!(cs.which_is_unsatisfied().unwrap(), "bit 254/boolean constraint");
+        assert_eq!(
+            cs.which_is_unsatisfied().unwrap(),
+            "bit 254/boolean constraint"
+        );
     }
 
     #[test]
     fn test_into_bits() {
         let mut rng = XorShiftRng::from_seed([
-            0x59, 0x62, 0xbe, 0x3d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06, 0xbc,
-            0xe5,
+            0x59, 0x62, 0xbe, 0x3d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06,
+            0xbc, 0xe5,
         ]);
 
         for i in 0..200 {
@@ -597,7 +557,10 @@ mod test {
 
             assert!(cs.is_satisfied());
 
-            for (b, a) in BitIterator::new(r.into_repr()).skip(1).zip(bits.iter().rev()) {
+            for (b, a) in BitIterator::new(r.into_repr())
+                .skip(1)
+                .zip(bits.iter().rev())
+            {
                 if let &Boolean::Is(ref a) = a {
                     assert_eq!(b, a.get_value().unwrap());
                 } else {

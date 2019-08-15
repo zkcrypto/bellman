@@ -6,36 +6,24 @@ use ff::{Field, PrimeField};
 use group::{CurveAffine, CurveProjective, Wnaf};
 use pairing::Engine;
 
-use super::{
-    Parameters,
-    VerifyingKey
-};
+use super::{Parameters, VerifyingKey};
 
-use ::{
-    SynthesisError,
-    Circuit,
-    ConstraintSystem,
-    LinearCombination,
-    Variable,
-    Index
-};
+use {Circuit, ConstraintSystem, Index, LinearCombination, SynthesisError, Variable};
 
-use ::domain::{
-    EvaluationDomain,
-    Scalar
-};
+use domain::{EvaluationDomain, Scalar};
 
-use ::multicore::{
-    Worker
-};
+use multicore::Worker;
 
 /// Generates a random common reference string for
 /// a circuit.
 pub fn generate_random_parameters<E, C, R>(
     circuit: C,
-    rng: &mut R
+    rng: &mut R,
 ) -> Result<Parameters<E>, SynthesisError>
-    where E: Engine, C: Circuit<E>, R: RngCore
+where
+    E: Engine,
+    C: Circuit<E>,
+    R: RngCore,
 {
     let g1 = E::G1::random(rng);
     let g2 = E::G2::random(rng);
@@ -45,16 +33,7 @@ pub fn generate_random_parameters<E, C, R>(
     let delta = E::Fr::random(rng);
     let tau = E::Fr::random(rng);
 
-    generate_parameters::<E, C>(
-        circuit,
-        g1,
-        g2,
-        alpha,
-        beta,
-        gamma,
-        delta,
-        tau
-    )
+    generate_parameters::<E, C>(circuit, g1, g2, alpha, beta, gamma, delta, tau)
 }
 
 /// This is our assembly structure that we'll use to synthesize the
@@ -68,18 +47,17 @@ struct KeypairAssembly<E: Engine> {
     ct_inputs: Vec<Vec<(E::Fr, usize)>>,
     at_aux: Vec<Vec<(E::Fr, usize)>>,
     bt_aux: Vec<Vec<(E::Fr, usize)>>,
-    ct_aux: Vec<Vec<(E::Fr, usize)>>
+    ct_aux: Vec<Vec<(E::Fr, usize)>>,
 }
 
 impl<E: Engine> ConstraintSystem<E> for KeypairAssembly<E> {
     type Root = Self;
 
-    fn alloc<F, A, AR>(
-        &mut self,
-        _: A,
-        _: F
-    ) -> Result<Variable, SynthesisError>
-        where F: FnOnce() -> Result<E::Fr, SynthesisError>, A: FnOnce() -> AR, AR: Into<String>
+    fn alloc<F, A, AR>(&mut self, _: A, _: F) -> Result<Variable, SynthesisError>
+    where
+        F: FnOnce() -> Result<E::Fr, SynthesisError>,
+        A: FnOnce() -> AR,
+        AR: Into<String>,
     {
         // There is no assignment, so we don't even invoke the
         // function for obtaining one.
@@ -94,12 +72,11 @@ impl<E: Engine> ConstraintSystem<E> for KeypairAssembly<E> {
         Ok(Variable(Index::Aux(index)))
     }
 
-    fn alloc_input<F, A, AR>(
-        &mut self,
-        _: A,
-        _: F
-    ) -> Result<Variable, SynthesisError>
-        where F: FnOnce() -> Result<E::Fr, SynthesisError>, A: FnOnce() -> AR, AR: Into<String>
+    fn alloc_input<F, A, AR>(&mut self, _: A, _: F) -> Result<Variable, SynthesisError>
+    where
+        F: FnOnce() -> Result<E::Fr, SynthesisError>,
+        A: FnOnce() -> AR,
+        AR: Into<String>,
     {
         // There is no assignment, so we don't even invoke the
         // function for obtaining one.
@@ -114,48 +91,59 @@ impl<E: Engine> ConstraintSystem<E> for KeypairAssembly<E> {
         Ok(Variable(Index::Input(index)))
     }
 
-    fn enforce<A, AR, LA, LB, LC>(
-        &mut self,
-        _: A,
-        a: LA,
-        b: LB,
-        c: LC
-    )
-        where A: FnOnce() -> AR, AR: Into<String>,
-              LA: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
-              LB: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
-              LC: FnOnce(LinearCombination<E>) -> LinearCombination<E>
+    fn enforce<A, AR, LA, LB, LC>(&mut self, _: A, a: LA, b: LB, c: LC)
+    where
+        A: FnOnce() -> AR,
+        AR: Into<String>,
+        LA: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
+        LB: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
+        LC: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
     {
         fn eval<E: Engine>(
             l: LinearCombination<E>,
             inputs: &mut [Vec<(E::Fr, usize)>],
             aux: &mut [Vec<(E::Fr, usize)>],
-            this_constraint: usize
-        )
-        {
+            this_constraint: usize,
+        ) {
             for (index, coeff) in l.0 {
                 match index {
                     Variable(Index::Input(id)) => inputs[id].push((coeff, this_constraint)),
-                    Variable(Index::Aux(id)) => aux[id].push((coeff, this_constraint))
+                    Variable(Index::Aux(id)) => aux[id].push((coeff, this_constraint)),
                 }
             }
         }
 
-        eval(a(LinearCombination::zero()), &mut self.at_inputs, &mut self.at_aux, self.num_constraints);
-        eval(b(LinearCombination::zero()), &mut self.bt_inputs, &mut self.bt_aux, self.num_constraints);
-        eval(c(LinearCombination::zero()), &mut self.ct_inputs, &mut self.ct_aux, self.num_constraints);
+        eval(
+            a(LinearCombination::zero()),
+            &mut self.at_inputs,
+            &mut self.at_aux,
+            self.num_constraints,
+        );
+        eval(
+            b(LinearCombination::zero()),
+            &mut self.bt_inputs,
+            &mut self.bt_aux,
+            self.num_constraints,
+        );
+        eval(
+            c(LinearCombination::zero()),
+            &mut self.ct_inputs,
+            &mut self.ct_aux,
+            self.num_constraints,
+        );
 
         self.num_constraints += 1;
     }
 
     fn push_namespace<NR, N>(&mut self, _: N)
-        where NR: Into<String>, N: FnOnce() -> NR
+    where
+        NR: Into<String>,
+        N: FnOnce() -> NR,
     {
         // Do nothing; we don't care about namespaces in this context.
     }
 
-    fn pop_namespace(&mut self)
-    {
+    fn pop_namespace(&mut self) {
         // Do nothing; we don't care about namespaces in this context.
     }
 
@@ -173,9 +161,11 @@ pub fn generate_parameters<E, C>(
     beta: E::Fr,
     gamma: E::Fr,
     delta: E::Fr,
-    tau: E::Fr
+    tau: E::Fr,
 ) -> Result<Parameters<E>, SynthesisError>
-    where E: Engine, C: Circuit<E>
+where
+    E: Engine,
+    C: Circuit<E>,
 {
     let mut assembly = KeypairAssembly {
         num_inputs: 0,
@@ -186,7 +176,7 @@ pub fn generate_parameters<E, C>(
         ct_inputs: vec![],
         at_aux: vec![],
         bt_aux: vec![],
-        ct_aux: vec![]
+        ct_aux: vec![],
     };
 
     // Allocate the "one" input variable
@@ -198,11 +188,7 @@ pub fn generate_parameters<E, C>(
     // Input constraints to ensure full density of IC query
     // x * 0 = 0
     for i in 0..assembly.num_inputs {
-        assembly.enforce(|| "",
-            |lc| lc + Variable(Index::Input(i)),
-            |lc| lc,
-            |lc| lc,
-        );
+        assembly.enforce(|| "", |lc| lc + Variable(Index::Input(i)), |lc| lc, |lc| lc);
     }
 
     // Create bases for blind evaluation of polynomials at tau
@@ -240,10 +226,9 @@ pub fn generate_parameters<E, C>(
         {
             let powers_of_tau = powers_of_tau.as_mut();
             worker.scope(powers_of_tau.len(), |scope, chunk| {
-                for (i, powers_of_tau) in powers_of_tau.chunks_mut(chunk).enumerate()
-                {
+                for (i, powers_of_tau) in powers_of_tau.chunks_mut(chunk).enumerate() {
                     scope.spawn(move || {
-                        let mut current_tau_power = tau.pow(&[(i*chunk) as u64]);
+                        let mut current_tau_power = tau.pow(&[(i * chunk) as u64]);
 
                         for p in powers_of_tau {
                             p.0 = current_tau_power;
@@ -260,14 +245,15 @@ pub fn generate_parameters<E, C>(
 
         // Compute the H query with multiple threads
         worker.scope(h.len(), |scope, chunk| {
-            for (h, p) in h.chunks_mut(chunk).zip(powers_of_tau.as_ref().chunks(chunk))
+            for (h, p) in h
+                .chunks_mut(chunk)
+                .zip(powers_of_tau.as_ref().chunks(chunk))
             {
                 let mut g1_wnaf = g1_wnaf.shared();
 
                 scope.spawn(move || {
                     // Set values of the H query to g1^{(tau^i * t(tau)) / delta}
-                    for (h, p) in h.iter_mut().zip(p.iter())
-                    {
+                    for (h, p) in h.iter_mut().zip(p.iter()) {
                         // Compute final exponent
                         let mut exp = p.0;
                         exp.mul_assign(&coeff);
@@ -320,9 +306,8 @@ pub fn generate_parameters<E, C>(
         beta: &E::Fr,
 
         // Worker
-        worker: &Worker
-    )
-    {
+        worker: &Worker,
+    ) {
         // Sanity check
         assert_eq!(a.len(), at.len());
         assert_eq!(a.len(), bt.len());
@@ -333,31 +318,32 @@ pub fn generate_parameters<E, C>(
 
         // Evaluate polynomials in multiple threads
         worker.scope(a.len(), |scope, chunk| {
-            for ((((((a, b_g1), b_g2), ext), at), bt), ct) in a.chunks_mut(chunk)
-                                                               .zip(b_g1.chunks_mut(chunk))
-                                                               .zip(b_g2.chunks_mut(chunk))
-                                                               .zip(ext.chunks_mut(chunk))
-                                                               .zip(at.chunks(chunk))
-                                                               .zip(bt.chunks(chunk))
-                                                               .zip(ct.chunks(chunk))
+            for ((((((a, b_g1), b_g2), ext), at), bt), ct) in a
+                .chunks_mut(chunk)
+                .zip(b_g1.chunks_mut(chunk))
+                .zip(b_g2.chunks_mut(chunk))
+                .zip(ext.chunks_mut(chunk))
+                .zip(at.chunks(chunk))
+                .zip(bt.chunks(chunk))
+                .zip(ct.chunks(chunk))
             {
                 let mut g1_wnaf = g1_wnaf.shared();
                 let mut g2_wnaf = g2_wnaf.shared();
 
                 scope.spawn(move || {
-                    for ((((((a, b_g1), b_g2), ext), at), bt), ct) in a.iter_mut()
-                                                                       .zip(b_g1.iter_mut())
-                                                                       .zip(b_g2.iter_mut())
-                                                                       .zip(ext.iter_mut())
-                                                                       .zip(at.iter())
-                                                                       .zip(bt.iter())
-                                                                       .zip(ct.iter())
+                    for ((((((a, b_g1), b_g2), ext), at), bt), ct) in a
+                        .iter_mut()
+                        .zip(b_g1.iter_mut())
+                        .zip(b_g2.iter_mut())
+                        .zip(ext.iter_mut())
+                        .zip(at.iter())
+                        .zip(bt.iter())
+                        .zip(ct.iter())
                     {
                         fn eval_at_tau<E: Engine>(
                             powers_of_tau: &[Scalar<E>],
-                            p: &[(E::Fr, usize)]
-                        ) -> E::Fr
-                        {
+                            p: &[(E::Fr, usize)],
+                        ) -> E::Fr {
                             let mut acc = E::Fr::zero();
 
                             for &(ref coeff, index) in p {
@@ -422,7 +408,7 @@ pub fn generate_parameters<E, C>(
         &gamma_inverse,
         &alpha,
         &beta,
-        &worker
+        &worker,
     );
 
     // Evaluate for auxiliary variables.
@@ -440,7 +426,7 @@ pub fn generate_parameters<E, C>(
         &delta_inverse,
         &alpha,
         &beta,
-        &worker
+        &worker,
     );
 
     // Don't allow any elements be unconstrained, so that
@@ -461,7 +447,7 @@ pub fn generate_parameters<E, C>(
         gamma_g2: g2.mul(gamma).into_affine(),
         delta_g1: g1.mul(delta).into_affine(),
         delta_g2: g2.mul(delta).into_affine(),
-        ic: ic.into_iter().map(|e| e.into_affine()).collect()
+        ic: ic.into_iter().map(|e| e.into_affine()).collect(),
     };
 
     Ok(Parameters {
@@ -470,8 +456,23 @@ pub fn generate_parameters<E, C>(
         l: Arc::new(l.into_iter().map(|e| e.into_affine()).collect()),
 
         // Filter points at infinity away from A/B queries
-        a: Arc::new(a.into_iter().filter(|e| !e.is_zero()).map(|e| e.into_affine()).collect()),
-        b_g1: Arc::new(b_g1.into_iter().filter(|e| !e.is_zero()).map(|e| e.into_affine()).collect()),
-        b_g2: Arc::new(b_g2.into_iter().filter(|e| !e.is_zero()).map(|e| e.into_affine()).collect())
+        a: Arc::new(
+            a.into_iter()
+                .filter(|e| !e.is_zero())
+                .map(|e| e.into_affine())
+                .collect(),
+        ),
+        b_g1: Arc::new(
+            b_g1.into_iter()
+                .filter(|e| !e.is_zero())
+                .map(|e| e.into_affine())
+                .collect(),
+        ),
+        b_g2: Arc::new(
+            b_g2.into_iter()
+                .filter(|e| !e.is_zero())
+                .map(|e| e.into_affine())
+                .collect(),
+        ),
     })
 }

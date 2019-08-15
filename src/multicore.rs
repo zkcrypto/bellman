@@ -6,15 +6,15 @@
 
 #[cfg(feature = "multicore")]
 mod implementation {
-    use num_cpus;
-    use futures::{Future, IntoFuture, Poll};
-    use futures_cpupool::{CpuPool, CpuFuture};
     use crossbeam::{self, Scope};
+    use futures::{Future, IntoFuture, Poll};
+    use futures_cpupool::{CpuFuture, CpuPool};
+    use num_cpus;
 
     #[derive(Clone)]
     pub struct Worker {
         cpus: usize,
-        pool: CpuPool
+        pool: CpuPool,
     }
 
     impl Worker {
@@ -24,7 +24,7 @@ mod implementation {
         pub(crate) fn new_with_cpus(cpus: usize) -> Worker {
             Worker {
                 cpus: cpus,
-                pool: CpuPool::new(cpus)
+                pool: CpuPool::new(cpus),
             }
         }
 
@@ -36,26 +36,22 @@ mod implementation {
             log2_floor(self.cpus)
         }
 
-        pub fn compute<F, R>(
-            &self, f: F
-        ) -> WorkerFuture<R::Item, R::Error>
-            where F: FnOnce() -> R + Send + 'static,
-                R: IntoFuture + 'static,
-                R::Future: Send + 'static,
-                R::Item: Send + 'static,
-                R::Error: Send + 'static
+        pub fn compute<F, R>(&self, f: F) -> WorkerFuture<R::Item, R::Error>
+        where
+            F: FnOnce() -> R + Send + 'static,
+            R: IntoFuture + 'static,
+            R::Future: Send + 'static,
+            R::Item: Send + 'static,
+            R::Error: Send + 'static,
         {
             WorkerFuture {
-                future: self.pool.spawn_fn(f)
+                future: self.pool.spawn_fn(f),
             }
         }
 
-        pub fn scope<'a, F, R>(
-            &self,
-            elements: usize,
-            f: F
-        ) -> R
-            where F: FnOnce(&Scope<'a>, usize) -> R
+        pub fn scope<'a, F, R>(&self, elements: usize, f: F) -> R
+        where
+            F: FnOnce(&Scope<'a>, usize) -> R,
         {
             let chunk_size = if elements < self.cpus {
                 1
@@ -63,22 +59,19 @@ mod implementation {
                 elements / self.cpus
             };
 
-            crossbeam::scope(|scope| {
-                f(scope, chunk_size)
-            })
+            crossbeam::scope(|scope| f(scope, chunk_size))
         }
     }
 
     pub struct WorkerFuture<T, E> {
-        future: CpuFuture<T, E>
+        future: CpuFuture<T, E>,
     }
 
     impl<T: Send + 'static, E: Send + 'static> Future for WorkerFuture<T, E> {
         type Item = T;
         type Error = E;
 
-        fn poll(&mut self) -> Poll<Self::Item, Self::Error>
-        {
+        fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
             self.future.poll()
         }
     }
@@ -88,7 +81,7 @@ mod implementation {
 
         let mut pow = 0;
 
-        while (1 << (pow+1)) <= num {
+        while (1 << (pow + 1)) <= num {
             pow += 1;
         }
 

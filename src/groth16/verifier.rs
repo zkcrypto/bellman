@@ -2,20 +2,11 @@ use ff::PrimeField;
 use group::{CurveAffine, CurveProjective};
 use pairing::{Engine, PairingCurveAffine};
 
-use super::{
-    Proof,
-    VerifyingKey,
-    PreparedVerifyingKey
-};
+use super::{PreparedVerifyingKey, Proof, VerifyingKey};
 
-use ::{
-    SynthesisError
-};
+use SynthesisError;
 
-pub fn prepare_verifying_key<E: Engine>(
-    vk: &VerifyingKey<E>
-) -> PreparedVerifyingKey<E>
-{
+pub fn prepare_verifying_key<E: Engine>(vk: &VerifyingKey<E>) -> PreparedVerifyingKey<E> {
     let mut gamma = vk.gamma_g2;
     gamma.negate();
     let mut delta = vk.delta_g2;
@@ -25,16 +16,15 @@ pub fn prepare_verifying_key<E: Engine>(
         alpha_g1_beta_g2: E::pairing(vk.alpha_g1, vk.beta_g2),
         neg_gamma_g2: gamma.prepare(),
         neg_delta_g2: delta.prepare(),
-        ic: vk.ic.clone()
+        ic: vk.ic.clone(),
     }
 }
 
 pub fn verify_proof<'a, E: Engine>(
     pvk: &'a PreparedVerifyingKey<E>,
     proof: &Proof<E>,
-    public_inputs: &[E::Fr]
-) -> Result<bool, SynthesisError>
-{
+    public_inputs: &[E::Fr],
+) -> Result<bool, SynthesisError> {
     if (public_inputs.len() + 1) != pvk.ic.len() {
         return Err(SynthesisError::MalformedVerifyingKey);
     }
@@ -53,11 +43,14 @@ pub fn verify_proof<'a, E: Engine>(
     // A * B + inputs * (-gamma) + C * (-delta) = alpha * beta
     // which allows us to do a single final exponentiation.
 
-    Ok(E::final_exponentiation(
-        &E::miller_loop([
+    Ok(E::final_exponentiation(&E::miller_loop(
+        [
             (&proof.a.prepare(), &proof.b.prepare()),
             (&acc.into_affine().prepare(), &pvk.neg_gamma_g2),
-            (&proof.c.prepare(), &pvk.neg_delta_g2)
-        ].into_iter())
-    ).unwrap() == pvk.alpha_g1_beta_g2)
+            (&proof.c.prepare(), &pvk.neg_delta_g2),
+        ]
+        .into_iter(),
+    ))
+    .unwrap()
+        == pvk.alpha_g1_beta_g2)
 }
