@@ -8,11 +8,11 @@ use pairing::Engine;
 
 use super::{Parameters, VerifyingKey};
 
-use {Circuit, ConstraintSystem, Index, LinearCombination, SynthesisError, Variable};
+use crate::{Circuit, ConstraintSystem, Index, LinearCombination, SynthesisError, Variable};
 
-use domain::{EvaluationDomain, Scalar};
+use crate::domain::{EvaluationDomain, Scalar};
 
-use multicore::Worker;
+use crate::multicore::Worker;
 
 /// Generates a random common reference string for
 /// a circuit.

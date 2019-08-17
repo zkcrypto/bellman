@@ -401,7 +401,7 @@ mod test {
         ]);
 
         for _ in 0..1000 {
-            let mut v = (0..32)
+            let v = (0..32)
                 .map(|_| Boolean::constant(rng.next_u32() % 2 != 0))
                 .collect::<Vec<_>>();
 
@@ -436,7 +436,7 @@ mod test {
         ]);
 
         for _ in 0..1000 {
-            let mut v = (0..32)
+            let v = (0..32)
                 .map(|_| Boolean::constant(rng.next_u32() % 2 != 0))
                 .collect::<Vec<_>>();
 

@@ -10,13 +10,13 @@ use pairing::Engine;
 
 use super::{ParameterSource, Proof};
 
-use {Circuit, ConstraintSystem, Index, LinearCombination, SynthesisError, Variable};
+use crate::{Circuit, ConstraintSystem, Index, LinearCombination, SynthesisError, Variable};
 
-use domain::{EvaluationDomain, Scalar};
+use crate::domain::{EvaluationDomain, Scalar};
 
-use multiexp::{multiexp, DensityTracker, FullDensity};
+use crate::multiexp::{multiexp, DensityTracker, FullDensity};
 
-use multicore::Worker;
+use crate::multicore::Worker;
 
 fn eval<E: Engine>(
     lc: &LinearCombination<E>,

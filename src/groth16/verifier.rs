@@ -4,7 +4,7 @@ use pairing::{Engine, PairingCurveAffine};
 
 use super::{PreparedVerifyingKey, Proof, VerifyingKey};
 
-use SynthesisError;
+use crate::SynthesisError;
 
 pub fn prepare_verifying_key<E: Engine>(vk: &VerifyingKey<E>) -> PreparedVerifyingKey<E> {
     let mut gamma = vk.gamma_g2;

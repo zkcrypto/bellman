@@ -1,10 +1,10 @@
 use group::{CurveAffine, EncodedPoint};
 use pairing::{Engine, PairingCurveAffine};
 
-use SynthesisError;
+use crate::SynthesisError;
 
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use multiexp::SourceBuilder;
+use crate::multiexp::SourceBuilder;
 use std::io::{self, Read, Write};
 use std::sync::Arc;
 
@@ -465,7 +465,7 @@ impl<'a, E: Engine> ParameterSource<E> for &'a Parameters<E> {
 #[cfg(test)]
 mod test_with_bls12_381 {
     use super::*;
-    use {Circuit, ConstraintSystem, SynthesisError};
+    use crate::{Circuit, ConstraintSystem, SynthesisError};
 
     use ff::Field;
     use pairing::bls12_381::{Bls12, Fr};
