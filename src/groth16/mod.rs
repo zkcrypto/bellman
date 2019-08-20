@@ -3,8 +3,8 @@ use pairing::{Engine, PairingCurveAffine};
 
 use crate::SynthesisError;
 
-use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use crate::multiexp::SourceBuilder;
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use std::io::{self, Read, Write};
 use std::sync::Arc;
 
