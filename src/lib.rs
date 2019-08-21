@@ -1,13 +1,3 @@
-
-
-
-
-
-
-
-
-
-
 #[cfg(feature = "multicore")]
 extern crate crossbeam;
 
@@ -20,10 +10,6 @@ extern crate hex_literal;
 
 #[cfg(test)]
 extern crate rand;
-
-
-
-
 
 pub mod domain;
 pub mod gadgets;
