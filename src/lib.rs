@@ -1,18 +1,16 @@
-extern crate ff;
-extern crate group;
-#[cfg(feature = "pairing")]
-extern crate pairing;
-extern crate rand_core;
 
-extern crate bit_vec;
-extern crate blake2s_simd;
-extern crate byteorder;
-extern crate futures;
+
+
+
+
+
+
+
+
 
 #[cfg(feature = "multicore")]
 extern crate crossbeam;
-#[cfg(feature = "multicore")]
-extern crate futures_cpupool;
+
 #[cfg(feature = "multicore")]
 extern crate num_cpus;
 
@@ -23,11 +21,9 @@ extern crate hex_literal;
 #[cfg(test)]
 extern crate rand;
 
-#[cfg(test)]
-extern crate rand_xorshift;
 
-#[cfg(test)]
-extern crate sha2;
+
+
 
 pub mod domain;
 pub mod gadgets;
@@ -230,7 +226,7 @@ impl Error for SynthesisError {
 }
 
 impl fmt::Display for SynthesisError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         if let &SynthesisError::IoError(ref e) = self {
             write!(f, "I/O error: ")?;
             e.fmt(f)
@@ -309,7 +305,7 @@ pub trait ConstraintSystem<E: ScalarEngine>: Sized {
 
 /// This is a "namespaced" constraint system which borrows a constraint system (pushing
 /// a namespace context) and, when dropped, pops out of the namespace context.
-pub struct Namespace<'a, E: ScalarEngine, CS: ConstraintSystem<E> + 'a>(&'a mut CS, PhantomData<E>);
+pub struct Namespace<'a, E: ScalarEngine, CS: ConstraintSystem<E>>(&'a mut CS, PhantomData<E>);
 
 impl<'cs, E: ScalarEngine, CS: ConstraintSystem<E>> ConstraintSystem<E> for Namespace<'cs, E, CS> {
     type Root = CS::Root;

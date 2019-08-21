@@ -16,7 +16,7 @@ const MODULUS_R: Wrapping<u32> = Wrapping(64513);
 pub struct Fr(Wrapping<u32>);
 
 impl fmt::Display for Fr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         write!(f, "{}", (self.0).0)
     }
 }
@@ -149,7 +149,7 @@ impl PartialOrd for FrRepr {
 }
 
 impl fmt::Display for FrRepr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         write!(f, "{}", (self.0)[0])
     }
 }
