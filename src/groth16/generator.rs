@@ -227,7 +227,7 @@ where
             let powers_of_tau = powers_of_tau.as_mut();
             worker.scope(powers_of_tau.len(), |scope, chunk| {
                 for (i, powers_of_tau) in powers_of_tau.chunks_mut(chunk).enumerate() {
-                    scope.spawn(move || {
+                    scope.spawn(move |_scope| {
                         let mut current_tau_power = tau.pow(&[(i * chunk) as u64]);
 
                         for p in powers_of_tau {
@@ -251,7 +251,7 @@ where
             {
                 let mut g1_wnaf = g1_wnaf.shared();
 
-                scope.spawn(move || {
+                scope.spawn(move |_scope| {
                     // Set values of the H query to g1^{(tau^i * t(tau)) / delta}
                     for (h, p) in h.iter_mut().zip(p.iter()) {
                         // Compute final exponent
@@ -330,7 +330,7 @@ where
                 let mut g1_wnaf = g1_wnaf.shared();
                 let mut g2_wnaf = g2_wnaf.shared();
 
-                scope.spawn(move || {
+                scope.spawn(move |_scope| {
                     for ((((((a, b_g1), b_g2), ext), at), bt), ct) in a
                         .iter_mut()
                         .zip(b_g1.iter_mut())

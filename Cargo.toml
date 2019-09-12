@@ -17,7 +17,7 @@ futures = "0.1"
 futures-cpupool = { version = "0.1", optional = true }
 group = { path = "../group" }
 num_cpus = { version = "1", optional = true }
-crossbeam = { version = "0.3", optional = true }
+crossbeam = { version = "0.7", optional = true }
 pairing = { path = "../pairing", optional = true }
 rand_core = "0.5"
 byteorder = "1"

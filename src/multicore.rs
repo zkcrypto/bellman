@@ -6,7 +6,7 @@
 
 #[cfg(feature = "multicore")]
 mod implementation {
-    use crossbeam::{self, Scope};
+    use crossbeam::{self, thread::Scope};
     use futures::{Future, IntoFuture, Poll};
     use futures_cpupool::{CpuFuture, CpuPool};
     use num_cpus;
@@ -59,7 +59,9 @@ mod implementation {
                 elements / self.cpus
             };
 
+            // TODO: Handle case where threads fail
             crossbeam::scope(|scope| f(scope, chunk_size))
+                .expect("Threads aren't allowed to fail yet")
         }
     }
 
@@ -152,8 +154,8 @@ mod implementation {
     pub struct DummyScope;
 
     impl DummyScope {
-        pub fn spawn<F: FnOnce()>(&self, f: F) {
-            f();
+        pub fn spawn<F: FnOnce(&DummyScope)>(&self, f: F) {
+            f(self);
         }
     }
 }
