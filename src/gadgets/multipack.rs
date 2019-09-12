@@ -2,14 +2,13 @@ use super::boolean::Boolean;
 use super::num::Num;
 use super::Assignment;
 use crate::{ConstraintSystem, SynthesisError};
-use ff::{Field, PrimeField};
-use pairing::Engine;
+use ff::{Field, PrimeField, ScalarEngine};
 
 /// Takes a sequence of booleans and exposes them as compact
 /// public inputs
 pub fn pack_into_inputs<E, CS>(mut cs: CS, bits: &[Boolean]) -> Result<(), SynthesisError>
 where
-    E: Engine,
+    E: ScalarEngine,
     CS: ConstraintSystem<E>,
 {
     for (i, bits) in bits.chunks(E::Fr::CAPACITY as usize).enumerate() {
@@ -49,7 +48,7 @@ pub fn bytes_to_bits_le(bytes: &[u8]) -> Vec<bool> {
         .collect()
 }
 
-pub fn compute_multipacking<E: Engine>(bits: &[bool]) -> Vec<E::Fr> {
+pub fn compute_multipacking<E: ScalarEngine>(bits: &[bool]) -> Vec<E::Fr> {
     let mut result = vec![];
 
     for bits in bits.chunks(E::Fr::CAPACITY as usize) {

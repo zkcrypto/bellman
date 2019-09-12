@@ -1,5 +1,4 @@
-use ff::{Field, PrimeField, PrimeFieldRepr};
-use pairing::Engine;
+use ff::{Field, PrimeField, PrimeFieldRepr, ScalarEngine};
 
 use crate::{ConstraintSystem, Index, LinearCombination, SynthesisError, Variable};
 
@@ -20,7 +19,7 @@ enum NamedObject {
 }
 
 /// Constraint system for testing purposes.
-pub struct TestConstraintSystem<E: Engine> {
+pub struct TestConstraintSystem<E: ScalarEngine> {
     named_objects: HashMap<String, NamedObject>,
     current_namespace: Vec<String>,
     constraints: Vec<(
@@ -62,7 +61,7 @@ impl Ord for OrderedVariable {
     }
 }
 
-fn proc_lc<E: Engine>(terms: &[(Variable, E::Fr)]) -> BTreeMap<OrderedVariable, E::Fr> {
+fn proc_lc<E: ScalarEngine>(terms: &[(Variable, E::Fr)]) -> BTreeMap<OrderedVariable, E::Fr> {
     let mut map = BTreeMap::new();
     for &(var, coeff) in terms {
         map.entry(OrderedVariable(var))
@@ -85,7 +84,7 @@ fn proc_lc<E: Engine>(terms: &[(Variable, E::Fr)]) -> BTreeMap<OrderedVariable, 
     map
 }
 
-fn hash_lc<E: Engine>(terms: &[(Variable, E::Fr)], h: &mut Blake2sState) {
+fn hash_lc<E: ScalarEngine>(terms: &[(Variable, E::Fr)], h: &mut Blake2sState) {
     let map = proc_lc::<E>(terms);
 
     let mut buf = [0u8; 9 + 32];
@@ -110,7 +109,7 @@ fn hash_lc<E: Engine>(terms: &[(Variable, E::Fr)], h: &mut Blake2sState) {
     }
 }
 
-fn eval_lc<E: Engine>(
+fn eval_lc<E: ScalarEngine>(
     terms: &[(Variable, E::Fr)],
     inputs: &[(E::Fr, String)],
     aux: &[(E::Fr, String)],
@@ -130,7 +129,7 @@ fn eval_lc<E: Engine>(
     acc
 }
 
-impl<E: Engine> TestConstraintSystem<E> {
+impl<E: ScalarEngine> TestConstraintSystem<E> {
     pub fn new() -> TestConstraintSystem<E> {
         let mut map = HashMap::new();
         map.insert(
@@ -344,7 +343,7 @@ fn compute_path(ns: &[String], this: String) -> String {
     name
 }
 
-impl<E: Engine> ConstraintSystem<E> for TestConstraintSystem<E> {
+impl<E: ScalarEngine> ConstraintSystem<E> for TestConstraintSystem<E> {
     type Root = Self;
 
     fn alloc<F, A, AR>(&mut self, annotation: A, f: F) -> Result<Variable, SynthesisError>

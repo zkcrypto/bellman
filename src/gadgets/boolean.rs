@@ -1,5 +1,4 @@
-use ff::{BitIterator, Field, PrimeField};
-use pairing::Engine;
+use ff::{BitIterator, Field, PrimeField, ScalarEngine};
 
 use crate::{ConstraintSystem, LinearCombination, SynthesisError, Variable};
 
@@ -31,7 +30,7 @@ impl AllocatedBit {
         must_be_false: &AllocatedBit,
     ) -> Result<Self, SynthesisError>
     where
-        E: Engine,
+        E: ScalarEngine,
         CS: ConstraintSystem<E>,
     {
         let var = cs.alloc(
@@ -68,7 +67,7 @@ impl AllocatedBit {
     /// boolean value.
     pub fn alloc<E, CS>(mut cs: CS, value: Option<bool>) -> Result<Self, SynthesisError>
     where
-        E: Engine,
+        E: ScalarEngine,
         CS: ConstraintSystem<E>,
     {
         let var = cs.alloc(
@@ -101,7 +100,7 @@ impl AllocatedBit {
     /// an `AllocatedBit`.
     pub fn xor<E, CS>(mut cs: CS, a: &Self, b: &Self) -> Result<Self, SynthesisError>
     where
-        E: Engine,
+        E: ScalarEngine,
         CS: ConstraintSystem<E>,
     {
         let mut result_value = None;
@@ -153,7 +152,7 @@ impl AllocatedBit {
     /// an `AllocatedBit`.
     pub fn and<E, CS>(mut cs: CS, a: &Self, b: &Self) -> Result<Self, SynthesisError>
     where
-        E: Engine,
+        E: ScalarEngine,
         CS: ConstraintSystem<E>,
     {
         let mut result_value = None;
@@ -191,7 +190,7 @@ impl AllocatedBit {
     /// Calculates `a AND (NOT b)`.
     pub fn and_not<E, CS>(mut cs: CS, a: &Self, b: &Self) -> Result<Self, SynthesisError>
     where
-        E: Engine,
+        E: ScalarEngine,
         CS: ConstraintSystem<E>,
     {
         let mut result_value = None;
@@ -229,7 +228,7 @@ impl AllocatedBit {
     /// Calculates `(NOT a) AND (NOT b)`.
     pub fn nor<E, CS>(mut cs: CS, a: &Self, b: &Self) -> Result<Self, SynthesisError>
     where
-        E: Engine,
+        E: ScalarEngine,
         CS: ConstraintSystem<E>,
     {
         let mut result_value = None;
@@ -265,7 +264,7 @@ impl AllocatedBit {
     }
 }
 
-pub fn u64_into_boolean_vec_le<E: Engine, CS: ConstraintSystem<E>>(
+pub fn u64_into_boolean_vec_le<E: ScalarEngine, CS: ConstraintSystem<E>>(
     mut cs: CS,
     value: Option<u64>,
 ) -> Result<Vec<Boolean>, SynthesisError> {
@@ -296,7 +295,7 @@ pub fn u64_into_boolean_vec_le<E: Engine, CS: ConstraintSystem<E>>(
     Ok(bits)
 }
 
-pub fn field_into_boolean_vec_le<E: Engine, CS: ConstraintSystem<E>, F: PrimeField>(
+pub fn field_into_boolean_vec_le<E: ScalarEngine, CS: ConstraintSystem<E>, F: PrimeField>(
     cs: CS,
     value: Option<F>,
 ) -> Result<Vec<Boolean>, SynthesisError> {
@@ -305,7 +304,7 @@ pub fn field_into_boolean_vec_le<E: Engine, CS: ConstraintSystem<E>, F: PrimeFie
     Ok(v.into_iter().map(Boolean::from).collect())
 }
 
-pub fn field_into_allocated_bits_le<E: Engine, CS: ConstraintSystem<E>, F: PrimeField>(
+pub fn field_into_allocated_bits_le<E: ScalarEngine, CS: ConstraintSystem<E>, F: PrimeField>(
     mut cs: CS,
     value: Option<F>,
 ) -> Result<Vec<AllocatedBit>, SynthesisError> {
@@ -367,7 +366,7 @@ impl Boolean {
 
     pub fn enforce_equal<E, CS>(mut cs: CS, a: &Self, b: &Self) -> Result<(), SynthesisError>
     where
-        E: Engine,
+        E: ScalarEngine,
         CS: ConstraintSystem<E>,
     {
         match (a, b) {
@@ -419,7 +418,7 @@ impl Boolean {
         }
     }
 
-    pub fn lc<E: Engine>(&self, one: Variable, coeff: E::Fr) -> LinearCombination<E> {
+    pub fn lc<E: ScalarEngine>(&self, one: Variable, coeff: E::Fr) -> LinearCombination<E> {
         match *self {
             Boolean::Constant(c) => {
                 if c {
@@ -452,7 +451,7 @@ impl Boolean {
     /// Perform XOR over two boolean operands
     pub fn xor<'a, E, CS>(cs: CS, a: &'a Self, b: &'a Self) -> Result<Self, SynthesisError>
     where
-        E: Engine,
+        E: ScalarEngine,
         CS: ConstraintSystem<E>,
     {
         match (a, b) {
@@ -474,7 +473,7 @@ impl Boolean {
     /// Perform AND over two boolean operands
     pub fn and<'a, E, CS>(cs: CS, a: &'a Self, b: &'a Self) -> Result<Self, SynthesisError>
     where
-        E: Engine,
+        E: ScalarEngine,
         CS: ConstraintSystem<E>,
     {
         match (a, b) {
@@ -508,7 +507,7 @@ impl Boolean {
         c: &'a Self,
     ) -> Result<Self, SynthesisError>
     where
-        E: Engine,
+        E: ScalarEngine,
         CS: ConstraintSystem<E>,
     {
         let ch_value = match (a.get_value(), b.get_value(), c.get_value()) {
@@ -615,7 +614,7 @@ impl Boolean {
         c: &'a Self,
     ) -> Result<Self, SynthesisError>
     where
-        E: Engine,
+        E: ScalarEngine,
         CS: ConstraintSystem<E>,
     {
         let maj_value = match (a.get_value(), b.get_value(), c.get_value()) {

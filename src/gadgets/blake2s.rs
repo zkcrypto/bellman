@@ -1,12 +1,6 @@
-use pairing::Engine;
-
+use super::{boolean::Boolean, multieq::MultiEq, uint32::UInt32};
 use crate::{ConstraintSystem, SynthesisError};
-
-use super::boolean::Boolean;
-
-use super::uint32::UInt32;
-
-use super::multieq::MultiEq;
+use ff::ScalarEngine;
 
 /*
 2.1.  Parameters
@@ -81,7 +75,7 @@ const SIGMA: [[usize; 16]; 10] = [
        END FUNCTION.
 */
 
-fn mixing_g<E: Engine, CS: ConstraintSystem<E>, M>(
+fn mixing_g<E: ScalarEngine, CS: ConstraintSystem<E>, M>(
     mut cs: M,
     v: &mut [UInt32],
     a: usize,
@@ -166,7 +160,7 @@ where
        END FUNCTION.
 */
 
-fn blake2s_compression<E: Engine, CS: ConstraintSystem<E>>(
+fn blake2s_compression<E: ScalarEngine, CS: ConstraintSystem<E>>(
     mut cs: CS,
     h: &mut [UInt32],
     m: &[UInt32],
@@ -339,7 +333,7 @@ fn blake2s_compression<E: Engine, CS: ConstraintSystem<E>>(
         END FUNCTION.
 */
 
-pub fn blake2s<E: Engine, CS: ConstraintSystem<E>>(
+pub fn blake2s<E: ScalarEngine, CS: ConstraintSystem<E>>(
     mut cs: CS,
     input: &[Boolean],
     personalization: &[u8],

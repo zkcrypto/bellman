@@ -2,7 +2,7 @@ use super::boolean::Boolean;
 use super::multieq::MultiEq;
 use super::uint32::UInt32;
 use crate::{ConstraintSystem, SynthesisError};
-use pairing::Engine;
+use ff::ScalarEngine;
 
 #[allow(clippy::unreadable_literal)]
 const ROUND_CONSTANTS: [u32; 64] = [
@@ -26,7 +26,7 @@ pub fn sha256_block_no_padding<E, CS>(
     input: &[Boolean],
 ) -> Result<Vec<Boolean>, SynthesisError>
 where
-    E: Engine,
+    E: ScalarEngine,
     CS: ConstraintSystem<E>,
 {
     assert_eq!(input.len(), 512);
@@ -41,7 +41,7 @@ where
 
 pub fn sha256<E, CS>(mut cs: CS, input: &[Boolean]) -> Result<Vec<Boolean>, SynthesisError>
 where
-    E: Engine,
+    E: ScalarEngine,
     CS: ConstraintSystem<E>,
 {
     assert!(input.len() % 8 == 0);
@@ -78,7 +78,7 @@ fn sha256_compression_function<E, CS>(
     current_hash_value: &[UInt32],
 ) -> Result<Vec<UInt32>, SynthesisError>
 where
-    E: Engine,
+    E: ScalarEngine,
     CS: ConstraintSystem<E>,
 {
     assert_eq!(input.len(), 512);
@@ -125,7 +125,7 @@ where
     impl Maybe {
         fn compute<E, CS, M>(self, cs: M, others: &[UInt32]) -> Result<UInt32, SynthesisError>
         where
-            E: Engine,
+            E: ScalarEngine,
             CS: ConstraintSystem<E>,
             M: ConstraintSystem<E, Root = MultiEq<E, CS>>,
         {

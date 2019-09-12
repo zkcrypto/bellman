@@ -1,5 +1,4 @@
-use ff::Field;
-use pairing::Engine;
+use ff::{Field, ScalarEngine};
 
 use super::boolean::Boolean;
 use super::num::{AllocatedNum, Num};
@@ -7,7 +6,7 @@ use super::*;
 use crate::ConstraintSystem;
 
 // Synthesize the constants for each base pattern.
-fn synth<'a, E: Engine, I>(window_size: usize, constants: I, assignment: &mut [E::Fr])
+fn synth<'a, E: ScalarEngine, I>(window_size: usize, constants: I, assignment: &mut [E::Fr])
 where
     I: IntoIterator<Item = &'a E::Fr>,
 {
@@ -28,7 +27,7 @@ where
 
 /// Performs a 3-bit window table lookup. `bits` is in
 /// little-endian order.
-pub fn lookup3_xy<E: Engine, CS>(
+pub fn lookup3_xy<E: ScalarEngine, CS>(
     mut cs: CS,
     bits: &[Boolean],
     coords: &[(E::Fr, E::Fr)],
@@ -118,7 +117,7 @@ where
 
 /// Performs a 3-bit window table lookup, where
 /// one of the bits is a sign bit.
-pub fn lookup3_xy_with_conditional_negation<E: Engine, CS>(
+pub fn lookup3_xy_with_conditional_negation<E: ScalarEngine, CS>(
     mut cs: CS,
     bits: &[Boolean],
     coords: &[(E::Fr, E::Fr)],

@@ -1,5 +1,4 @@
-use ff::{Field, PrimeField};
-use pairing::Engine;
+use ff::{Field, PrimeField, ScalarEngine};
 
 use crate::{ConstraintSystem, LinearCombination, SynthesisError};
 
@@ -41,7 +40,7 @@ impl UInt32 {
     /// Allocate a `UInt32` in the constraint system
     pub fn alloc<E, CS>(mut cs: CS, value: Option<u32>) -> Result<Self, SynthesisError>
     where
-        E: Engine,
+        E: ScalarEngine,
         CS: ConstraintSystem<E>,
     {
         let values = match value {
@@ -194,7 +193,7 @@ impl UInt32 {
         circuit_fn: U,
     ) -> Result<Self, SynthesisError>
     where
-        E: Engine,
+        E: ScalarEngine,
         CS: ConstraintSystem<E>,
         F: Fn(u32, u32, u32) -> u32,
         U: Fn(&mut CS, usize, &Boolean, &Boolean, &Boolean) -> Result<Boolean, SynthesisError>,
@@ -223,7 +222,7 @@ impl UInt32 {
     /// during SHA256.
     pub fn sha256_maj<E, CS>(cs: CS, a: &Self, b: &Self, c: &Self) -> Result<Self, SynthesisError>
     where
-        E: Engine,
+        E: ScalarEngine,
         CS: ConstraintSystem<E>,
     {
         Self::triop(
@@ -240,7 +239,7 @@ impl UInt32 {
     /// during SHA256.
     pub fn sha256_ch<E, CS>(cs: CS, a: &Self, b: &Self, c: &Self) -> Result<Self, SynthesisError>
     where
-        E: Engine,
+        E: ScalarEngine,
         CS: ConstraintSystem<E>,
     {
         Self::triop(
@@ -256,7 +255,7 @@ impl UInt32 {
     /// XOR this `UInt32` with another `UInt32`
     pub fn xor<E, CS>(&self, mut cs: CS, other: &Self) -> Result<Self, SynthesisError>
     where
-        E: Engine,
+        E: ScalarEngine,
         CS: ConstraintSystem<E>,
     {
         let new_value = match (self.value, other.value) {
@@ -281,7 +280,7 @@ impl UInt32 {
     /// Perform modular addition of several `UInt32` objects.
     pub fn addmany<E, CS, M>(mut cs: M, operands: &[Self]) -> Result<Self, SynthesisError>
     where
-        E: Engine,
+        E: ScalarEngine,
         CS: ConstraintSystem<E>,
         M: ConstraintSystem<E, Root = MultiEq<E, CS>>,
     {

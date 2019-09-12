@@ -1,5 +1,4 @@
-use ff::{BitIterator, Field, PrimeField, PrimeFieldRepr};
-use pairing::Engine;
+use ff::{BitIterator, Field, PrimeField, PrimeFieldRepr, ScalarEngine};
 
 use crate::{ConstraintSystem, LinearCombination, SynthesisError, Variable};
 
@@ -7,12 +6,12 @@ use super::Assignment;
 
 use super::boolean::{self, AllocatedBit, Boolean};
 
-pub struct AllocatedNum<E: Engine> {
+pub struct AllocatedNum<E: ScalarEngine> {
     value: Option<E::Fr>,
     variable: Variable,
 }
 
-impl<E: Engine> Clone for AllocatedNum<E> {
+impl<E: ScalarEngine> Clone for AllocatedNum<E> {
     fn clone(&self) -> Self {
         AllocatedNum {
             value: self.value,
@@ -21,7 +20,7 @@ impl<E: Engine> Clone for AllocatedNum<E> {
     }
 }
 
-impl<E: Engine> AllocatedNum<E> {
+impl<E: ScalarEngine> AllocatedNum<E> {
     pub fn alloc<CS, F>(mut cs: CS, value: F) -> Result<Self, SynthesisError>
     where
         CS: ConstraintSystem<E>,
@@ -75,7 +74,7 @@ impl<E: Engine> AllocatedNum<E> {
             v: &[AllocatedBit],
         ) -> Result<AllocatedBit, SynthesisError>
         where
-            E: Engine,
+            E: ScalarEngine,
             CS: ConstraintSystem<E>,
         {
             assert!(!v.is_empty());
@@ -359,12 +358,12 @@ impl<E: Engine> AllocatedNum<E> {
     }
 }
 
-pub struct Num<E: Engine> {
+pub struct Num<E: ScalarEngine> {
     value: Option<E::Fr>,
     lc: LinearCombination<E>,
 }
 
-impl<E: Engine> From<AllocatedNum<E>> for Num<E> {
+impl<E: ScalarEngine> From<AllocatedNum<E>> for Num<E> {
     fn from(num: AllocatedNum<E>) -> Num<E> {
         Num {
             value: num.value,
@@ -373,7 +372,7 @@ impl<E: Engine> From<AllocatedNum<E>> for Num<E> {
     }
 }
 
-impl<E: Engine> Num<E> {
+impl<E: ScalarEngine> Num<E> {
     pub fn zero() -> Self {
         Num {
             value: Some(E::Fr::zero()),
