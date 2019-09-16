@@ -1797,6 +1797,8 @@ mod test {
             AllocatedBit::alloc_conditionally(cs.namespace(|| "alloc_conditionally"), value, &b1)
                 .unwrap();
 
+            assert!(cs.is_satisfied());
+
             //check with true bit
             let mut cs = TestConstraintSystem::<Bls12>::new();
             let b2 = AllocatedBit::alloc(&mut cs, Some(true)).unwrap();
