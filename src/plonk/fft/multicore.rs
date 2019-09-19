@@ -31,11 +31,16 @@ impl Worker {
     }
 
     pub fn new() -> Worker {
-        Self::new_with_cpus(num_cpus::get())
+        let cpus = num_cpus::get();
+        Self::new_with_cpus(cpus)
     }
 
     pub fn log_num_cpus(&self) -> u32 {
         log2_floor(self.cpus)
+    }
+
+    pub fn num_cpus(&self) -> u32 {
+        self.cpus as u32
     }
 
     pub fn compute<F, R>(
@@ -130,4 +135,6 @@ fn test_log2_floor() {
     assert_eq!(log2_floor(6), 2);
     assert_eq!(log2_floor(7), 2);
     assert_eq!(log2_floor(8), 3);
+    assert_eq!(log2_floor(15), 3);
+    assert_eq!(log2_floor(16), 4);
 }

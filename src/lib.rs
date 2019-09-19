@@ -19,6 +19,8 @@ pub mod gm17;
 #[cfg(feature = "sonic")]
 pub mod sonic;
 
+pub mod plonk;
+
 mod group;
 mod source;
 mod multiexp;
