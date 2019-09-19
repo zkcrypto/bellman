@@ -88,11 +88,9 @@ impl<E: Engine> ConstraintSystem<E> for GeneratorAssembly<E> {
     // allocate a constant
     fn enforce_constant(&mut self, variable: Variable, constant: E::Fr) -> Result<(), SynthesisError>
     {
-        // let idx = self.new_empty_gate();
         let gate = Gate::<E>::new_enforce_constant_gate(variable, Some(constant), self.dummy_variable());
         self.aux_gates.push(gate);
         self.n += 1;
-        // self.set_gate(gate, idx);
 
         Ok(())
     }
@@ -204,18 +202,8 @@ impl<E: Engine> GeneratorAssembly<E> {
     fn dummy_variable(&self) -> Variable {
         <Self as ConstraintSystem<E>>::ZERO
         // <Self as ConstraintSystem<E>>::ONE
-        // Variable(Index::Input(1))
         // Variable(Index::Aux(0))
     }
-
-    // pub(crate) fn show_permutations(&self) {
-    //     for (i, gate) in self.input_gates.iter().enumerate() {
-    //         println!("For input gate = {}, a = {:?}, b = {:?}, c = {:?}", i, gate.a_wire(), gate.b_wire(), gate.c_wire());
-    //     }
-    //     for (i, gate) in self.aux_gates.iter().enumerate() {
-    //         println!("For aux gate = {}, a = {:?}, b = {:?}, c = {:?}", i, gate.a_wire(), gate.b_wire(), gate.c_wire());
-    //     }
-    // }
 
     pub(crate) fn make_wire_assingments(&self) -> (Vec<E::Fr>, Vec<E::Fr>, Vec<E::Fr>) {
         // create a vector of gate assingments
@@ -503,38 +491,6 @@ impl<E: Engine> GeneratorAssembly<E> {
         let worker = Worker::new();
 
         let (w_l, w_r, w_o) = self.make_wire_assingments();
-        // {
-        //     let w_l = Polynomial::<E::Fr, Values>::from_values(w_l.clone())?;
-        //     let w_r = Polynomial::<E::Fr, Values>::from_values(w_r.clone())?;
-        //     let w_o = Polynomial::<E::Fr, Values>::from_values(w_o.clone())?;
-
-        //     let (q_l, q_r, q_o, q_m, q_c) = self.make_circuit_description_polynomials(&worker)?;
-
-        //     for i in 0..w_l.as_ref().len() {
-        //         let mut tmp = q_c.as_ref()[i];
-
-        //         let mut l = q_l.as_ref()[i];
-        //         l.mul_assign(&w_l.as_ref()[i]);
-
-        //         let mut r = q_r.as_ref()[i];
-        //         r.mul_assign(&w_r.as_ref()[i]);
-
-        //         let mut o = q_o.as_ref()[i];
-        //         o.mul_assign(&w_o.as_ref()[i]);
-
-        //         let mut m = q_m.as_ref()[i];
-        //         m.mul_assign(&w_l.as_ref()[i]);
-        //         m.mul_assign(&w_r.as_ref()[i]);
-
-        //         tmp.add_assign(&l);
-        //         tmp.add_assign(&r);
-        //         tmp.add_assign(&o);
-        //         tmp.add_assign(&m);
-
-        //         assert!(tmp.is_zero());
-        //     }
-        // }
-
 
         let w_l = Polynomial::<E::Fr, Values>::from_values_unpadded(w_l)?;
         let w_r = Polynomial::<E::Fr, Values>::from_values_unpadded(w_r)?;
@@ -583,9 +539,11 @@ impl<E: Engine> GeneratorAssembly<E> {
             w_l_contribution.mul_assign(&worker, &w_o_contribution);
             drop(w_o_contribution);
 
-            // let grand_product = w_l_contribution.calculate_grand_product(&worker)?;
+            let grand_product = w_l_contribution.calculate_grand_product(&worker)?;
 
-            let grand_product = w_l_contribution.calculate_grand_product_serial()?;
+            // let grand_product_serial = w_l_contribution.calculate_grand_product_serial()?;
+
+            // assert!(grand_product == grand_product_serial);
 
             drop(w_l_contribution);
 
@@ -623,9 +581,11 @@ impl<E: Engine> GeneratorAssembly<E> {
             w_l_contribution.mul_assign(&worker, &w_o_contribution);
             drop(w_o_contribution);
 
-            // let grand_product = w_l_contribution.calculate_grand_product(&worker)?;
+            let grand_product = w_l_contribution.calculate_grand_product(&worker)?;
 
-            let grand_product = w_l_contribution.calculate_grand_product_serial()?;
+            // let grand_product_serial = w_l_contribution.calculate_grand_product_serial()?;
+
+            // assert!(grand_product == grand_product_serial);
 
             drop(w_l_contribution);
 
@@ -642,8 +602,6 @@ impl<E: Engine> GeneratorAssembly<E> {
 
         let z_1 = z_1.ifft(&worker);
         let z_2 = z_2.ifft(&worker);
-
-        // let omega_inv = z_1.omega.inverse().expect("inverse must exist");
 
         let mut z_1_shifted = z_1.clone();
         z_1_shifted.distribute_powers(&worker, z_1.omega);
@@ -673,14 +631,7 @@ impl<E: Engine> GeneratorAssembly<E> {
 
         let alpha = E::Fr::from_str("3").unwrap();
 
-        // let mut vanishing_poly_inverse = self.calculate_inverse_vanishing_polynomial_in_a_coset_for_domain_size(&worker, q_c_lde.size(), required_domain_size.next_power_of_two())?;
         let mut vanishing_poly_inverse = self.calculate_inverse_vanishing_polynomial_in_a_coset(&worker, q_c_lde.size(), required_domain_size.next_power_of_two())?;
-
-        // let mut z = q_l_lde.omega;
-        // z.mul_assign(&E::Fr::multiplicative_generator());
-        // let z = E::Fr::multiplicative_generator();
-        // let mut z = z.pow([required_domain_size.next_power_of_two() as u64]);
-        // z.sub_assign(&E::Fr::one());
 
         let mut t_1 = {
             let mut t_1 = q_c_lde;
@@ -1211,29 +1162,6 @@ impl<E: Engine> GeneratorAssembly<E> {
 
         numerator
     }
-
-    // fn calculate_inverse_vanishing_polynomial_in_a_coset_for_domain_size(&self, worker: &Worker, poly_size:usize, size: usize) -> Result<Polynomial::<E::Fr, Values>, SynthesisError> {
-    //     assert!(poly_size.is_power_of_two());
-    //     assert!(size.is_power_of_two());
-    //     // polynomial has a form X^size - 1
-
-    //     let multiplicative_generator = E::Fr::multiplicative_generator();
-    //     let shift = multiplicative_generator.pow([size as u64]);
-        
-    //     let mut denominator = Polynomial::<E::Fr, Values>::from_values(vec![shift; poly_size])?;
-
-    //     // elements are h^size - 1, (hg)^size - 1, (hg^2)^size - 1, ...
-
-    //     denominator.distribute_powers(&worker, denominator.omega.pow([size as u64]));
-
-    //     let mut negative_one = E::Fr::one();
-    //     negative_one.negate();
-    //     denominator.add_constant(&worker, &negative_one);
-
-    //     denominator.batch_inversion(&worker)?;
-
-    //     Ok(denominator)
-    // }
 
     fn calculate_lagrange_poly(&self, worker: &Worker, poly_size:usize, poly_number: usize) -> Result<Polynomial::<E::Fr, Coefficients>, SynthesisError> {
         assert!(poly_size.is_power_of_two());

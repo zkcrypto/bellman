@@ -83,6 +83,10 @@ impl Worker {
         &self,
         elements: usize
     ) -> usize {
+        if elements < self.cpus {
+            return elements;
+        }
+
         let chunk_size = self.get_chunk_size(elements);
 
         let mut n = elements / chunk_size;
