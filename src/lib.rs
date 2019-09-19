@@ -8,10 +8,16 @@ extern crate num_cpus;
 extern crate paired;
 extern crate rand;
 
+#[cfg(feature = "gpu")]
+extern crate itertools;
+#[cfg(feature = "gpu")]
+extern crate ocl;
+
+mod gpu;
 pub mod domain;
 pub mod groth16;
 pub mod multicore;
-mod multiexp;
+pub mod multiexp;
 
 use ff::Field;
 use paired::Engine;

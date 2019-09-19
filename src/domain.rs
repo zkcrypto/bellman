@@ -17,6 +17,8 @@ use super::SynthesisError;
 
 use super::multicore::Worker;
 
+use gpu;
+
 pub struct EvaluationDomain<E: Engine, G: Group<E>> {
     coeffs: Vec<G>,
     exp: u32,
@@ -53,7 +55,6 @@ impl<E: Engine, G: Group<E>> EvaluationDomain<E, G> {
                 return Err(SynthesisError::PolynomialDegreeTooLarge);
             }
         }
-
         // Compute omega, the 2^exp primitive root of unity
         let mut omega = E::Fr::root_of_unity();
         for _ in exp..E::Fr::S {
@@ -76,26 +77,30 @@ impl<E: Engine, G: Group<E>> EvaluationDomain<E, G> {
         })
     }
 
-    pub fn fft(&mut self, worker: &Worker) {
-        best_fft(&mut self.coeffs, worker, &self.omega, self.exp);
+    pub fn fft(&mut self, worker: &Worker, kern: &mut Option<gpu::FFTKernel<E::Fr>>) {
+        best_fft(kern, &mut self.coeffs, worker, &self.omega, self.exp);
     }
 
-    pub fn ifft(&mut self, worker: &Worker) {
-        best_fft(&mut self.coeffs, worker, &self.omegainv, self.exp);
+    pub fn ifft(&mut self, worker: &Worker, kern: &mut Option<gpu::FFTKernel<E::Fr>>) {
+        best_fft(kern, &mut self.coeffs, worker, &self.omegainv, self.exp);
 
-        worker
-            .scope(self.coeffs.len(), |scope, chunk| {
-                let minv = self.minv;
+        if let Some(ref mut k) = kern {
+            gpu_mul_by_field(k, &mut self.coeffs, &self.minv, self.exp).expect("GPU Multiply By Field failed!");
+        } else {
+            worker
+                .scope(self.coeffs.len(), |scope, chunk| {
+                    let minv = self.minv;
 
-                for v in self.coeffs.chunks_mut(chunk) {
-                    scope.spawn(move |_| {
-                        for v in v {
-                            v.group_mul_assign(&minv);
-                        }
-                    });
-                }
-            })
-            .unwrap();
+                    for v in self.coeffs.chunks_mut(chunk) {
+                        scope.spawn(move |_| {
+                            for v in v {
+                                v.group_mul_assign(&minv);
+                            }
+                        });
+                    }
+                })
+                .unwrap();
+        }
     }
 
     pub fn distribute_powers(&mut self, worker: &Worker, g: E::Fr) {
@@ -114,15 +119,15 @@ impl<E: Engine, G: Group<E>> EvaluationDomain<E, G> {
             .unwrap();
     }
 
-    pub fn coset_fft(&mut self, worker: &Worker) {
+    pub fn coset_fft(&mut self, worker: &Worker, kern: &mut Option<gpu::FFTKernel<E::Fr>>) {
         self.distribute_powers(worker, E::Fr::multiplicative_generator());
-        self.fft(worker);
+        self.fft(worker, kern);
     }
 
-    pub fn icoset_fft(&mut self, worker: &Worker) {
+    pub fn icoset_fft(&mut self, worker: &Worker, kern: &mut Option<gpu::FFTKernel<E::Fr>>) {
         let geninv = self.geninv;
 
-        self.ifft(worker);
+        self.ifft(worker, kern);
         self.distribute_powers(worker, geninv);
     }
 
@@ -138,23 +143,27 @@ impl<E: Engine, G: Group<E>> EvaluationDomain<E, G> {
     /// The target polynomial is the zero polynomial in our
     /// evaluation domain, so we must perform division over
     /// a coset.
-    pub fn divide_by_z_on_coset(&mut self, worker: &Worker) {
+    pub fn divide_by_z_on_coset(&mut self, worker: &Worker, kern: &mut Option<gpu::FFTKernel<E::Fr>>) {
         let i = self
             .z(&E::Fr::multiplicative_generator())
             .inverse()
             .unwrap();
 
-        worker
-            .scope(self.coeffs.len(), |scope, chunk| {
-                for v in self.coeffs.chunks_mut(chunk) {
-                    scope.spawn(move |_| {
-                        for v in v {
-                            v.group_mul_assign(&i);
-                        }
-                    });
-                }
-            })
-            .unwrap();
+        if let Some(ref mut k) = kern {
+            gpu_mul_by_field(k, &mut self.coeffs, &i, self.exp).expect("GPU Multiply By Field failed!");
+        } else {
+            worker
+                .scope(self.coeffs.len(), |scope, chunk| {
+                    for v in self.coeffs.chunks_mut(chunk) {
+                        scope.spawn(move |_| {
+                            for v in v {
+                                v.group_mul_assign(&i);
+                            }
+                        });
+                    }
+                })
+                .unwrap();
+        }
     }
 
     /// Perform O(n) multiplication of two polynomials in the domain.
@@ -269,17 +278,44 @@ impl<E: Engine> Group<E> for Scalar<E> {
     }
 }
 
-fn best_fft<E: Engine, T: Group<E>>(a: &mut [T], worker: &Worker, omega: &E::Fr, log_n: u32) {
-    let log_cpus = worker.log_num_cpus();
-
-    if log_n <= log_cpus {
-        serial_fft(a, omega, log_n);
+fn best_fft<E: Engine, T: Group<E>>(kern: &mut Option<gpu::FFTKernel<E::Fr>>, a: &mut [T], worker: &Worker, omega: &E::Fr, log_n: u32)
+{
+    if let Some(ref mut k) = kern {
+        gpu_fft(k, a, omega, log_n).expect("GPU FFT failed!");
     } else {
-        parallel_fft(a, worker, omega, log_n, log_cpus);
+        let log_cpus = worker.log_num_cpus();
+        if log_n <= log_cpus {
+            serial_fft(a, omega, log_n);
+        } else {
+            parallel_fft(a, worker, omega, log_n, log_cpus);
+        }
     }
 }
 
-fn serial_fft<E: Engine, T: Group<E>>(a: &mut [T], omega: &E::Fr, log_n: u32) {
+pub fn gpu_fft<E: Engine, T: Group<E>>(kern: &mut gpu::FFTKernel<E::Fr>, a: &mut [T], omega: &E::Fr, log_n: u32) -> gpu::GPUResult<()>
+{
+    // EvaluationDomain module is supposed to work only with E::Fr elements, and not CurveProjective
+    // points. The Bellman authors have implemented an unnecessarry abstraction called Group<E>
+    // which is implemented for both PrimeField and CurveProjective elements. As nowhere in the code
+    // is the CurveProjective version used, T and E::Fr are guaranteed to be equal and thus have same
+    // size.
+    // For compatibility/performance reasons we decided to transmute the array to the desired type
+    // as it seems safe and needs less modifications in the current structure of Bellman library.
+    let a = unsafe { std::mem::transmute::<&mut [T], &mut [E::Fr]>(a) };
+    kern.radix_fft(a, omega, log_n)?;
+    Ok(())
+}
+
+pub fn gpu_mul_by_field<E: Engine, T: Group<E>>(kern: &mut gpu::FFTKernel<E::Fr>, a: &mut [T], minv: &E::Fr, log_n: u32) -> gpu::GPUResult<()>
+{
+    // The reason of unsafety is same as above.
+    let a = unsafe { std::mem::transmute::<&mut [T], &mut [E::Fr]>(a) };
+    kern.mul_by_field(a, minv, log_n)?;
+    Ok(())
+}
+
+pub fn serial_fft<E: Engine, T: Group<E>>(a: &mut [T], omega: &E::Fr, log_n: u32)
+{
     fn bitreverse(mut n: u32, l: u32) -> u32 {
         let mut r = 0;
         for _ in 0..l {
@@ -420,10 +456,10 @@ fn polynomial_arith() {
                 let mut a = EvaluationDomain::from_coeffs(a).unwrap();
                 let mut b = EvaluationDomain::from_coeffs(b).unwrap();
 
-                a.fft(&worker);
-                b.fft(&worker);
+                a.fft(&worker, &mut None);
+                b.fft(&worker, &mut None);
                 a.mul_assign(&worker, &b);
-                a.ifft(&worker);
+                a.ifft(&worker, &mut None);
 
                 for (naive, fft) in naive.iter().zip(a.coeffs.iter()) {
                     assert!(naive == fft);
@@ -454,17 +490,17 @@ fn fft_composition() {
             }
 
             let mut domain = EvaluationDomain::from_coeffs(v.clone()).unwrap();
-            domain.ifft(&worker);
-            domain.fft(&worker);
+            domain.ifft(&worker, &mut None);
+            domain.fft(&worker, &mut None);
             assert!(v == domain.coeffs);
-            domain.fft(&worker);
-            domain.ifft(&worker);
+            domain.fft(&worker, &mut None);
+            domain.ifft(&worker, &mut None);
             assert!(v == domain.coeffs);
-            domain.icoset_fft(&worker);
-            domain.coset_fft(&worker);
+            domain.icoset_fft(&worker, &mut None);
+            domain.coset_fft(&worker, &mut None);
             assert!(v == domain.coeffs);
-            domain.coset_fft(&worker);
-            domain.icoset_fft(&worker);
+            domain.coset_fft(&worker, &mut None);
+            domain.icoset_fft(&worker, &mut None);
             assert!(v == domain.coeffs);
         }
     }
@@ -506,4 +542,58 @@ fn parallel_fft_consistency() {
     let rng = &mut rand::thread_rng();
 
     test_consistency::<Bls12, _>(rng);
+}
+
+pub fn gpu_fft_supported<E>(log_d: u32) -> gpu::GPUResult<gpu::FFTKernel<E::Fr>> where E: Engine {
+    let log_test_size : u32 = std::cmp::min(E::Fr::S - 1, 10);
+    let test_size : u32 = 1 << log_test_size;
+    use rand::Rand;
+    let rng = &mut rand::thread_rng();
+    let mut kern = gpu::FFTKernel::create(test_size)?;
+    let elems = (0..test_size).map(|_| Scalar::<E>(E::Fr::rand(rng))).collect::<Vec<_>>();
+    let mut v1 = EvaluationDomain::from_coeffs(elems.clone()).unwrap();
+    let mut v2 = EvaluationDomain::from_coeffs(elems.clone()).unwrap();
+    gpu_fft(&mut kern, &mut v1.coeffs, &v1.omega, log_test_size)?;
+    serial_fft(&mut v2.coeffs, &v2.omega, log_test_size);
+    if v1.coeffs == v2.coeffs { Ok(gpu::FFTKernel::create(1 << log_d)?) }
+    else { Err(gpu::GPUError {msg: "GPU FFT not supported!".to_string()} ) }
+}
+
+#[cfg(feature = "gpu")]
+#[test]
+pub fn gpu_fft_consistency() {
+    use std::time::Instant;
+    use paired::bls12_381::{Bls12, Fr};
+    use rand::{Rand};
+    let rng = &mut rand::thread_rng();
+
+    let worker = Worker::new();
+    let log_cpus = worker.log_num_cpus();
+    let mut kern = gpu::FFTKernel::create(1 << 24).expect("Cannot initialize kernel!");
+
+    for log_d in 1..25 {
+        let d = 1 << log_d;
+
+        let elems = (0..d).map(|_| Scalar::<Bls12>(Fr::rand(rng))).collect::<Vec<_>>();
+        let mut v1 = EvaluationDomain::from_coeffs(elems.clone()).unwrap();
+        let mut v2 = EvaluationDomain::from_coeffs(elems.clone()).unwrap();
+
+        println!("Testing FFT for {} elements...", d);
+
+        let mut now = Instant::now();
+        gpu_fft(&mut kern, &mut v1.coeffs, &v1.omega, log_d).expect("GPU FFT failed!");
+        let gpu_dur = now.elapsed().as_secs() * 1000 as u64 + now.elapsed().subsec_millis() as u64;
+        println!("GPU took {}ms.", gpu_dur);
+
+        now = Instant::now();
+        if log_d <= log_cpus { serial_fft(&mut v2.coeffs, &v2.omega, log_d); }
+        else { parallel_fft(&mut v2.coeffs, &worker, &v2.omega, log_d, log_cpus); }
+        let cpu_dur = now.elapsed().as_secs() * 1000 as u64 + now.elapsed().subsec_millis() as u64;
+        println!("CPU ({} cores) took {}ms.", 1 << log_cpus, cpu_dur);
+
+        println!("Speedup: x{}", cpu_dur as f32 / gpu_dur as f32);
+
+        assert!(v1.coeffs == v2.coeffs);
+        println!("============================");
+    }
 }
