@@ -25,7 +25,3 @@ itertools = { version = "0.8.0", optional = true }
 [features]
 default = []
 gpu = ["ocl", "itertools"]
-
-[package.metadata.release]
-pre-release-commit-message = "chore(release): release {{version}}"
-pro-release-commit-message = "chore(release): starting development cycle for {{next_version}}"
