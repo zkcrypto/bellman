@@ -18,6 +18,11 @@ pub trait FriProof<F: PrimeField, I: IOP<F>> {
     fn get_final_coefficients(&self) -> &[F];
 }
 
+pub trait FriPrecomputations<F: PrimeField> {
+    fn omegas_inv_ref(&self) -> &[F];
+    fn domain_size(&self) -> usize;
+}
+
 pub trait FriIop<F: PrimeField> {
     const DEGREE: usize;
 
@@ -25,11 +30,13 @@ pub trait FriIop<F: PrimeField> {
     type ProofPrototype: FriProofPrototype<F, Self::IopType>;
     type Proof: FriProof<F, Self::IopType>;
     type Prng: Prng<F, Input = < < <Self::IopType as IOP<F>>::Tree as IopTree<F> >::TreeHasher as IopTreeHasher<F>>::HashOutput >;
+    type Precomputations: FriPrecomputations<F>;
 
     fn proof_from_lde(
         lde_values: &Polynomial<F, Values>, 
         lde_factor: usize,
         output_coeffs_at_degree_plus_one: usize,
+        precomputations: &Self::Precomputations,
         worker: &Worker,
         prng: &mut Self::Prng
     ) -> Result<Self::ProofPrototype, SynthesisError>;

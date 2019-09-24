@@ -6,6 +6,7 @@ use crate::SynthesisError;
 use crate::plonk::commitments::transparent::iop::*;
 use crate::plonk::commitments::transparent::utils::log2_floor;
 use crate::plonk::commitments::transcript::Prng;
+use crate::plonk::commitments::transparent::precomputations::*;
 use super::super::*;
 
 pub struct NaiveFriIop<F: PrimeField, I: IOP<F>, P: Prng<F>> {
@@ -21,11 +22,13 @@ impl<F: PrimeField, I: IOP<F>, P: Prng<F, Input = < < I::Tree as IopTree<F> >::T
     type ProofPrototype = FRIProofPrototype<F, I>;
     type Proof = FRIProof<F, I>;
     type Prng = P;
+    type Precomputations = PrecomputedInvOmegas<F>;
 
     fn proof_from_lde(
         lde_values: &Polynomial<F, Values>, 
         lde_factor: usize,
         output_coeffs_at_degree_plus_one: usize,
+        precomputations: &Self::Precomputations,
         worker: &Worker,
         prng: &mut Self::Prng
     ) -> Result<Self::ProofPrototype, SynthesisError> {
@@ -33,6 +36,7 @@ impl<F: PrimeField, I: IOP<F>, P: Prng<F, Input = < < I::Tree as IopTree<F> >::T
             lde_values, 
             lde_factor,
             output_coeffs_at_degree_plus_one,
+            precomputations,
             worker,
             prng
         )
@@ -213,34 +217,19 @@ impl<F: PrimeField, I: IOP<F>, P: Prng<F, Input = < < I::Tree as IopTree<F> >::T
         lde_values: &Polynomial<F, Values>, 
         lde_factor: usize,
         output_coeffs_at_degree_plus_one: usize,
+        precomputations: &PrecomputedInvOmegas<F>,
         worker: &Worker,
         prng: &mut P
     ) -> Result<FRIProofPrototype<F, I>, SynthesisError> {
         let l0_commitment: I = I::create(lde_values.as_ref());
         let initial_domain_size = lde_values.size();
-        let precomputation_size = initial_domain_size/2;
+
+        assert_eq!(precomputations.domain_size(), initial_domain_size);
+
         let mut two = F::one();
         two.double();
         let two_inv = two.inverse().expect("should exist");
-
-        let mut omegas_inv = vec![F::zero(); precomputation_size];
-        let omega_inv = lde_values.omegainv;
-
-        // for interpolations we will need factors 2*w^k in denominator,
-        // so we just make powers
-
-        worker.scope(omegas_inv.len(), |scope, chunk| {
-            for (i, v) in omegas_inv.chunks_mut(chunk).enumerate() {
-                scope.spawn(move |_| {
-                    let mut u = omega_inv.pow(&[(i * chunk) as u64]);
-                    for v in v.iter_mut() {
-                        *v = u;
-                        u.mul_assign(&omega_inv);
-                    }
-                });
-            }
-        });
-
+        
         assert!(output_coeffs_at_degree_plus_one.is_power_of_two());
         assert!(lde_factor.is_power_of_two());
 
@@ -259,7 +248,7 @@ impl<F: PrimeField, I: IOP<F>, P: Prng<F, Input = < < I::Tree as IopTree<F> >::T
 
         let mut values_slice = lde_values.as_ref();
 
-        let omegas_inv_ref: &[F] = omegas_inv.as_ref();
+        let omegas_inv_ref: &[F] = precomputations.omegas_inv_ref();
 
         let mut roots = vec![];
         

@@ -4,9 +4,9 @@ use crate::plonk::polynomials::*;
 
 use super::CommitmentScheme;
 
-mod precomputations;
-mod iop;
-mod fri;
+pub mod precomputations;
+pub mod iop;
+pub mod fri;
 
 pub mod utils;
 
