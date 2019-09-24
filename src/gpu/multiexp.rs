@@ -80,7 +80,6 @@ impl<E> MultiexpKernel<E> where E: Engine {
             self.g1_base_buffer.write(tbases).enq()?;
             let kernel = self.proque.kernel_builder("G1_bellman_multiexp")
                 .global_work_size([gws])
-                .local_work_size([LOCAL_WORK_SIZE])
                 .arg(&self.g1_base_buffer)
                 .arg(&self.g1_bucket_buffer)
                 .arg(&self.g1_result_buffer)
@@ -100,7 +99,6 @@ impl<E> MultiexpKernel<E> where E: Engine {
             self.g2_base_buffer.write(tbases).enq()?;
             let kernel = self.proque.kernel_builder("G2_bellman_multiexp")
                 .global_work_size([gws])
-                .local_work_size([LOCAL_WORK_SIZE])
                 .arg(&self.g2_base_buffer)
                 .arg(&self.g2_bucket_buffer)
                 .arg(&self.g2_result_buffer)
