@@ -1,14 +1,15 @@
-//! This module contains an `EvaluationDomain` abstraction for
-//! performing various kinds of polynomial arithmetic on top of
-//! the scalar field.
+//! This module contains an [`EvaluationDomain`] abstraction for performing
+//! various kinds of polynomial arithmetic on top of the scalar field.
 //!
-//! In pairing-based SNARKs like Groth16, we need to calculate
-//! a quotient polynomial over a target polynomial with roots
-//! at distinct points associated with each constraint of the
-//! constraint system. In order to be efficient, we choose these
-//! roots to be the powers of a 2^n root of unity in the field.
-//! This allows us to perform polynomial operations in O(n)
-//! by performing an O(n log n) FFT over such a domain.
+//! In pairing-based SNARKs like [Groth16], we need to calculate a quotient
+//! polynomial over a target polynomial with roots at distinct points associated
+//! with each constraint of the constraint system. In order to be efficient, we
+//! choose these roots to be the powers of a 2<sup>n</sup> root of unity in the
+//! field. This allows us to perform polynomial operations in O(n) by performing
+//! an O(n log n) FFT over such a domain.
+//!
+//! [`EvaluationDomain`]: crate::domain::EvaluationDomain
+//! [Groth16]: https://eprint.iacr.org/2016/260
 
 use ff::{Field, PrimeField, ScalarEngine};
 use group::CurveProjective;

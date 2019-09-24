@@ -1,3 +1,7 @@
+//! The [Groth16] proving system.
+//!
+//! [Groth16]: https://eprint.iacr.org/2016/260
+
 use group::{CurveAffine, EncodedPoint};
 use pairing::{Engine, PairingCurveAffine};
 

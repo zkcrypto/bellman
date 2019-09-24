@@ -1,3 +1,5 @@
+//! Helpers for testing circuit implementations.
+
 use ff::{Field, PrimeField, PrimeFieldRepr, ScalarEngine};
 
 use crate::{ConstraintSystem, Index, LinearCombination, SynthesisError, Variable};

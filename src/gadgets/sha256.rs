@@ -1,3 +1,8 @@
+//! Circuits for the [SHA-256] hash function and its internal compression
+//! function.
+//!
+//! [SHA-256]: https://tools.ietf.org/html/rfc6234
+
 use super::boolean::Boolean;
 use super::multieq::MultiEq;
 use super::uint32::UInt32;

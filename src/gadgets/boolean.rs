@@ -1,3 +1,5 @@
+//! Gadgets for allocating bits in the circuit and performing boolean logic.
+
 use ff::{BitIterator, Field, PrimeField, ScalarEngine};
 
 use crate::{ConstraintSystem, LinearCombination, SynthesisError, Variable};

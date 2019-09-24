@@ -1,3 +1,6 @@
+//! Circuit representation of a [`u32`], with helpers for the [`sha256`]
+//! gadgets.
+
 use ff::{Field, PrimeField, ScalarEngine};
 
 use crate::{ConstraintSystem, LinearCombination, SynthesisError};

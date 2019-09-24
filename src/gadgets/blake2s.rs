@@ -1,3 +1,7 @@
+//! The [BLAKE2s] hash function with personalization support.
+//!
+//! [BLAKE2s]: https://tools.ietf.org/html/rfc7693
+
 use super::{boolean::Boolean, multieq::MultiEq, uint32::UInt32};
 use crate::{ConstraintSystem, SynthesisError};
 use ff::ScalarEngine;

@@ -1,3 +1,5 @@
+//! Helpers for packing vectors of bits into scalar field elements.
+
 use super::boolean::Boolean;
 use super::num::Num;
 use super::Assignment;

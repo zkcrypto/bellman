@@ -1,8 +1,9 @@
-//! This is an interface for dealing with the kinds of
-//! parallel computations involved in bellman. It's
-//! currently just a thin wrapper around CpuPool and
-//! crossbeam but may be extended in the future to
-//! allow for various parallelism strategies.
+//! An interface for dealing with the kinds of parallel computations involved in
+//! `bellman`. It's currently just a thin wrapper around [`CpuPool`] and
+//! [`crossbeam`] but may be extended in the future to allow for various
+//! parallelism strategies.
+//!
+//! [`CpuPool`]: futures_cpupool::CpuPool
 
 #[cfg(feature = "multicore")]
 mod implementation {

@@ -1,3 +1,5 @@
+//! Window table lookup gadgets.
+
 use ff::{Field, ScalarEngine};
 
 use super::boolean::Boolean;

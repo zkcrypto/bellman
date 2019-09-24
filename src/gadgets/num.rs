@@ -1,3 +1,5 @@
+//! Gadgets representing numbers in the scalar field of the underlying curve.
+
 use ff::{BitIterator, Field, PrimeField, PrimeFieldRepr, ScalarEngine};
 
 use crate::{ConstraintSystem, LinearCombination, SynthesisError, Variable};
