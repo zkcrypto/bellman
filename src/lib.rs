@@ -1,3 +1,6 @@
+// Catch documentation errors caused by code changes.
+#![deny(intra_doc_link_resolution_failure)]
+
 #[cfg(feature = "multicore")]
 extern crate crossbeam;
 
