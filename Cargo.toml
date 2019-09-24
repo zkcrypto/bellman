@@ -16,7 +16,7 @@ crate-type = ["cdylib", "lib", "staticlib"]
 rand = "0.4"
 bit-vec = "0.4.4"
 futures = "0.1"
-cfg-if = "0.1.7"
+cfg-if = "0.1"
 
 #pairing = {package = "pairing_ce", path = "../pairing" }
 pairing = {package = "pairing_ce", version = "0.18.0" }
@@ -24,21 +24,26 @@ byteorder = "1"
 
 futures-cpupool = {version = "0.1", optional = true}
 num_cpus = {version = "1", optional = true}
-crossbeam = {version = "0.7.1", optional = true}
+crossbeam = {version = "0.7", optional = true}
 
 prefetch = {version = "0.2", optional = true}
 
-web-sys = {version = "0.3.17", optional = true, features = ["console", "Performance", "Window"]}
+web-sys = {version = "0.3", optional = true, features = ["console", "Performance", "Window"]}
 
-tiny-keccak = {version = "1.4.2", optional = true}
+tiny-keccak = {version = "1.5", optional = true}
 blake2-rfc = {version = "0.2.18", optional = true}
 
+blake2s_simd = {version = "0.5", optional = true}
+lazy_static = {version = "1", optional = true}
+
 [features]
-default = ["multicore"]
+# default = ["multicore"]
+default = ["multicore", "plonk"]
 #default = ["multicore", "nightly"]
 #default = ["wasm"]
 multicore = ["futures-cpupool", "num_cpus", "crossbeam"]
 sonic = ["tiny-keccak", "blake2-rfc"]
 gm17 = []
+plonk = ["blake2s_simd", "lazy_static"]
 wasm = ["web-sys"]
 nightly = ["prefetch"]

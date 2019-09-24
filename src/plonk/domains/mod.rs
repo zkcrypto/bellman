@@ -33,4 +33,31 @@ impl<F: PrimeField> Domain<F> {
             generator: generator
         })
     }
+
+    pub fn coset_for_natural_index_and_size(natural_index: usize, domain_size: usize) -> Vec<usize> {
+        assert!(domain_size > 1);
+        assert!(domain_size.is_power_of_two());
+        let natural_pair_index = (natural_index + (domain_size / 2)) % domain_size;
+        let mut coset = vec![natural_index, natural_pair_index];
+        coset.sort();
+
+        coset
+    }
+
+    pub fn index_and_size_for_next_domain(natural_index: usize, domain_size: usize) -> (usize, usize) {
+        // maps coset index into element of the next domain
+        // if index < current_size / 2 -> return index
+        // else -> return index - current_size / 2
+        assert!(domain_size > 1);
+        assert!(domain_size.is_power_of_two());
+        let next_size = domain_size / 2;
+
+        let next_index = if natural_index < next_size {
+            natural_index
+        } else {
+            natural_index - next_size
+        };
+
+        (next_index, next_size)
+    }
 }
