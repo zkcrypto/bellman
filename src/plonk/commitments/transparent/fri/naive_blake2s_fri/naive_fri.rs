@@ -9,28 +9,26 @@ use crate::plonk::commitments::transcript::Prng;
 use crate::plonk::commitments::transparent::precomputations::*;
 use super::super::*;
 
-pub struct NaiveFriIop<F: PrimeField, I: IOP<F>, P: Prng<F>> {
+pub struct NaiveFriIop<F: PrimeField, I: IOP<F>> {
     _marker_f: std::marker::PhantomData<F>,
     _marker_i: std::marker::PhantomData<I>,
-    _marker_p: std::marker::PhantomData<P>
 }
 
-impl<F: PrimeField, I: IOP<F>, P: Prng<F, Input = < < I::Tree as IopTree<F> >::TreeHasher as IopTreeHasher<F> >::HashOutput> > FriIop<F> for NaiveFriIop<F, I, P> {
+impl<F: PrimeField, I: IOP<F> > FriIop<F> for NaiveFriIop<F, I> {
     const DEGREE: usize = 2;
 
     type IopType = I;
     type ProofPrototype = FRIProofPrototype<F, I>;
     type Proof = FRIProof<F, I>;
-    type Prng = P;
     type Precomputations = PrecomputedInvOmegas<F>;
 
-    fn proof_from_lde(
+    fn proof_from_lde<P: Prng<F, Input = < < I::Tree as IopTree<F> >::TreeHasher as IopTreeHasher<F> >::HashOutput> >(
         lde_values: &Polynomial<F, Values>, 
         lde_factor: usize,
         output_coeffs_at_degree_plus_one: usize,
         precomputations: &Self::Precomputations,
         worker: &Worker,
-        prng: &mut Self::Prng
+        prng: &mut P
     ) -> Result<Self::ProofPrototype, SynthesisError> {
         NaiveFriIop::proof_from_lde_by_values(
             lde_values, 
@@ -45,18 +43,18 @@ impl<F: PrimeField, I: IOP<F>, P: Prng<F, Input = < < I::Tree as IopTree<F> >::T
     fn prototype_into_proof(
         prototype: Self::ProofPrototype,
         iop_values: &Polynomial<F, Values>,
-        natural_first_element_index: usize,
+        natural_first_element_indexes: Vec<usize>,
     ) -> Result<Self::Proof, SynthesisError> {
-        prototype.produce_proof(iop_values, natural_first_element_index)
+        prototype.produce_proof(iop_values, natural_first_element_indexes)
     }
 
-    fn verify_proof(
+    fn verify_proof<P: Prng<F, Input = < < I::Tree as IopTree<F> >::TreeHasher as IopTreeHasher<F> >::HashOutput> >(
         proof: &Self::Proof,
-        natural_element_index: usize,
+        natural_element_indexes: Vec<usize>,
         expected_value: F,
-        prng: &mut Self::Prng
+        prng: &mut P
     ) -> Result<bool, SynthesisError> {
-        Self::verify_proof_queries(proof, natural_element_index, Self::DEGREE, expected_value, prng)
+        Self::verify_proof_queries(proof, natural_element_indexes, Self::DEGREE, expected_value, prng)
     }
 }
 
@@ -95,7 +93,7 @@ impl<F: PrimeField, I: IOP<F>> FriProofPrototype<F, I> for FRIProofPrototype<F, 
 
 #[derive(PartialEq, Eq, Clone)]
 pub struct FRIProof<F: PrimeField, I: IOP<F>> {
-    pub queries: Vec< <I as IOP<F> >::Query >,
+    pub queries: Vec< Vec< <I as IOP<F> >::Query > >,
     pub roots: Vec< < <I::Tree as IopTree<F> >::TreeHasher as IopTreeHasher<F>>::HashOutput>,
     pub final_coefficients: Vec<F>,
     pub initial_degree_plus_one: usize,
@@ -109,15 +107,14 @@ impl<F: PrimeField, I: IOP<F>> FriProof<F, I> for FRIProof<F, I> {
     }
 }
 
-impl<F: PrimeField, I: IOP<F>, P: Prng<F, Input = < < I::Tree as IopTree<F> >::TreeHasher as IopTreeHasher<F> >::HashOutput> > NaiveFriIop<F, I, P> {
-    pub fn proof_from_lde_through_coefficients(
+impl<F: PrimeField, I: IOP<F>> NaiveFriIop<F, I> {
+    pub fn proof_from_lde_through_coefficients<P: Prng<F, Input = < < I::Tree as IopTree<F> >::TreeHasher as IopTreeHasher<F> >::HashOutput> >(
         lde_values: Polynomial<F, Values>, 
         lde_factor: usize,
         output_coeffs_at_degree_plus_one: usize,
         worker: &Worker,
         prng: &mut P
     ) -> Result<FRIProofPrototype<F, I>, SynthesisError> {
-        let mut prng = P::new();
         let l0_commitment: I = I::create(lde_values.as_ref());
         let initial_domain_size = lde_values.size();
 
@@ -213,7 +210,7 @@ impl<F: PrimeField, I: IOP<F>, P: Prng<F, Input = < < I::Tree as IopTree<F> >::T
 
     }
 
-    pub fn proof_from_lde_by_values(
+    pub fn proof_from_lde_by_values<P: Prng<F, Input = < < I::Tree as IopTree<F> >::TreeHasher as IopTreeHasher<F> >::HashOutput> >(
         lde_values: &Polynomial<F, Values>, 
         lde_factor: usize,
         output_coeffs_at_degree_plus_one: usize,

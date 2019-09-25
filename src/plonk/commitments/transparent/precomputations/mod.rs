@@ -70,6 +70,12 @@ impl<F: PrimeField> PrecomputedOmegas<F> {
 }
 
 impl<F: PrimeField> FriPrecomputations<F> for PrecomputedOmegas<F>{
+    fn new_for_domain_size(size: usize) -> Self {
+        let domain = Domain::<F>::new_for_size(size as u64).expect("domain must exist");
+        let worker = Worker::new();
+        Self::new_for_domain(&domain, &worker)
+    }
+
     fn omegas_inv_ref(&self) -> &[F] {
         &self.omegas_inv[..]
     }
@@ -114,6 +120,12 @@ impl<F: PrimeField> PrecomputedInvOmegas<F> {
 }
 
 impl<F: PrimeField> FriPrecomputations<F> for PrecomputedInvOmegas<F>{
+    fn new_for_domain_size(size: usize) -> Self {
+        let domain = Domain::<F>::new_for_size(size as u64).expect("domain must exist");
+        let worker = Worker::new();
+        Self::new_for_domain(&domain, &worker)
+    }
+
     fn omegas_inv_ref(&self) -> &[F] {
         &self.omegas_inv[..]
     }
