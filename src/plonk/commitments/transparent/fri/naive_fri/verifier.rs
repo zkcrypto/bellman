@@ -131,12 +131,22 @@ impl<F: PrimeField, I: IOP<F>> NaiveFriIop<F, I> {
         Ok(valid)
     }
 
-    pub fn verify_proof_queries<P: Prng<F, Input = < < I::Tree as IopTree<F> >::TreeHasher as IopTreeHasher<F> >::HashOutput> >(
+    // pub fn verify_proof_queries<P: Prng<F, Input = < < I::Tree as IopTree<F> >::TreeHasher as IopTreeHasher<F> >::HashOutput> >(
+    //     proof: &FRIProof<F, I>,
+    //     natural_element_indexes: Vec<usize>,
+    //     degree: usize, 
+    //     expected_value_from_oracle: F,
+    //     prng: &mut P
+    // ) -> Result<bool, SynthesisError> {
+
+    // }
+
+    pub fn verify_proof_queries(
         proof: &FRIProof<F, I>,
         natural_element_indexes: Vec<usize>,
         degree: usize, 
-        expected_value_from_oracle: F,
-        prng: &mut P
+        expected_values_from_oracle: &[F],
+        fri_challenges: &[F]
     ) -> Result<bool, SynthesisError> {
         let mut two = F::one();
         two.double();
@@ -147,25 +157,19 @@ impl<F: PrimeField, I: IOP<F>> NaiveFriIop<F, I> {
 
         let domain = Domain::<F>::new_for_size((proof.initial_degree_plus_one * proof.lde_factor) as u64)?;
 
-        let mut omega = domain.generator;
-        let mut omega_inv = omega.inverse().ok_or(
+        let omega = domain.generator;
+        let omega_inv = omega.inverse().ok_or(
             SynthesisError::DivisionByZero
         )?;
 
-        let mut fri_challenges = vec![];
-
-        for root in proof.roots.iter() {
-            let iop_challenge = {
-                prng.commit_input(&root);
-                prng.get_challenge()
-            };
-
-            fri_challenges.push(iop_challenge);
-        }
+        assert!(fri_challenges.len() == proof.roots.len() - 1);
 
         assert!(natural_element_indexes.len() == proof.queries.len());
 
-        for (query, natural_element_index) in proof.queries.iter().zip(natural_element_indexes.into_iter()) {
+        for ((query, natural_element_index), expected_value_from_oracle) in proof.queries.iter()
+                                                                            .zip(natural_element_indexes.into_iter())
+                                                                            .zip(expected_values_from_oracle.iter()) 
+        {
 
             let domain_element = domain.generator.pow([natural_element_index as u64]);
 
@@ -173,20 +177,19 @@ impl<F: PrimeField, I: IOP<F>> NaiveFriIop<F, I> {
             if el != F::one() {
                 return Err(SynthesisError::UnexpectedIdentity);
             }
-            let next_domain_size = domain.size / 2;
-            let el = domain_element.pow([next_domain_size]);
-            if el == F::one() {
-                return Err(SynthesisError::UnexpectedIdentity);
-            }
-
-
-
+            // let next_domain_size = domain.size / 2;
+            // let el = domain_element.pow([next_domain_size]);
+            // if el == F::one() {
+            //     return Err(SynthesisError::UnexpectedIdentity);
+            // }
 
             let mut expected_value: Option<F> = None;
             let mut domain_size = domain.size as usize;
             let mut domain_idx = natural_element_index;
+            let mut omega = omega;
+            let mut omega_inv = omega_inv;
 
-            if proof.queries.len() % degree != 0 {
+            if query.len() % degree != 0 {
                 return Err(SynthesisError::PolynomialDegreeTooLarge);
             }
 
@@ -203,13 +206,15 @@ impl<F: PrimeField, I: IOP<F>> NaiveFriIop<F, I> {
 
                 for q in queries.iter() {
                     if !coset_values.contains(&q.natural_index()) {
+                        println!("Coset values do not contain query index {}", q.natural_index());
                         return Ok(false);
                     }
                 }
 
                 if round == 0 {
                     for q in queries.iter() {
-                        if q.natural_index() == natural_element_index && q.value() != expected_value_from_oracle {
+                        if q.natural_index() == natural_element_index && q.value() != *expected_value_from_oracle {
+                            println!("Expected {}, got {} from query", expected_value_from_oracle, q.value());
                             return Ok(false);
                         }
                     }
@@ -225,13 +230,13 @@ impl<F: PrimeField, I: IOP<F>> NaiveFriIop<F, I> {
 
                 for q in queries.iter() {
                     if !I::verify_query(&q, &root) {
+                        println!("Query is not in the root");
                         return Ok(false);
                     }
                 }
                 
                 let f_at_omega = (&queries[0]).value();
                 if let Some(value) = expected_value {
-
                     if !coset_values.contains(&domain_idx) {
                         return Ok(false);
                     }

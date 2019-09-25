@@ -706,8 +706,8 @@ impl<F: PrimeField> Polynomial<F, Coefficients> {
     }
 
     pub fn evaluate_at(&self, worker: &Worker, g: F) -> F {
-        let num_threads = worker.cpus;
-        let mut subvalues = vec![F::zero(); num_threads as usize];
+        let num_threads = worker.get_num_spawned_threads(self.coeffs.len());
+        let mut subvalues = vec![F::zero(); num_threads];
 
         worker.scope(self.coeffs.len(), |scope, chunk| {
             for (i, (a, s)) in self.coeffs.chunks(chunk)

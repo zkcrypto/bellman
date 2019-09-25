@@ -15,10 +15,12 @@ impl<F: PrimeField, I: IOP<F>> FRIProofPrototype<F, I> {
         iop_values: &Polynomial<F, Values>,
         natural_first_element_indexes: Vec<usize>,
     ) -> Result<FRIProof<F, I>, SynthesisError> {
-        let mut domain_size = self.initial_degree_plus_one * self.lde_factor;
+        let domain_size = self.initial_degree_plus_one * self.lde_factor;
 
         let mut roots = vec![];
-        for iop in Some(self.l0_commitment).iter().chain(&self.intermediate_commitments) {
+        let l0_commitment = Some(self.l0_commitment);
+
+        for iop in l0_commitment.iter().chain(&self.intermediate_commitments) {
             roots.push(iop.get_root());
         }
 
@@ -27,8 +29,9 @@ impl<F: PrimeField, I: IOP<F>> FRIProofPrototype<F, I> {
         for natural_first_element_index in natural_first_element_indexes.into_iter() {
             let mut queries = vec![];
             let mut domain_idx = natural_first_element_index;
+            let mut domain_size = domain_size;
 
-            for (iop, leaf_values) in Some(self.l0_commitment).iter().chain(&self.intermediate_commitments)
+            for (iop, leaf_values) in l0_commitment.iter().chain(&self.intermediate_commitments)
                                         .zip(Some(iop_values).into_iter().chain(&self.intermediate_values)) {
                 
                 let coset_values = <I::Combiner as CosetCombiner<F>>::get_coset_for_natural_index(domain_idx, domain_size);
@@ -41,8 +44,6 @@ impl<F: PrimeField, I: IOP<F>> FRIProofPrototype<F, I> {
                     let query = iop.query(idx, leaf_values.as_ref());
                     queries.push(query);
                 }
-
-                
 
                 let (next_idx, next_size) = Domain::<F>::index_and_size_for_next_domain(domain_idx, domain_size);
 

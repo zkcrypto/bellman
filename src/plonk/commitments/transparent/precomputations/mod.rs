@@ -96,7 +96,7 @@ impl<F: PrimeField> PrecomputedInvOmegas<F> {
         let precomputation_size = domain_size/2;
 
         let omega = domain.generator;
-        let omega_inv = domain.generator.inverse().expect("must exist");
+        let omega_inv = omega.inverse().expect("must exist");
 
         let mut omegas_inv = vec![F::zero(); precomputation_size];
 

@@ -20,13 +20,14 @@ impl<F: PrimeField, I: IOP<F> > FriIop<F> for NaiveFriIop<F, I> {
     type IopType = I;
     type ProofPrototype = FRIProofPrototype<F, I>;
     type Proof = FRIProof<F, I>;
-    type Precomputations = PrecomputedInvOmegas<F>;
 
-    fn proof_from_lde<P: Prng<F, Input = < < I::Tree as IopTree<F> >::TreeHasher as IopTreeHasher<F> >::HashOutput> >(
+    fn proof_from_lde<P: Prng<F, Input = < < I::Tree as IopTree<F> >::TreeHasher as IopTreeHasher<F> >::HashOutput>,
+        C: FriPrecomputations<F>
+    >(
         lde_values: &Polynomial<F, Values>, 
         lde_factor: usize,
         output_coeffs_at_degree_plus_one: usize,
-        precomputations: &Self::Precomputations,
+        precomputations: &C,
         worker: &Worker,
         prng: &mut P
     ) -> Result<Self::ProofPrototype, SynthesisError> {
@@ -48,13 +49,52 @@ impl<F: PrimeField, I: IOP<F> > FriIop<F> for NaiveFriIop<F, I> {
         prototype.produce_proof(iop_values, natural_first_element_indexes)
     }
 
-    fn verify_proof<P: Prng<F, Input = < < I::Tree as IopTree<F> >::TreeHasher as IopTreeHasher<F> >::HashOutput> >(
+    // fn verify_proof_with_transcript<P: Prng<F, Input = < < I::Tree as IopTree<F> >::TreeHasher as IopTreeHasher<F> >::HashOutput> >(
+    //     proof: &Self::Proof,
+    //     natural_element_indexes: Vec<usize>,
+    //     expected_value: &[F],
+    //     prng: &mut P
+    // ) -> Result<bool, SynthesisError> {
+    //     let mut fri_challenges = vec![];
+
+    //     for root in proof.roots.iter() {
+    //         let iop_challenge = {
+    //             prng.commit_input(&root);
+    //             prng.get_challenge()
+    //         };
+
+    //         fri_challenges.push(iop_challenge);
+    //     }
+    //     Self::verify_proof_queries(proof, natural_element_indexes, Self::DEGREE, expected_value, &fri_challenges)
+    // }
+
+    fn get_fri_challenges<P: Prng<F, Input = < < I::Tree as IopTree<F> >::TreeHasher as IopTreeHasher<F> >::HashOutput> >(
+        proof: &Self::Proof,
+        prng: &mut P
+    ) -> Vec<F> {
+        let mut fri_challenges = vec![];
+
+        for root in proof.roots.iter() {
+            let iop_challenge = {
+                prng.commit_input(&root);
+                prng.get_challenge()
+            };
+
+            fri_challenges.push(iop_challenge);
+        }
+
+        fri_challenges.pop().expect("challenges are not empty");
+
+        fri_challenges
+    }
+
+    fn verify_proof_with_challenges(
         proof: &Self::Proof,
         natural_element_indexes: Vec<usize>,
-        expected_value: F,
-        prng: &mut P
+        expected_value: &[F],
+        fri_challenges: &[F]
     ) -> Result<bool, SynthesisError> {
-        Self::verify_proof_queries(proof, natural_element_indexes, Self::DEGREE, expected_value, prng)
+        Self::verify_proof_queries(proof, natural_element_indexes, Self::DEGREE, expected_value, fri_challenges)
     }
 }
 
@@ -210,11 +250,13 @@ impl<F: PrimeField, I: IOP<F>> NaiveFriIop<F, I> {
 
     }
 
-    pub fn proof_from_lde_by_values<P: Prng<F, Input = < < I::Tree as IopTree<F> >::TreeHasher as IopTreeHasher<F> >::HashOutput> >(
+    pub fn proof_from_lde_by_values<P: Prng<F, Input = < < I::Tree as IopTree<F> >::TreeHasher as IopTreeHasher<F> >::HashOutput>,
+        C: FriPrecomputations<F>
+    >(
         lde_values: &Polynomial<F, Values>, 
         lde_factor: usize,
         output_coeffs_at_degree_plus_one: usize,
-        precomputations: &PrecomputedInvOmegas<F>,
+        precomputations: &C,
         worker: &Worker,
         prng: &mut P
     ) -> Result<FRIProofPrototype<F, I>, SynthesisError> {
@@ -231,6 +273,7 @@ impl<F: PrimeField, I: IOP<F>> NaiveFriIop<F, I> {
         assert!(lde_factor.is_power_of_two());
 
         let initial_degree_plus_one = initial_domain_size / lde_factor;
+
         let num_steps = log2_floor(initial_degree_plus_one / output_coeffs_at_degree_plus_one) as usize;
 
         let mut intermediate_commitments = vec![];
@@ -241,6 +284,7 @@ impl<F: PrimeField, I: IOP<F>> NaiveFriIop<F, I> {
             prng.get_challenge()
         };
         challenges.push(next_domain_challenge);
+
         let mut next_domain_size = initial_domain_size / 2;
 
         let mut values_slice = lde_values.as_ref();

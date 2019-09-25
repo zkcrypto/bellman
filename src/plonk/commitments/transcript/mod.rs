@@ -38,8 +38,39 @@ impl<F: PrimeField> Blake2sTranscript<F> {
 }
 
 
+// impl<F: PrimeField> Prng<F> for Blake2sTranscript<F> {
+//     type Input = F;
+
+//     fn new() -> Self {
+//         assert!(F::NUM_BITS < 256);
+//         let state = (*TRANSCRIPT_BLAKE2S_PARAMS).clone();
+//         Self {
+//             state,
+//             _marker: std::marker::PhantomData
+//         }
+//     }
+
+//     fn commit_input(&mut self, input: &Self::Input) {
+//         self.commit_field_element(input)
+//     }
+
+//     fn get_challenge(&mut self) -> F {
+//         let value = *(self.state.finalize().as_array());
+//         self.state.update(&value[..]);
+        
+//         let mut repr = F::Repr::default();
+//         let shaving_mask: u64 = 0xffffffffffffffff >> (Self::SHAVE_BITS % 64);
+//         repr.read_be(&value[..]).expect("will read");
+//         let last_limb_idx = repr.as_ref().len() - 1;
+//         repr.as_mut()[last_limb_idx] &= shaving_mask;
+//         let value = F::from_repr(repr).expect("in a field");
+
+//         value
+//     }
+// }
+
 impl<F: PrimeField> Prng<F> for Blake2sTranscript<F> {
-    type Input = F;
+    type Input = [u8; 32];
 
     fn new() -> Self {
         assert!(F::NUM_BITS < 256);
@@ -51,7 +82,7 @@ impl<F: PrimeField> Prng<F> for Blake2sTranscript<F> {
     }
 
     fn commit_input(&mut self, input: &Self::Input) {
-        self.commit_field_element(input)
+        self.commit_bytes(input)
     }
 
     fn get_challenge(&mut self) -> F {

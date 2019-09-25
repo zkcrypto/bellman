@@ -19,4 +19,6 @@ pub trait CommitmentScheme<F: PrimeField> {
     fn commit_multiple(&self, polynomials: Vec<&Polynomial<F, Coefficients>>, degrees: Vec<usize>, aggregation_coefficient: F) -> (Self::Commitment, Vec<Self::IntermediateData>);
     fn open_single(&self, poly: &Polynomial<F, Coefficients>, at_point: F, data: Self::IntermediateData, prng: &mut Self::Prng) -> (F, Self::OpeningProof);
     fn open_multiple(&self, polynomials: Vec<&Polynomial<F, Coefficients>>, degrees: Vec<usize>, aggregation_coefficient: F, at_point: F, data: Vec<Self::IntermediateData>, prng: &mut Self::Prng) -> (Vec<F>, Self::OpeningProof);
+    fn verify_single(&self, commitment: &Self::Commitment, at_point: F, claimed_value: F, proof: &Self::OpeningProof, prng: &mut Self::Prng) -> bool;
+    // fn verify_multiple(&self, polynomials: Vec<&Polynomial<F, Coefficients>>, degrees: Vec<usize>, aggregation_coefficient: F, at_point: F, data: Vec<Self::IntermediateData>, prng: &mut Self::Prng) -> (Vec<F>, Self::OpeningProof);
 }

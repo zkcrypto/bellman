@@ -1175,9 +1175,7 @@ impl<E: Engine> GeneratorAssembly<E> {
     }
 }
 
-
-
-
+#[cfg(test)]
 mod test {
 
     use super::*;

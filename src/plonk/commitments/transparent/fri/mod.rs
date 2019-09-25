@@ -6,7 +6,7 @@ use crate::SynthesisError;
 use crate::plonk::commitments::transparent::utils::log2_floor;
 use crate::plonk::commitments::transcript::Prng;
 
-pub mod naive_blake2s_fri;
+pub mod naive_fri;
 
 pub trait FriProofPrototype<F: PrimeField, I: IOP<F>> {
     fn get_roots(&self) -> Vec< < <I::Tree as IopTree<F> >::TreeHasher as IopTreeHasher<F>>::HashOutput>;
@@ -31,13 +31,15 @@ pub trait FriIop<F: PrimeField> {
     type ProofPrototype: FriProofPrototype<F, Self::IopType>;
     type Proof: FriProof<F, Self::IopType>;
     // type Prng: Prng<F, Input = < < <Self::IopType as IOP<F>>::Tree as IopTree<F> >::TreeHasher as IopTreeHasher<F>>::HashOutput >;
-    type Precomputations: FriPrecomputations<F>;
+    // type Precomputations: FriPrecomputations<F>;
 
-    fn proof_from_lde<P: Prng<F, Input = < < <Self::IopType as IOP<F>>::Tree as IopTree<F> >::TreeHasher as IopTreeHasher<F>>::HashOutput > >(
+    fn proof_from_lde<P: Prng<F, Input = < < <Self::IopType as IOP<F>>::Tree as IopTree<F> >::TreeHasher as IopTreeHasher<F>>::HashOutput >,
+    C: FriPrecomputations<F>
+    >(
         lde_values: &Polynomial<F, Values>, 
         lde_factor: usize,
         output_coeffs_at_degree_plus_one: usize,
-        precomputations: &Self::Precomputations,
+        precomputations: &C,
         worker: &Worker,
         prng: &mut P
     ) -> Result<Self::ProofPrototype, SynthesisError>;
@@ -48,11 +50,24 @@ pub trait FriIop<F: PrimeField> {
         natural_first_element_indexes: Vec<usize>,
     ) -> Result<Self::Proof, SynthesisError>;
 
-    fn verify_proof<P: Prng<F, Input = < < <Self::IopType as IOP<F>>::Tree as IopTree<F> >::TreeHasher as IopTreeHasher<F>>::HashOutput > >(
+    // // will write roots to prng values
+    // fn verify_proof_with_transcript<P: Prng<F, Input = < < <Self::IopType as IOP<F>>::Tree as IopTree<F> >::TreeHasher as IopTreeHasher<F>>::HashOutput > >(
+    //     proof: &Self::Proof,
+    //     natural_element_indexes: Vec<usize>,
+    //     expected_values: &[F],
+    //     prng: &mut P
+    // ) -> Result<bool, SynthesisError>;
+
+    fn get_fri_challenges<P: Prng<F, Input = < < <Self::IopType as IOP<F>>::Tree as IopTree<F> >::TreeHasher as IopTreeHasher<F>>::HashOutput > >(
+        proof: &Self::Proof,
+        prng: &mut P
+    ) -> Vec<F>;
+
+    fn verify_proof_with_challenges(
         proof: &Self::Proof,
         natural_element_indexes: Vec<usize>,
-        expected_value: F,
-        prng: &mut P
+        expected_value: &[F],
+        fri_challenges: &[F]
     ) -> Result<bool, SynthesisError>;
 }
 

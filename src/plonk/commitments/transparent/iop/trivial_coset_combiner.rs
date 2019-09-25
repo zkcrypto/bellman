@@ -27,7 +27,7 @@ impl<'c, F: PrimeField> CosetCombiner<F> for TrivialCombiner<F> {
     }
 
     fn get_coset_for_natural_index(natural_index: usize, domain_size: usize) -> Vec<usize> {
-        assert!(natural_index < domain_size);
+        assert!(natural_index < domain_size, "asking for index {} for domain size {}", natural_index, domain_size);
         let natural_pair_index = (natural_index + (domain_size / 2)) % domain_size;
         let mut coset = vec![natural_index, natural_pair_index];
         coset.sort();
