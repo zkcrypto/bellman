@@ -8,17 +8,21 @@ pub mod transparent;
 pub mod transcript;
 
 pub trait CommitmentScheme<F: PrimeField> {
-    type Commitment;
+    type Commitment: std::fmt::Debug;
     type OpeningProof;
     type IntermediateData;
     type Meta;
     type Prng;
 
+    const REQUIRES_PRECOMPUTATION: bool;
+    const IS_HOMOMORPHIC: bool;
+
     fn new_for_size(max_degree_plus_one: usize, meta: Self::Meta) -> Self;
-    fn commit_single(&self, poly: &Polynomial<F, Coefficients>) -> (Self::Commitment, Self::IntermediateData);
-    fn commit_multiple(&self, polynomials: Vec<&Polynomial<F, Coefficients>>, degrees: Vec<usize>, aggregation_coefficient: F) -> (Self::Commitment, Vec<Self::IntermediateData>);
-    fn open_single(&self, poly: &Polynomial<F, Coefficients>, at_point: F, data: Self::IntermediateData, prng: &mut Self::Prng) -> (F, Self::OpeningProof);
-    fn open_multiple(&self, polynomials: Vec<&Polynomial<F, Coefficients>>, degrees: Vec<usize>, aggregation_coefficient: F, at_point: F, data: Vec<Self::IntermediateData>, prng: &mut Self::Prng) -> (Vec<F>, Self::OpeningProof);
+    fn precompute(&self, poly: &Polynomial<F, Coefficients>) -> Option<Self::IntermediateData>;
+    fn commit_single(&self, poly: &Polynomial<F, Coefficients>) -> (Self::Commitment, Option<Self::IntermediateData>);
+    fn commit_multiple(&self, polynomials: Vec<&Polynomial<F, Coefficients>>, degrees: Vec<usize>, aggregation_coefficient: F) -> (Self::Commitment, Option<Vec<Self::IntermediateData>>);
+    fn open_single(&self, poly: &Polynomial<F, Coefficients>, at_point: F, data: &Option<Self::IntermediateData>, prng: &mut Self::Prng) -> (F, Self::OpeningProof);
+    fn open_multiple(&self, polynomials: Vec<&Polynomial<F, Coefficients>>, degrees: Vec<usize>, aggregation_coefficient: F, at_point: F, data: &Option<Vec<Self::IntermediateData>>, prng: &mut Self::Prng) -> (Vec<F>, Self::OpeningProof);
     fn verify_single(&self, commitment: &Self::Commitment, at_point: F, claimed_value: F, proof: &Self::OpeningProof, prng: &mut Self::Prng) -> bool;
-    // fn verify_multiple(&self, polynomials: Vec<&Polynomial<F, Coefficients>>, degrees: Vec<usize>, aggregation_coefficient: F, at_point: F, data: Vec<Self::IntermediateData>, prng: &mut Self::Prng) -> (Vec<F>, Self::OpeningProof);
+    fn verify_multiple_openings(&self, commitments: Vec<&Self::Commitment>, at_point: F, claimed_values: &Vec<F>, aggregation_coefficient: F, proof: &Self::OpeningProof, prng: &mut Self::Prng) -> bool;
 }

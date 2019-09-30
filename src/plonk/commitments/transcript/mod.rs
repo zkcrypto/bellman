@@ -96,25 +96,32 @@ impl<F: PrimeField> Prng<F> for Blake2sTranscript<F> {
         repr.as_mut()[last_limb_idx] &= shaving_mask;
         let value = F::from_repr(repr).expect("in a field");
 
+        // println!("Outputting {}", value);
+
         value
     }
 }
 
 impl<F: PrimeField> Transcript<F> for Blake2sTranscript<F> {
     fn commit_bytes(&mut self, bytes: &[u8]) {
+        // println!("Committing bytes {:?}", bytes);
         self.state.update(&bytes);
     }
 
     fn commit_field_element(&mut self, element: &F) {
+        // println!("Committing field element {:?}", element);
         let repr = element.into_repr();
         let mut bytes: Vec<u8> = vec![0u8; Self::REPR_SIZE];
         repr.write_be(&mut bytes[..]).expect("should write");
+        
         self.state.update(&bytes[..]);
     }
 
     fn get_challenge_bytes(&mut self) -> Vec<u8> {
         let value = *(self.state.finalize().as_array());
         self.state.update(&value[..]);
+
+        // println!("Outputting {:?}", value);
 
         Vec::from(&value[..])
     }

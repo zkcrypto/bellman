@@ -20,7 +20,7 @@ pub trait CosetCombiner<F: PrimeField> {
     fn get_coset_for_tree_index(tree_index: usize, domain_size: usize) -> Vec<usize>;
 }
 
-pub trait HashFunctionOutput: Clone + Eq + PartialEq {}
+pub trait HashFunctionOutput: Clone + Eq + PartialEq + std::fmt::Debug {}
 
 pub trait LeafEncoder<F: PrimeField> {
     type Output;
@@ -67,7 +67,7 @@ pub trait IopTree<F: PrimeField> {
     fn get_path(&self, index: usize, leafs_values: &[F]) -> Vec< <Self::TreeHasher as IopTreeHasher<F>>::HashOutput >;
 }
 
-pub trait IopQuery<F: PrimeField>: 'static + PartialEq + Eq + Clone {
+pub trait IopQuery<F: PrimeField>: 'static + PartialEq + Eq + Clone + std::fmt::Debug {
     type TreeHasher: IopTreeHasher<F>;
 
     fn tree_index(&self) -> usize;

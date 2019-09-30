@@ -83,7 +83,7 @@ impl<F: PrimeField, I: IOP<F> > FriIop<F> for NaiveFriIop<F, I> {
             fri_challenges.push(iop_challenge);
         }
 
-        fri_challenges.pop().expect("challenges are not empty");
+        // fri_challenges.pop().expect("challenges are not empty");
 
         fri_challenges
     }
@@ -181,7 +181,7 @@ impl<F: PrimeField, I: IOP<F>> NaiveFriIop<F, I> {
         let mut coeffs = initial_polynomial_coeffs;
         let mut roots = vec![];
         
-        for _ in 0..num_steps {
+        for step in 0..num_steps {
             let mut next_coefficients = vec![F::zero(); next_domain_size];
             let coeffs_slice: &[F] = coeffs.as_ref();
             assert!(next_coefficients.len()*2 == coeffs_slice.len());
@@ -207,26 +207,29 @@ impl<F: PrimeField, I: IOP<F>> NaiveFriIop<F, I> {
             let next_coeffs_as_poly = Polynomial::from_coeffs(next_coefficients.clone())?;
             let next_values_as_poly = next_coeffs_as_poly.lde(&worker, lde_factor)?;
             let intermediate_iop = I::create(next_values_as_poly.as_ref());
-            let root = intermediate_iop.get_root();
-            roots.push(root);
-            next_domain_challenge = {
-                prng.commit_input(&intermediate_iop.get_root());
-                prng.get_challenge()
-            };
+            if step < num_steps - 1 {
+                let root = intermediate_iop.get_root();
+                roots.push(root);
+                next_domain_challenge = {
+                    prng.commit_input(&intermediate_iop.get_root());
+                    prng.get_challenge()
+                };
 
-            challenges.push(next_domain_challenge);
+                challenges.push(next_domain_challenge);
 
-            next_domain_size /= 2;
+                next_domain_size /= 2;
 
-            intermediate_commitments.push(intermediate_iop);
-            intermediate_values.push(next_values_as_poly);
+                intermediate_commitments.push(intermediate_iop);
+                intermediate_values.push(next_values_as_poly);
 
-            coeffs = next_coefficients;
+                coeffs = next_coefficients;
+            }
         }
 
-        challenges.pop().expect("will work");
+        // challenges.pop().expect("will work");
 
-        let final_root = roots.pop().expect("will work");
+        // let final_root = roots.pop().expect("will work");
+        let final_root = roots.last().expect("will work").clone();
 
         assert!(challenges.len() == num_steps);
         assert!(intermediate_commitments.len() == num_steps);

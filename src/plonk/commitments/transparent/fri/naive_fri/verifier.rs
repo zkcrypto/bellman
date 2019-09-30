@@ -162,7 +162,7 @@ impl<F: PrimeField, I: IOP<F>> NaiveFriIop<F, I> {
             SynthesisError::DivisionByZero
         )?;
 
-        assert!(fri_challenges.len() == proof.roots.len() - 1);
+        assert!(fri_challenges.len() == proof.roots.len());
 
         assert!(natural_element_indexes.len() == proof.queries.len());
 

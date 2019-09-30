@@ -19,10 +19,10 @@ use crate::plonk::commitments::transcript::*;
 
 // Such committer uses external transcript for all the operations
 pub struct StatelessTransparentCommitter<
-        F: PrimeField, 
-        FRI: FriIop<F>,
-        T: Transcript<F, Input = < < < <FRI as FriIop<F> >::IopType as IOP<F> >::Tree as IopTree<F> >::TreeHasher as IopTreeHasher<F>>::HashOutput >
-    >{
+    F: PrimeField, 
+    FRI: FriIop<F>,
+    T: Transcript<F, Input = < < < <FRI as FriIop<F> >::IopType as IOP<F> >::Tree as IopTree<F> >::TreeHasher as IopTreeHasher<F>>::HashOutput >
+>{
     max_degree_plus_one: usize,
     lde_factor: usize,
     output_coeffs_at_degree_plus_one: usize,
@@ -33,6 +33,17 @@ pub struct StatelessTransparentCommitter<
     _marker_t: std::marker::PhantomData<T>
 }
 
+impl<
+    F: PrimeField, 
+    FRI: FriIop<F>,
+    T: Transcript<F, Input = < < < <FRI as FriIop<F> >::IopType as IOP<F> >::Tree as IopTree<F> >::TreeHasher as IopTreeHasher<F>>::HashOutput >
+> std::fmt::Debug for StatelessTransparentCommitter<F, FRI, T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+        writeln!(f, "Stateless transparent committer")
+    }
+}
+
+#[derive(Debug)]
 pub struct TransparentCommitterParameters {
     pub lde_factor: usize,
     pub num_queries: usize,
@@ -45,13 +56,13 @@ impl<
     T: Transcript<F, Input = < < < <FRI as FriIop<F> >::IopType as IOP<F> >::Tree as IopTree<F> >::TreeHasher as IopTreeHasher<F>>::HashOutput >
 > CommitmentScheme<F> for StatelessTransparentCommitter<F, FRI, T> {
     type Commitment = < < < <FRI as FriIop<F> >::IopType as IOP<F> >::Tree as IopTree<F> >::TreeHasher as IopTreeHasher<F>>::HashOutput;
-    // type OpeningProof = Vec< < < <FRI as FriIop<F> >::IopType as IOP<F> >::Tree as IopTree<F> >::Query >;
-    type OpeningProof = (FRI::Proof, Vec< (F, < < FRI as FriIop<F> >::IopType as IOP<F> >::Query) > );
+    type OpeningProof = (FRI::Proof, Vec<Vec< (F, < < FRI as FriIop<F> >::IopType as IOP<F> >::Query) > >);
     type IntermediateData = (Polynomial<F, Values>, < FRI as FriIop<F> >::IopType);
     type Meta = TransparentCommitterParameters;
     type Prng = T;
 
-    // <T: Transcript<F>, Input = < < I::Tree as IopTree<F> >::TreeHasher as IopTreeHasher<F> >::HashOutput> 
+    const REQUIRES_PRECOMPUTATION: bool = true;
+    const IS_HOMOMORPHIC: bool = false;
 
     fn new_for_size(max_degree_plus_one: usize, meta: Self::Meta) -> Self {
         let base_size = max_degree_plus_one.next_power_of_two();
@@ -74,26 +85,33 @@ impl<
         }
     }
 
-    fn commit_single(&self, poly: &Polynomial<F, Coefficients>) -> (Self::Commitment, Self::IntermediateData) {
+    fn precompute(&self, poly: &Polynomial<F, Coefficients>) -> Option<Self::IntermediateData> {
         let original_poly_lde = poly.clone().lde(&self.worker, self.lde_factor).expect("must make an LDE");
         let original_tree = < < FRI as FriIop<F> >::IopType as IOP<F> >::create(&original_poly_lde.as_ref());
         let commitment = original_tree.get_root();
 
-        (commitment, (original_poly_lde, original_tree))
+        Some((original_poly_lde, original_tree))
+    }
+
+    fn commit_single(&self, poly: &Polynomial<F, Coefficients>) -> (Self::Commitment, Option<Self::IntermediateData>) {
+        let original_poly_lde = poly.clone().lde(&self.worker, self.lde_factor).expect("must make an LDE");
+        let original_tree = < < FRI as FriIop<F> >::IopType as IOP<F> >::create(&original_poly_lde.as_ref());
+        let commitment = original_tree.get_root();
+
+        (commitment, Some((original_poly_lde, original_tree)))
         
     }
 
-    fn commit_multiple(&self, polynomials: Vec<&Polynomial<F, Coefficients>>, degrees: Vec<usize>, aggregation_coefficient: F) -> (Self::Commitment, Vec<Self::IntermediateData>) {
+    fn commit_multiple(&self, polynomials: Vec<&Polynomial<F, Coefficients>>, degrees: Vec<usize>, aggregation_coefficient: F) -> (Self::Commitment, Option<Vec<Self::IntermediateData>>) {
         unimplemented!()
     }
 
-    fn open_single(&self, poly: &Polynomial<F, Coefficients>, at_point: F, data: Self::IntermediateData, prng: &mut Self::Prng) -> (F, Self::OpeningProof) {
+    fn open_single(&self, poly: &Polynomial<F, Coefficients>, at_point: F, data: &Option<Self::IntermediateData>, prng: &mut Self::Prng) -> (F, Self::OpeningProof) {
         let opening_value = poly.evaluate_at(&self.worker, at_point);
 
+        // do not need to to the subtraction cause last coefficient is never used by division
         let division_result = {
-            let mut q_poly_proto = poly.clone();
-            q_poly_proto.as_mut()[0].sub_assign(&opening_value);
-            let division_result = kate_divison_with_same_return_size(q_poly_proto.as_ref(), at_point);
+            let division_result = kate_divison_with_same_return_size(poly.as_ref(), at_point);
 
             division_result
         };
@@ -138,30 +156,162 @@ impl<
 
         let mut original_poly_queries = vec![];
 
-        let (original_poly_lde, original_poly_lde_oracle) = data;
+        let precomputations = if data.is_some() {
+            None
+        } else {
+            self.precompute(&poly)
+        };
+
+        let (original_poly_lde, original_poly_lde_oracle) = if let Some((lde, oracle)) = data.as_ref() {
+            (lde, oracle)
+        } else if let Some((lde, oracle)) = precomputations.as_ref() {
+            (lde, oracle)
+        } else {
+            unreachable!("precomputations are required for transparent polynomial commitment");
+        };
+
         for idx in domain_indexes.into_iter() {
             let original_value = < < <FRI as FriIop<F> >::IopType as IOP<F> >::Combiner as CosetCombiner<F>>::get_for_natural_index(original_poly_lde.as_ref(), idx);
             let original_poly_query = original_poly_lde_oracle.query(idx, original_poly_lde.as_ref());
             original_poly_queries.push((*original_value, original_poly_query));
         }
 
-        (opening_value, (q_poly_fri_proof, original_poly_queries))
+        (opening_value, (q_poly_fri_proof, vec![original_poly_queries]))
 
     }
+
     fn open_multiple(
         &self, 
         polynomials: Vec<&Polynomial<F, Coefficients>>, 
         degrees: Vec<usize>, 
         aggregation_coefficient: F, 
         at_point: F, 
-        data: Vec<Self::IntermediateData>, 
+        data: &Option<Vec<Self::IntermediateData>>, 
         prng: &mut Self::Prng
     ) -> (Vec<F>, Self::OpeningProof) {
-        unimplemented!()
+        let max_degree = *degrees.iter().max().expect("MAX element exists");
+        let min_degree = *degrees.iter().min().expect("MIN element exists");
+
+        assert!(f64::from(max_degree as u32) / f64::from(min_degree as u32) < 2.0, "polynomials should not have too large degree difference");
+
+        let mut opening_values = Vec::with_capacity(polynomials.len());
+
+        let mut division_results = vec![vec![]; polynomials.len()];
+
+        for poly in polynomials.iter() {
+            let opening_value = poly.evaluate_at(&self.worker, at_point);
+            opening_values.push(opening_value);
+        }
+
+        self.worker.scope(polynomials.len(), |scope, chunk| {
+            for (p, q) in polynomials.chunks(chunk)
+                        .zip(division_results.chunks_mut(chunk)) 
+                        {
+                scope.spawn(move |_| {
+                    for (p, q) in p.iter().zip(q.iter_mut()) {
+                        let division_result = kate_divison_with_same_return_size(p.as_ref(), at_point);
+
+                        *q = division_result;
+                    }
+                });
+            }
+        });
+
+        // aggregate starting usign the first coefficient of 1
+
+        let mut q_poly: Option<Polynomial::<F, Coefficients>> = None;
+
+        let mut alpha = F::one();
+
+        for q in division_results.into_iter() {
+            if let Some(q_poly) = q_poly.as_mut() {
+                let q = Polynomial::<F, Coefficients>::from_coeffs(q).expect("must be small enough");
+                q_poly.add_assign_scaled(&self.worker, &q, &alpha);
+            } else {
+                let q = Polynomial::<F, Coefficients>::from_coeffs(q).expect("must be small enough");
+                q_poly = Some(q);
+            }
+            alpha.mul_assign(&aggregation_coefficient);
+        }
+
+        let q_poly = q_poly.expect("now it's aggregated");
+
+        let q_poly_lde = q_poly.lde(&self.worker, self.lde_factor).expect("must make an LDE");
+
+        let lde_size = q_poly_lde.size();
+
+        let fri_proto = FRI::proof_from_lde(
+            &q_poly_lde, 
+            self.lde_factor, 
+            self.output_coeffs_at_degree_plus_one, 
+            &self.precomputed_values, 
+            &self.worker, 
+            prng
+        ).expect("FRI must succeed");
+
+        let mut used_queries: Vec<usize> = vec![];
+
+        let mut domain_indexes = vec![];
+
+        // even while this is conditional, it can be changed to unconditional given large enough field
+
+        while domain_indexes.len() < self.num_queries {
+            let domain_idx = bytes_to_challenge_index(prng.get_challenge_bytes(), lde_size);
+            let coset_index_values = < < <FRI as FriIop<F> >::IopType as IOP<F> >::Combiner as CosetCombiner<F>>::get_coset_for_natural_index(domain_idx, lde_size);
+            let mut can_use = true;
+            for v in coset_index_values.iter() {
+                if used_queries.contains(&v) {
+                    can_use = false;
+                    break
+                }
+            }
+            if can_use {
+                domain_indexes.push(domain_idx);
+                used_queries.extend(coset_index_values);
+            }
+        }
+
+        let q_poly_fri_proof = FRI::prototype_into_proof(fri_proto, &q_poly_lde, domain_indexes.clone()).expect("must generate a proper proof");
+
+        let precomputations = if data.is_some() {
+            None
+        } else {
+            let mut result = Vec::with_capacity(polynomials.len());
+            for poly in polynomials.iter() {
+                let p = self.precompute(&poly).expect("aux data is computed");
+                result.push(p);
+            }
+
+            Some(result)
+        };
+
+        let data = if data.is_some() {
+            data.as_ref()
+        } else {
+            (&precomputations).as_ref()
+        }.expect("there is aux data in full");
+
+        let mut queries = vec![];
+
+        for (original_poly_lde, original_poly_lde_oracle) in data.iter() {
+            let mut original_poly_queries = vec![];
+            for idx in domain_indexes.clone().into_iter() {
+                let original_value = < < <FRI as FriIop<F> >::IopType as IOP<F> >::Combiner as CosetCombiner<F>>::get_for_natural_index(original_poly_lde.as_ref(), idx);
+                let original_poly_query = original_poly_lde_oracle.query(idx, original_poly_lde.as_ref());
+                original_poly_queries.push((*original_value, original_poly_query));
+            }
+            queries.push(original_poly_queries);
+        }
+
+        (opening_values, (q_poly_fri_proof, queries))
     }
 
     fn verify_single(&self, commitment: &Self::Commitment, at_point: F, claimed_value: F, proof: &Self::OpeningProof, prng: &mut Self::Prng) -> bool {
-        let (q_poly_fri_proof, original_poly_queries) = proof;
+        let (q_poly_fri_proof, original_poly_queries_vec) = proof;
+
+        assert!(original_poly_queries_vec.len() == 1);
+
+        let original_poly_queries = &original_poly_queries_vec[0];
 
         let lde_size = self.max_degree_plus_one.next_power_of_two() * self.lde_factor;
         let lde_domain = Domain::<F>::new_for_size(lde_size as u64).expect("large enough domain must exist");
@@ -195,7 +345,6 @@ impl<
         }
 
         // now simulate expected values
-        println!("Claiming {} at {}", claimed_value, at_point);
 
         let mut simulated_q_poly_values = vec![];
 
@@ -224,7 +373,100 @@ impl<
             simulated_q_poly_values.push(value_at_x);
         }
 
-        println!("All initial oracle queries are fine");
+        let valid = FRI::verify_proof_with_challenges(q_poly_fri_proof, domain_indexes, &simulated_q_poly_values, &fri_challenges).expect("fri verification should work");
+
+        valid
+    }
+
+    fn verify_multiple_openings(&self, commitments: Vec<&Self::Commitment>, at_point: F, claimed_values: &Vec<F>, aggregation_coefficient: F, proof: &Self::OpeningProof, prng: &mut Self::Prng) -> bool {
+        let (q_poly_fri_proof, original_poly_queries_vec) = proof;
+
+        let lde_size = self.max_degree_plus_one.next_power_of_two() * self.lde_factor;
+        let lde_domain = Domain::<F>::new_for_size(lde_size as u64).expect("large enough domain must exist");
+
+        // first get FRI challenges
+
+        let fri_challenges = FRI::get_fri_challenges(q_poly_fri_proof, prng);
+
+        // then make expected query locations
+
+        let mut used_queries: Vec<usize> = vec![];
+
+        let mut domain_indexes = vec![];
+
+        // even while this is conditional, it can be changed to unconditional given large enough field
+
+        while domain_indexes.len() < self.num_queries {
+            let domain_idx = bytes_to_challenge_index(prng.get_challenge_bytes(), lde_size);
+            let coset_index_values = < < <FRI as FriIop<F> >::IopType as IOP<F> >::Combiner as CosetCombiner<F>>::get_coset_for_natural_index(domain_idx, lde_size);
+            let mut can_use = true;
+            for v in coset_index_values.iter() {
+                if used_queries.contains(&v) {
+                    can_use = false;
+                    break
+                }
+            }
+            if can_use {
+                domain_indexes.push(domain_idx);
+                used_queries.extend(coset_index_values);
+            }
+        }
+
+        // now simulate expected values
+
+        let mut simulated_q_poly_values = vec![F::zero(); domain_indexes.len()];
+
+        assert!(original_poly_queries_vec.len() == claimed_values.len());
+
+        // accumulate value of the q poly over subpolys
+
+        let mut alpha = F::one();
+
+        for subpoly_index in 0..original_poly_queries_vec.len() {
+            let subpoly_queries = &original_poly_queries_vec[subpoly_index];
+            let claimed_value = claimed_values[subpoly_index];
+            let subpoly_commitment = commitments[subpoly_index];
+
+            let mut simulated_q_poly_subvalues = vec![];
+
+            for (domain_idx, original_poly_query) in domain_indexes.clone().into_iter()
+                                        .zip(subpoly_queries.iter()) {
+
+                let x = lde_domain.generator.pow(&[domain_idx as u64]);
+
+                assert!(original_poly_query.1.value() == original_poly_query.0);
+            
+                let mut num = original_poly_query.0;
+                num.sub_assign(&claimed_value);
+
+                let mut den = x;
+                den.sub_assign(&at_point);
+
+                let den_inversed = den.inverse().expect("denominator is unlikely to be zero in large enough field");
+
+                let mut value_at_x = num;
+                value_at_x.mul_assign(&den_inversed);
+
+                let is_in_commitment = < <FRI as FriIop<F> >::IopType as IOP<F> >::verify_query(&original_poly_query.1, subpoly_commitment);
+                if !is_in_commitment {
+                    println!("Not in the root for subpoly {} out of {}", subpoly_index, original_poly_queries_vec.len());
+                    return false;
+                }
+
+                simulated_q_poly_subvalues.push(value_at_x);
+            }
+
+            // in simulated_q_poly_values now there are values of this polynomial for all the queries, 
+            // now we need to sum them up with a proper coefficients starting with 0
+
+            for (a, s) in simulated_q_poly_values.iter_mut().zip(simulated_q_poly_subvalues.iter()) {
+                let mut tmp = *s;
+                tmp.mul_assign(&alpha);
+                a.add_assign(&tmp);
+            }
+
+            alpha.mul_assign(&aggregation_coefficient);
+        }
 
         let valid = FRI::verify_proof_with_challenges(q_poly_fri_proof, domain_indexes, &simulated_q_poly_values, &fri_challenges).expect("fri verification should work");
 
@@ -327,7 +569,7 @@ mod test {
 
         let expected_at_z = poly.evaluate_at(&worker, open_at);
 
-        let (opening, proof) = committer.open_single(&poly, open_at, aux_data, &mut transcript);
+        let (opening, proof) = committer.open_single(&poly, open_at, &aux_data, &mut transcript);
 
         assert!(opening == expected_at_z);
 
@@ -378,7 +620,7 @@ mod test {
 
         let now = Instant::now();
 
-        let (opening, proof) = committer.open_single(&poly, open_at, aux_data, &mut transcript);
+        let (opening, proof) = committer.open_single(&poly, open_at, &aux_data, &mut transcript);
 
         println!("Opening taken {:?}", now.elapsed());
 

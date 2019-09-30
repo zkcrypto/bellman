@@ -35,7 +35,6 @@ impl<F: PrimeField, I: IOP<F>> FRIProofPrototype<F, I> {
                                         .zip(Some(iop_values).into_iter().chain(&self.intermediate_values)) {
                 
                 let coset_values = <I::Combiner as CosetCombiner<F>>::get_coset_for_natural_index(domain_idx, domain_size);
-
                 if coset_values.len() != <I::Combiner as CosetCombiner<F>>::COSET_SIZE {
                     return Err(SynthesisError::PolynomialDegreeTooLarge);
                 }
