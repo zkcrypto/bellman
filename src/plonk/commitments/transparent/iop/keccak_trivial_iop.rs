@@ -1,25 +1,15 @@
 use crate::pairing::ff::{PrimeField, PrimeFieldRepr};
-use blake2s_simd::{Params, State};
+use tiny_keccak::*;
 use crate::multicore::Worker;
 use super::super::utils::log2_floor;
 use super::*;
 use super::trivial_coset_combiner::*;
 
-lazy_static! {
-    static ref BASE_BLAKE2S_PARAMS: State = {
-        Params::new()
-            .hash_length(32)
-            .key(b"Squeamish Ossifrage")
-            .personal(b"Shaftoe")
-            .to_state()
-    };
-}
-
-pub struct Blake2sLeafEncoder<F: PrimeField> {
+pub struct KeccakLeafEncoder<F: PrimeField> {
     _marker: std::marker::PhantomData<F>
 }
 
-impl<F: PrimeField> Blake2sLeafEncoder<F>  {
+impl<F: PrimeField> KeccakLeafEncoder<F>  {
     const SHAVE_BITS: u32 = 256 - F::CAPACITY;
     pub fn new() -> Self {
         assert!(F::NUM_BITS < 256);
@@ -30,7 +20,7 @@ impl<F: PrimeField> Blake2sLeafEncoder<F>  {
     }
 }
 
-impl<F: PrimeField> LeafEncoder<F> for Blake2sLeafEncoder<F>{
+impl<F: PrimeField> LeafEncoder<F> for KeccakLeafEncoder<F>{
     type Output = [u8; 32];
 
     fn encode_leaf(value: &F) -> Self::Output {
@@ -42,7 +32,7 @@ impl<F: PrimeField> LeafEncoder<F> for Blake2sLeafEncoder<F>{
     }
 }
 
-impl<F: PrimeField> FiatShamirHasher<F> for Blake2sLeafEncoder<F>{
+impl<F: PrimeField> FiatShamirHasher<F> for KeccakLeafEncoder<F>{
     type Input = [u8; 32];
 
     fn transform(value: &Self::Input) -> F {
@@ -59,23 +49,21 @@ impl<F: PrimeField> FiatShamirHasher<F> for Blake2sLeafEncoder<F>{
     }
 }
 
-pub struct Blake2sTreeHasher<F: PrimeField> {
-    encoder: Blake2sLeafEncoder<F>
+pub struct KeccakTreeHasher<F: PrimeField> {
+    _marker: std::marker::PhantomData<F>
 }
 
-impl<F: PrimeField> Blake2sTreeHasher<F> {
+impl<F: PrimeField> KeccakTreeHasher<F> {
     pub fn new() -> Self {
         Self {
-            encoder: Blake2sLeafEncoder::new()
+            _marker: std::marker::PhantomData
         }
     }
 }
 
-impl HashFunctionOutput for [u8; 32] {}
-
-impl<F: PrimeField> IopTreeHasher<F> for Blake2sTreeHasher<F> {
+impl<F: PrimeField> IopTreeHasher<F> for KeccakTreeHasher<F> {
     type HashOutput = [u8; 32];
-    type LeafEncoder = Blake2sLeafEncoder<F>;
+    type LeafEncoder = KeccakLeafEncoder<F>;
 
     fn hash_leaf(value: &F) -> Self::HashOutput {
         let value = <Self::LeafEncoder as LeafEncoder<F> >::encode_leaf(value);
@@ -83,32 +71,31 @@ impl<F: PrimeField> IopTreeHasher<F> for Blake2sTreeHasher<F> {
     }
 
     fn hash_encoded_leaf(value: &<Self::LeafEncoder as LeafEncoder<F>>::Output) -> Self::HashOutput {
-        let mut state = (*BASE_BLAKE2S_PARAMS).clone();
-        state.update(value);
-        let output = state.finalize();
+        let output = keccak256(value);
 
-        *output.as_array()
+        output
     }
 
     fn hash_node(values: &[Self::HashOutput], _level: usize) -> Self::HashOutput {
         debug_assert!(values.len() == 2);
-        let mut state = (*BASE_BLAKE2S_PARAMS).clone();
+        let mut state = Keccak::new_keccak256();
         for value in values.iter() {
             state.update(value);
         }
 
-        let output = state.finalize();
+        let mut output: [u8; 32] = [0; 32];
+        state.finalize(&mut output);
 
-        *output.as_array()
+        output
     }
 }
 
-pub struct Blake2sIopTree<F: PrimeField> {
+pub struct KeccakIopTree<F: PrimeField> {
     size: usize,
-    nodes: Vec< < Blake2sTreeHasher<F> as IopTreeHasher<F> >::HashOutput >,
+    nodes: Vec< < KeccakTreeHasher<F> as IopTreeHasher<F> >::HashOutput >,
 }
 
-impl<F: PrimeField> Blake2sIopTree<F> {
+impl<F: PrimeField> KeccakIopTree<F> {
     pub fn new() -> Self {
         Self {
             size: 0usize,
@@ -119,20 +106,16 @@ impl<F: PrimeField> Blake2sIopTree<F> {
 
 use std::time::Instant;
 
-impl<'a, F: PrimeField> IopTree<F> for Blake2sIopTree<F> {
+impl<'a, F: PrimeField> IopTree<F> for KeccakIopTree<F> {
     type Combiner = TrivialCombiner<F>;
-    type TreeHasher = Blake2sTreeHasher<F>;
-    type FiatShamirTransformer = Blake2sLeafEncoder<F>;
+    type TreeHasher = KeccakTreeHasher<F>;
+    type FiatShamirTransformer = KeccakLeafEncoder<F>;
 
     fn size(&self) -> usize {
         self.size
     }
 
     fn create(leafs: &[F]) -> Self {
-        {
-            let _ = *BASE_BLAKE2S_PARAMS;
-        }
-
         println!("Creating a tree of size {}", leafs.len());
         let start = Instant::now();
 
@@ -279,15 +262,15 @@ impl<'a, F: PrimeField> IopTree<F> for Blake2sIopTree<F> {
     }
 }
 
-pub struct TrivialBlake2sIOP<F: PrimeField> {
-    tree: Blake2sIopTree<F>,
+pub struct TrivialKeccakIOP<F: PrimeField> {
+    tree: KeccakIopTree<F>,
 }
 
 
-impl<F: PrimeField> IOP<F> for TrivialBlake2sIOP<F> {
+impl<F: PrimeField> IOP<F> for TrivialKeccakIOP<F> {
     type Combiner = TrivialCombiner<F>;
-    type Tree = Blake2sIopTree<F>;
-    type Query = TrivialBlake2sIopQuery<F>;
+    type Tree = KeccakIopTree<F>;
+    type Query = TrivialKeccakIopQuery<F>;
 
     fn create<'l> (leafs: &'l [F]) -> Self {
         let tree = Self::Tree::create(leafs);
@@ -322,7 +305,7 @@ impl<F: PrimeField> IOP<F> for TrivialBlake2sIOP<F> {
 
         let path = self.tree.get_path(tree_index, leafs);
 
-        TrivialBlake2sIopQuery::<F> {
+        TrivialKeccakIopQuery::<F> {
             index: natural_index,
             value: value,
             path: path
@@ -330,23 +313,23 @@ impl<F: PrimeField> IOP<F> for TrivialBlake2sIOP<F> {
     }
 }
 
-impl<F: PrimeField> PartialEq for TrivialBlake2sIOP<F> {
+impl<F: PrimeField> PartialEq for TrivialKeccakIOP<F> {
     fn eq(&self, other: &Self) -> bool {
         self.get_root() == other.get_root()
     }
 }
 
-impl<F: PrimeField> Eq for TrivialBlake2sIOP<F> {}
+impl<F: PrimeField> Eq for TrivialKeccakIOP<F> {}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct TrivialBlake2sIopQuery<F: PrimeField> {
+pub struct TrivialKeccakIopQuery<F: PrimeField> {
     index: usize,
     value: F,
     path: Vec<[u8; 32]>,
 }
 
-impl<F: PrimeField> IopQuery<F> for TrivialBlake2sIopQuery<F> {
-    type TreeHasher = Blake2sTreeHasher<F>;
+impl<F: PrimeField> IopQuery<F> for TrivialKeccakIopQuery<F> {
+    type TreeHasher = KeccakTreeHasher<F>;
 
     fn natural_index(&self) -> usize {
         self.index

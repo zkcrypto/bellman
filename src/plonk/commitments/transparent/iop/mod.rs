@@ -2,6 +2,7 @@ use crate::pairing::ff::PrimeField;
 
 pub mod trivial_coset_combiner;
 pub mod blake2s_trivial_iop;
+pub mod keccak_trivial_iop;
 
 pub trait CosetInformation: Sized + Clone + Copy {
     const COSET_SIZE: usize;

@@ -650,6 +650,8 @@ pub fn prove_nonhomomorphic<E: Engine, S: CommitmentScheme<E::Fr, Prng = T>, T: 
     let required_domain_size = n + 1;
     assert!(required_domain_size.is_power_of_two());
 
+    println!("Start work with polynomials");
+
     let (w_l, w_r, w_o) = assembly.make_wire_assingments();
 
     let w_l = Polynomial::<E::Fr, Values>::from_values_unpadded(w_l)?;
@@ -793,16 +795,16 @@ pub fn prove_nonhomomorphic<E: Engine, S: CommitmentScheme<E::Fr, Prng = T>, T: 
     let sigma_2_lde = sigma_2.clone().coset_lde(&worker, 4)?;
     let sigma_3_lde = sigma_3.clone().coset_lde(&worker, 4)?;
 
-    let (q_l_commitment, q_l_aux) = committer.commit_single(&q_l);
-    let (q_r_commitment, q_r_aux) = committer.commit_single(&q_r);
-    let (q_o_commitment, q_o_aux) = committer.commit_single(&q_o);
-    let (q_m_commitment, q_m_aux) = committer.commit_single(&q_m);
-    let (q_c_commitment, q_c_aux) = committer.commit_single(&q_c);
+    let (_q_l_commitment, q_l_aux) = committer.commit_single(&q_l);
+    let (_q_r_commitment, q_r_aux) = committer.commit_single(&q_r);
+    let (_q_o_commitment, q_o_aux) = committer.commit_single(&q_o);
+    let (_q_m_commitment, q_m_aux) = committer.commit_single(&q_m);
+    let (_q_c_commitment, q_c_aux) = committer.commit_single(&q_c);
 
-    let (s_id_commitment, s_id_aux) = committer.commit_single(&s_id);
-    let (sigma_1_commitment, sigma_1_aux) = committer.commit_single(&sigma_1);
-    let (sigma_2_commitment, sigma_2_aux) = committer.commit_single(&sigma_2);
-    let (sigma_3_commitment, sigma_3_aux) = committer.commit_single(&sigma_3);
+    let (_s_id_commitment, s_id_aux) = committer.commit_single(&s_id);
+    let (_sigma_1_commitment, sigma_1_aux) = committer.commit_single(&sigma_1);
+    let (_sigma_2_commitment, sigma_2_aux) = committer.commit_single(&sigma_2);
+    let (_sigma_3_commitment, sigma_3_aux) = committer.commit_single(&sigma_3);
 
     // we do not commit those cause those are known already
 
@@ -971,6 +973,8 @@ pub fn prove_nonhomomorphic<E: Engine, S: CommitmentScheme<E::Fr, Prng = T>, T: 
 
     let t_poly = t_1.icoset_fft(&worker);
 
+    println!("End work with polynomials");
+
     // let degree = get_degree::<E>(&t_poly);
 
     // assert!(degree <= 3*n);
@@ -1013,7 +1017,7 @@ pub fn prove_nonhomomorphic<E: Engine, S: CommitmentScheme<E::Fr, Prng = T>, T: 
     let sigma_2_at_z = sigma_2.evaluate_at(&worker, z);
     let sigma_3_at_z = sigma_3.evaluate_at(&worker, z);
 
-    let mut inverse_vanishing_at_z = assembly.evaluate_inverse_vanishing_poly(required_domain_size.next_power_of_two(), z);
+    // let mut inverse_vanishing_at_z = assembly.evaluate_inverse_vanishing_poly(required_domain_size.next_power_of_two(), z);
 
     // let inverse_vanishing_at_z_no_alphas = inverse_vanishing_at_z;
 
@@ -1023,8 +1027,8 @@ pub fn prove_nonhomomorphic<E: Engine, S: CommitmentScheme<E::Fr, Prng = T>, T: 
     let z_1_shifted_at_z = z_1_shifted.evaluate_at(&worker, z);
     let z_2_shifted_at_z = z_2_shifted.evaluate_at(&worker, z);
 
-    let l_0_at_z = l_0.evaluate_at(&worker, z);
-    let l_n_minus_one_at_z = l_n_minus_one.evaluate_at(&worker, z);
+    // let l_0_at_z = l_0.evaluate_at(&worker, z);
+    // let l_n_minus_one_at_z = l_n_minus_one.evaluate_at(&worker, z);
 
     let t_at_z = t_poly.evaluate_at(&worker, z);
 
@@ -1054,123 +1058,123 @@ pub fn prove_nonhomomorphic<E: Engine, S: CommitmentScheme<E::Fr, Prng = T>, T: 
 
     let shifted_opening_aggregation_challenge = transcript.get_challenge();
 
-    // this is a sanity check
-    {
-        let mut t_1 = {
-            let mut res = q_c_at_z;
+    // // this is a sanity check
+    // {
+    //     let mut t_1 = {
+    //         let mut res = q_c_at_z;
 
-            let mut tmp = q_l_at_z;
-            tmp.mul_assign(&a_at_z);
-            res.add_assign(&tmp);
+    //         let mut tmp = q_l_at_z;
+    //         tmp.mul_assign(&a_at_z);
+    //         res.add_assign(&tmp);
 
-            let mut tmp = q_r_at_z;
-            tmp.mul_assign(&b_at_z);
-            res.add_assign(&tmp);
+    //         let mut tmp = q_r_at_z;
+    //         tmp.mul_assign(&b_at_z);
+    //         res.add_assign(&tmp);
 
-            let mut tmp = q_o_at_z;
-            tmp.mul_assign(&c_at_z);
-            res.add_assign(&tmp);
+    //         let mut tmp = q_o_at_z;
+    //         tmp.mul_assign(&c_at_z);
+    //         res.add_assign(&tmp);
 
-            let mut tmp = q_m_at_z;
-            tmp.mul_assign(&a_at_z);
-            tmp.mul_assign(&b_at_z);
-            res.add_assign(&tmp);
+    //         let mut tmp = q_m_at_z;
+    //         tmp.mul_assign(&a_at_z);
+    //         tmp.mul_assign(&b_at_z);
+    //         res.add_assign(&tmp);
 
-            inverse_vanishing_at_z.mul_assign(&alpha);
+    //         inverse_vanishing_at_z.mul_assign(&alpha);
 
-            res.mul_assign(&inverse_vanishing_at_z);
+    //         res.mul_assign(&inverse_vanishing_at_z);
 
-            res
-        };
+    //         res
+    //     };
 
-        {
-            let mut res = z_1_at_z;
+    //     {
+    //         let mut res = z_1_at_z;
 
-            let mut tmp = s_id_at_z;
-            tmp.mul_assign(&beta);
-            tmp.add_assign(&a_at_z);
-            tmp.add_assign(&gamma);
-            res.mul_assign(&tmp);
+    //         let mut tmp = s_id_at_z;
+    //         tmp.mul_assign(&beta);
+    //         tmp.add_assign(&a_at_z);
+    //         tmp.add_assign(&gamma);
+    //         res.mul_assign(&tmp);
 
-            let mut tmp = s_id_at_z;
-            tmp.add_assign(&n_fe);
-            tmp.mul_assign(&beta);
-            tmp.add_assign(&b_at_z);
-            tmp.add_assign(&gamma);
-            res.mul_assign(&tmp);
+    //         let mut tmp = s_id_at_z;
+    //         tmp.add_assign(&n_fe);
+    //         tmp.mul_assign(&beta);
+    //         tmp.add_assign(&b_at_z);
+    //         tmp.add_assign(&gamma);
+    //         res.mul_assign(&tmp);
 
-            let mut tmp = s_id_at_z;
-            tmp.add_assign(&two_n_fe);
-            tmp.mul_assign(&beta);
-            tmp.add_assign(&c_at_z);
-            tmp.add_assign(&gamma);
-            res.mul_assign(&tmp);
+    //         let mut tmp = s_id_at_z;
+    //         tmp.add_assign(&two_n_fe);
+    //         tmp.mul_assign(&beta);
+    //         tmp.add_assign(&c_at_z);
+    //         tmp.add_assign(&gamma);
+    //         res.mul_assign(&tmp);
 
-            res.sub_assign(&z_1_shifted_at_z);
+    //         res.sub_assign(&z_1_shifted_at_z);
 
-            inverse_vanishing_at_z.mul_assign(&alpha);
+    //         inverse_vanishing_at_z.mul_assign(&alpha);
 
-            res.mul_assign(&inverse_vanishing_at_z);
+    //         res.mul_assign(&inverse_vanishing_at_z);
 
-            t_1.add_assign(&res);
-        }
+    //         t_1.add_assign(&res);
+    //     }
 
-        {
-            let mut res = z_2_at_z;
+    //     {
+    //         let mut res = z_2_at_z;
 
-            let mut tmp = sigma_1_at_z;
-            tmp.mul_assign(&beta);
-            tmp.add_assign(&a_at_z);
-            tmp.add_assign(&gamma);
-            res.mul_assign(&tmp);
+    //         let mut tmp = sigma_1_at_z;
+    //         tmp.mul_assign(&beta);
+    //         tmp.add_assign(&a_at_z);
+    //         tmp.add_assign(&gamma);
+    //         res.mul_assign(&tmp);
 
-            let mut tmp = sigma_2_at_z;
-            tmp.mul_assign(&beta);
-            tmp.add_assign(&b_at_z);
-            tmp.add_assign(&gamma);
-            res.mul_assign(&tmp);
+    //         let mut tmp = sigma_2_at_z;
+    //         tmp.mul_assign(&beta);
+    //         tmp.add_assign(&b_at_z);
+    //         tmp.add_assign(&gamma);
+    //         res.mul_assign(&tmp);
 
-            let mut tmp = sigma_3_at_z;
-            tmp.mul_assign(&beta);
-            tmp.add_assign(&c_at_z);
-            tmp.add_assign(&gamma);
-            res.mul_assign(&tmp);
+    //         let mut tmp = sigma_3_at_z;
+    //         tmp.mul_assign(&beta);
+    //         tmp.add_assign(&c_at_z);
+    //         tmp.add_assign(&gamma);
+    //         res.mul_assign(&tmp);
 
-            res.sub_assign(&z_2_shifted_at_z);
+    //         res.sub_assign(&z_2_shifted_at_z);
 
-            inverse_vanishing_at_z.mul_assign(&alpha);
+    //         inverse_vanishing_at_z.mul_assign(&alpha);
 
-            res.mul_assign(&inverse_vanishing_at_z);
+    //         res.mul_assign(&inverse_vanishing_at_z);
 
-            t_1.add_assign(&res);
-        }
+    //         t_1.add_assign(&res);
+    //     }
 
-        {
-            let mut res = z_1_shifted_at_z;
-            res.sub_assign(&z_2_shifted_at_z);
-            res.mul_assign(&l_n_minus_one_at_z);
+    //     {
+    //         let mut res = z_1_shifted_at_z;
+    //         res.sub_assign(&z_2_shifted_at_z);
+    //         res.mul_assign(&l_n_minus_one_at_z);
 
-            inverse_vanishing_at_z.mul_assign(&alpha);
+    //         inverse_vanishing_at_z.mul_assign(&alpha);
 
-            res.mul_assign(&inverse_vanishing_at_z);
+    //         res.mul_assign(&inverse_vanishing_at_z);
 
-            t_1.add_assign(&res);
-        }
+    //         t_1.add_assign(&res);
+    //     }
 
-        {
-            let mut res = z_1_at_z;
-            res.sub_assign(&z_2_at_z);
-            res.mul_assign(&l_0_at_z);
+    //     {
+    //         let mut res = z_1_at_z;
+    //         res.sub_assign(&z_2_at_z);
+    //         res.mul_assign(&l_0_at_z);
 
-            inverse_vanishing_at_z.mul_assign(&alpha);
+    //         inverse_vanishing_at_z.mul_assign(&alpha);
 
-            res.mul_assign(&inverse_vanishing_at_z);
+    //         res.mul_assign(&inverse_vanishing_at_z);
 
-            t_1.add_assign(&res);
-        }
+    //         t_1.add_assign(&res);
+    //     }
 
-        // assert_eq!(t_at_z, t_1);
-    }
+    //     assert_eq!(t_at_z, t_1);
+    // }
 
     // we do NOT compute linearization polynomial for non-homomorphic case
 

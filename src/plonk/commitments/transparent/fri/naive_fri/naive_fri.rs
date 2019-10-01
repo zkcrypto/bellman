@@ -98,6 +98,8 @@ impl<F: PrimeField, I: IOP<F> > FriIop<F> for NaiveFriIop<F, I> {
     }
 }
 
+use std::time::Instant;
+
 #[derive(PartialEq, Eq, Clone)]
 pub struct FRIProofPrototype<F: PrimeField, I: IOP<F>> {
     pub l0_commitment: I,
@@ -263,6 +265,9 @@ impl<F: PrimeField, I: IOP<F>> NaiveFriIop<F, I> {
         worker: &Worker,
         prng: &mut P
     ) -> Result<FRIProofPrototype<F, I>, SynthesisError> {
+        println!("Starting FRI");
+        let start = Instant::now();
+    
         let l0_commitment: I = I::create(lde_values.as_ref());
         let initial_domain_size = lde_values.size();
 
@@ -384,6 +389,8 @@ impl<F: PrimeField, I: IOP<F>> NaiveFriIop<F, I> {
         // assert!(output_coeffs_at_degree_plus_one >= degree_plus_one);
 
         final_poly_coeffs.truncate(output_coeffs_at_degree_plus_one);
+
+        println!("Done FRI for size {} in {:?}", lde_values.size()/lde_factor, start.elapsed());
 
         Ok(FRIProofPrototype {
             l0_commitment,

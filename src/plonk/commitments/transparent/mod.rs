@@ -50,6 +50,8 @@ pub struct TransparentCommitterParameters {
     pub output_coeffs_at_degree_plus_one: usize,
 }
 
+use std::time::Instant;
+
 impl<
     F: PrimeField, 
     FRI: FriIop<F>,
@@ -88,15 +90,20 @@ impl<
     fn precompute(&self, poly: &Polynomial<F, Coefficients>) -> Option<Self::IntermediateData> {
         let original_poly_lde = poly.clone().lde(&self.worker, self.lde_factor).expect("must make an LDE");
         let original_tree = < < FRI as FriIop<F> >::IopType as IOP<F> >::create(&original_poly_lde.as_ref());
-        let commitment = original_tree.get_root();
 
         Some((original_poly_lde, original_tree))
     }
 
     fn commit_single(&self, poly: &Polynomial<F, Coefficients>) -> (Self::Commitment, Option<Self::IntermediateData>) {
+        println!("Start commit single");
+        let start = Instant::now();
+
         let original_poly_lde = poly.clone().lde(&self.worker, self.lde_factor).expect("must make an LDE");
         let original_tree = < < FRI as FriIop<F> >::IopType as IOP<F> >::create(&original_poly_lde.as_ref());
         let commitment = original_tree.get_root();
+
+        println!("Done in {:?} for max degree {}", start.elapsed(), poly.size());
+        println!("Done commit single");
 
         (commitment, Some((original_poly_lde, original_tree)))
         
@@ -107,6 +114,9 @@ impl<
     }
 
     fn open_single(&self, poly: &Polynomial<F, Coefficients>, at_point: F, data: &Option<Self::IntermediateData>, prng: &mut Self::Prng) -> (F, Self::OpeningProof) {
+        println!("Start open single");
+        let start = Instant::now();
+
         let opening_value = poly.evaluate_at(&self.worker, at_point);
 
         // do not need to to the subtraction cause last coefficient is never used by division
@@ -176,6 +186,9 @@ impl<
             original_poly_queries.push((*original_value, original_poly_query));
         }
 
+        println!("Done in {:?} for max degree {}", start.elapsed(), poly.size());
+        println!("Done open single");
+
         (opening_value, (q_poly_fri_proof, vec![original_poly_queries]))
 
     }
@@ -189,6 +202,9 @@ impl<
         data: &Option<Vec<Self::IntermediateData>>, 
         prng: &mut Self::Prng
     ) -> (Vec<F>, Self::OpeningProof) {
+        println!("Start open multiple");
+        let start = Instant::now();
+
         let max_degree = *degrees.iter().max().expect("MAX element exists");
         let min_degree = *degrees.iter().min().expect("MIN element exists");
 
@@ -302,6 +318,10 @@ impl<
             }
             queries.push(original_poly_queries);
         }
+
+
+        println!("Done in {:?} for max degree {}", start.elapsed(), max_degree);
+        println!("Done open multiple");
 
         (opening_values, (q_poly_fri_proof, queries))
     }

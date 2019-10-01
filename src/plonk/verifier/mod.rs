@@ -572,4 +572,248 @@ mod test {
 
         assert!(!valid);
     }
+
+    #[derive(Clone)]
+    struct BenchmarkCircuit<E:Engine>{
+        num_steps: usize,
+        _marker: PhantomData<E>
+    }
+
+    impl<E: Engine> Circuit<E> for BenchmarkCircuit<E> {
+        fn synthesize<CS: ConstraintSystem<E>>(&self, cs: &mut CS) -> Result<(), SynthesisError> {
+            // yeah, fibonacci...
+
+            println!("Start synthesis");
+            let one = E::Fr::one();
+            let mut negative_one = one;
+            negative_one.negate();
+
+            let mut two = one;
+            two.double();
+            
+            let mut a = cs.alloc(|| {
+                Ok(E::Fr::one())
+            })?;
+
+            let mut b = cs.alloc(|| {
+                Ok(E::Fr::one())
+            })?;
+
+            cs.enforce_zero_2((a, CS::ONE), (one, negative_one))?;
+            cs.enforce_zero_2((b, CS::ONE), (one, negative_one))?;
+
+            let mut c = cs.alloc(|| {
+                Ok(two)
+            })?;
+
+            cs.enforce_zero_3((a, b, c), (one, one, negative_one))?;
+
+            let mut a_value = one;
+            let mut b_value = one;
+            let mut c_value = two;
+
+            for _ in 0..self.num_steps {
+                a = b;
+                b = c;
+
+                a_value = b_value;
+                b_value = c_value;
+                c_value = a_value;
+                c_value.add_assign(&b_value);
+
+                c = cs.alloc(|| {
+                    Ok(c_value)
+                })?;
+
+                cs.enforce_zero_3((a, b, c), (one, one, negative_one))?;
+            }
+
+            println!("Done synthesis");
+
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn test_bench_fibonacci_circuit() {
+        use crate::pairing::bn256::{Bn256, Fr};
+        use crate::plonk::utils::*;
+        use crate::plonk::commitments::transparent::fri::*;
+        use crate::plonk::commitments::transparent::iop::*;
+        use crate::plonk::commitments::transcript::*;
+        use crate::plonk::commitments::transparent::fri::naive_fri::naive_fri::*;
+        use crate::plonk::commitments::transparent::iop::blake2s_trivial_iop::*;
+        use crate::plonk::commitments::*;
+        use crate::plonk::commitments::transparent::*;
+
+        use std::time::Instant;
+
+        type Iop = TrivialBlake2sIOP<Fr>;
+        type Fri = NaiveFriIop<Fr, Iop>;
+        type Committer = StatelessTransparentCommitter<Fr, Fri, Blake2sTranscript<Fr>>;
+
+        let meta = TransparentCommitterParameters {
+            lde_factor: 16,
+            num_queries: 10,
+            output_coeffs_at_degree_plus_one: 16,
+        };
+
+        let meta_large = TransparentCommitterParameters {
+            lde_factor: 16,
+            num_queries: 10,
+            output_coeffs_at_degree_plus_one: 16,
+        };
+
+        let circuit = BenchmarkCircuit::<Bn256> {
+            num_steps: 1_000_000,
+            _marker: PhantomData
+        };
+
+        println!("Start setup");
+        let start = Instant::now();
+        let setup = setup::<Bn256, Committer, _>(&circuit, meta).unwrap();
+        println!("Setup taken {:?}", start.elapsed());
+
+        println!("Using circuit with N = {}", setup.n);
+
+        let meta = TransparentCommitterParameters {
+            lde_factor: 16,
+            num_queries: 10,
+            output_coeffs_at_degree_plus_one: 16,
+        };
+
+        println!("Start proving");
+        let start = Instant::now();
+        let proof = prove_nonhomomorphic::<Bn256, Committer, Blake2sTranscript::<Fr>, _>(&circuit, meta, meta_large).unwrap();
+        println!("Proof taken {:?}", start.elapsed());
+
+        let meta = TransparentCommitterParameters {
+            lde_factor: 16,
+            num_queries: 10,
+            output_coeffs_at_degree_plus_one: 16,
+        };
+
+        let meta_large = TransparentCommitterParameters {
+            lde_factor: 16,
+            num_queries: 10,
+            output_coeffs_at_degree_plus_one: 16,
+        };
+
+        println!("Start verifying");
+        let start = Instant::now();
+        let valid = verify_nonhomomorphic::<Bn256, Committer, Blake2sTranscript::<Fr>>(&setup, &proof, meta, meta_large).unwrap();
+        println!("Verification with unnecessary precomputation taken {:?}", start.elapsed());
+
+        assert!(!valid);
+    }
+
+    #[test]
+    fn test_bench_keccak_for_fibonacci_circuit() {
+        use crate::pairing::bn256::{Bn256, Fr};
+        use crate::plonk::utils::*;
+        use crate::plonk::commitments::transparent::fri::*;
+        use crate::plonk::commitments::transparent::iop::*;
+        use crate::plonk::commitments::transcript::*;
+        use crate::plonk::commitments::transparent::fri::naive_fri::naive_fri::*;
+        use crate::plonk::commitments::transparent::iop::keccak_trivial_iop::*;
+        use crate::plonk::commitments::*;
+        use crate::plonk::commitments::transparent::*;
+
+        use std::time::Instant;
+
+        type Iop = TrivialKeccakIOP<Fr>;
+        type Fri = NaiveFriIop<Fr, Iop>;
+        type Committer = StatelessTransparentCommitter<Fr, Fri, Blake2sTranscript<Fr>>;
+
+        let meta = TransparentCommitterParameters {
+            lde_factor: 16,
+            num_queries: 10,
+            output_coeffs_at_degree_plus_one: 16,
+        };
+
+        let meta_large = TransparentCommitterParameters {
+            lde_factor: 16,
+            num_queries: 10,
+            output_coeffs_at_degree_plus_one: 16,
+        };
+
+        let circuit = BenchmarkCircuit::<Bn256> {
+            num_steps: 1_000_000,
+            _marker: PhantomData
+        };
+
+        println!("Start setup");
+        let start = Instant::now();
+        let setup = setup::<Bn256, Committer, _>(&circuit, meta).unwrap();
+        println!("Setup taken {:?}", start.elapsed());
+
+        println!("Using circuit with N = {}", setup.n);
+
+        let meta = TransparentCommitterParameters {
+            lde_factor: 16,
+            num_queries: 10,
+            output_coeffs_at_degree_plus_one: 16,
+        };
+
+        println!("Start proving");
+        let start = Instant::now();
+        let proof = prove_nonhomomorphic::<Bn256, Committer, Blake2sTranscript::<Fr>, _>(&circuit, meta, meta_large).unwrap();
+        println!("Proof taken {:?}", start.elapsed());
+
+        let meta = TransparentCommitterParameters {
+            lde_factor: 16,
+            num_queries: 10,
+            output_coeffs_at_degree_plus_one: 16,
+        };
+
+        let meta_large = TransparentCommitterParameters {
+            lde_factor: 16,
+            num_queries: 10,
+            output_coeffs_at_degree_plus_one: 16,
+        };
+
+        println!("Start verifying");
+        let start = Instant::now();
+        let valid = verify_nonhomomorphic::<Bn256, Committer, Blake2sTranscript::<Fr>>(&setup, &proof, meta, meta_large).unwrap();
+        println!("Verification with unnecessary precomputation taken {:?}", start.elapsed());
+
+        assert!(!valid);
+    }
+
+    #[test]
+    fn test_bench_homomorphic_plonk() {
+        use rand::{XorShiftRng, SeedableRng, Rand, Rng};
+        use crate::pairing::bn256::Bn256;
+        use num_cpus;
+        use crate::pairing::ff::ScalarEngine;
+        use crate::pairing::CurveProjective;
+        use crate::multiexp::*;
+        use crate::multicore::*;
+        use crate::source::*;
+        use std::sync::Arc;
+        use futures::{Future};
+
+        const SAMPLES: usize = 1 << 20;
+        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+
+        let v = (0..SAMPLES).map(|_| <Bn256 as ScalarEngine>::Fr::rand(rng).into_repr()).collect::<Vec<_>>();
+        let g = (0..SAMPLES).map(|_| <Bn256 as Engine>::G1::rand(rng).into_affine()).collect::<Vec<_>>();
+
+        println!("Done generating test points and scalars");
+
+        let pool = Worker::new();
+        let start = std::time::Instant::now();
+
+        let _sparse = multiexp(
+            &pool,
+            (Arc::new(g), 0),
+            FullDensity,
+            Arc::new(v)
+        ).wait().unwrap();
+
+        let per_one_poly = start.elapsed().as_micros();
+        // a, b, c, z_1, z_2, t, opening at z (of length t), opening at z*omega(of length a)
+        let total_expected_plonk = per_one_poly * (5 + 1 + 3 + 3 + 1); 
+        println!("{} ms for expected plonk with ~ {} gates", total_expected_plonk/1000u128, SAMPLES);
+    }
 }
