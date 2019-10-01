@@ -965,14 +965,15 @@ impl<F: PrimeField> Polynomial<F, Values> {
             *s = tmp;
         }
 
-        let first_chunk_len = worker.get_chunk_size(self.coeffs.len());
+        let chunk_len = worker.get_chunk_size(self.coeffs.len());
 
-        worker.scope(result[first_chunk_len..].len(), |scope, chunk| {
-            for (g, s) in result[first_chunk_len..].chunks_mut(chunk)
+        worker.scope(0, |scope, _| {
+            for (g, s) in result[chunk_len..].chunks_mut(chunk_len)
                         .zip(subproducts.chunks(1)) {
                 scope.spawn(move |_| {
+                    let c = s[0];
                     for g in g.iter_mut() {
-                        g.mul_assign(&s[0]);
+                        g.mul_assign(&c);
                     }
                 });
             }

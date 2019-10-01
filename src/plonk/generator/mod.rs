@@ -469,7 +469,20 @@ pub struct PlonkSetup<E: Engine, S: CommitmentScheme<E::Fr> >{
     pub sigma_3: S::Commitment,
 }
 
-pub fn setup<E: Engine, S: CommitmentScheme<E::Fr>, C: Circuit<E>>(circuit: &C, meta: S::Meta) -> Result<PlonkSetup<E, S>, SynthesisError> {
+#[derive(Debug)]
+pub struct PlonkSetupAuxData<E: Engine, S: CommitmentScheme<E::Fr> >{
+    pub q_l_aux: Option<S::IntermediateData>,
+    pub q_r_aux: Option<S::IntermediateData>,
+    pub q_o_aux: Option<S::IntermediateData>,
+    pub q_m_aux: Option<S::IntermediateData>,
+    pub q_c_aux: Option<S::IntermediateData>,
+    pub s_id_aux: Option<S::IntermediateData>,
+    pub sigma_1_aux: Option<S::IntermediateData>,
+    pub sigma_2_aux: Option<S::IntermediateData>,
+    pub sigma_3_aux: Option<S::IntermediateData>,
+}
+
+pub fn setup<E: Engine, S: CommitmentScheme<E::Fr>, C: Circuit<E>>(circuit: &C, meta: S::Meta) -> Result<(PlonkSetup<E, S>, PlonkSetupAuxData<E, S>), SynthesisError> {
     let mut assembly = GeneratorAssembly::<E>::new();
     circuit.synthesize(&mut assembly)?;
     assembly.finalize();
@@ -482,17 +495,17 @@ pub fn setup<E: Engine, S: CommitmentScheme<E::Fr>, C: Circuit<E>>(circuit: &C, 
 
     let (q_l, q_r, q_o, q_m, q_c, s_id, sigma_1, sigma_2, sigma_3) = assembly.output_setup_polynomials(&worker)?;
 
-    let (q_l, _) = committer.commit_single(&q_l);
-    let (q_r, _) = committer.commit_single(&q_r);
-    let (q_o, _) = committer.commit_single(&q_o);
-    let (q_m, _) = committer.commit_single(&q_m);
-    let (q_c, _) = committer.commit_single(&q_c);
-    let (s_id, _) = committer.commit_single(&s_id);
-    let (sigma_1, _) = committer.commit_single(&sigma_1);
-    let (sigma_2, _) = committer.commit_single(&sigma_2);
-    let (sigma_3, _) = committer.commit_single(&sigma_3);
+    let (q_l, q_l_aux) = committer.commit_single(&q_l);
+    let (q_r, q_r_aux) = committer.commit_single(&q_r);
+    let (q_o, q_o_aux) = committer.commit_single(&q_o);
+    let (q_m, q_m_aux) = committer.commit_single(&q_m);
+    let (q_c, q_c_aux) = committer.commit_single(&q_c);
+    let (s_id, s_id_aux) = committer.commit_single(&s_id);
+    let (sigma_1, sigma_1_aux) = committer.commit_single(&sigma_1);
+    let (sigma_2, sigma_2_aux) = committer.commit_single(&sigma_2);
+    let (sigma_3, sigma_3_aux) = committer.commit_single(&sigma_3);
 
-    Ok(PlonkSetup::<E, S> {
+    let setup = PlonkSetup::<E, S> {
         n,
         q_l,
         q_r,
@@ -503,5 +516,19 @@ pub fn setup<E: Engine, S: CommitmentScheme<E::Fr>, C: Circuit<E>>(circuit: &C, 
         sigma_1,
         sigma_2,
         sigma_3,
-    })
+    };
+
+    let aux = PlonkSetupAuxData::<E, S> {
+        q_l_aux,
+        q_r_aux,
+        q_o_aux,
+        q_m_aux,
+        q_c_aux,
+        s_id_aux,
+        sigma_1_aux,
+        sigma_2_aux,
+        sigma_3_aux
+    };
+
+    Ok((setup, aux))
 }

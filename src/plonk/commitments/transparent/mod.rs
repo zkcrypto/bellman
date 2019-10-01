@@ -43,7 +43,7 @@ impl<
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TransparentCommitterParameters {
     pub lde_factor: usize,
     pub num_queries: usize,
@@ -113,11 +113,16 @@ impl<
         unimplemented!()
     }
 
-    fn open_single(&self, poly: &Polynomial<F, Coefficients>, at_point: F, data: &Option<Self::IntermediateData>, prng: &mut Self::Prng) -> (F, Self::OpeningProof) {
+    fn open_single(
+        &self, 
+        poly: &Polynomial<F, Coefficients>, 
+        at_point: F, 
+        opening_value: F, 
+        data: &Option<&Self::IntermediateData>, 
+        prng: &mut Self::Prng
+    ) -> Self::OpeningProof {
         println!("Start open single");
         let start = Instant::now();
-
-        let opening_value = poly.evaluate_at(&self.worker, at_point);
 
         // do not need to to the subtraction cause last coefficient is never used by division
         let division_result = {
@@ -189,7 +194,7 @@ impl<
         println!("Done in {:?} for max degree {}", start.elapsed(), poly.size());
         println!("Done open single");
 
-        (opening_value, (q_poly_fri_proof, vec![original_poly_queries]))
+        (q_poly_fri_proof, vec![original_poly_queries])
 
     }
 
@@ -198,34 +203,31 @@ impl<
         polynomials: Vec<&Polynomial<F, Coefficients>>, 
         degrees: Vec<usize>, 
         aggregation_coefficient: F, 
-        at_point: F, 
-        data: &Option<Vec<Self::IntermediateData>>, 
+        at_points: Vec<F>, 
+        opening_values: Vec<F>,
+        data: &Option<Vec<&Self::IntermediateData>>, 
         prng: &mut Self::Prng
-    ) -> (Vec<F>, Self::OpeningProof) {
+    ) -> Self::OpeningProof {
         println!("Start open multiple");
         let start = Instant::now();
+        assert!(at_points.len() == opening_values.len());
+        assert!(at_points.len() == polynomials.len());
 
         let max_degree = *degrees.iter().max().expect("MAX element exists");
         let min_degree = *degrees.iter().min().expect("MIN element exists");
 
         assert!(f64::from(max_degree as u32) / f64::from(min_degree as u32) < 2.0, "polynomials should not have too large degree difference");
 
-        let mut opening_values = Vec::with_capacity(polynomials.len());
-
         let mut division_results = vec![vec![]; polynomials.len()];
 
-        for poly in polynomials.iter() {
-            let opening_value = poly.evaluate_at(&self.worker, at_point);
-            opening_values.push(opening_value);
-        }
-
         self.worker.scope(polynomials.len(), |scope, chunk| {
-            for (p, q) in polynomials.chunks(chunk)
+            for ((p, q), at) in polynomials.chunks(chunk)
                         .zip(division_results.chunks_mut(chunk)) 
+                        .zip(at_points.chunks(chunk))
                         {
                 scope.spawn(move |_| {
-                    for (p, q) in p.iter().zip(q.iter_mut()) {
-                        let division_result = kate_divison_with_same_return_size(p.as_ref(), at_point);
+                    for ((p, q), at) in p.iter().zip(q.iter_mut()).zip(at.iter()) {
+                        let division_result = kate_divison_with_same_return_size(p.as_ref(), *at);
 
                         *q = division_result;
                     }
@@ -301,13 +303,18 @@ impl<
             Some(result)
         };
 
+        let mut prec_may_be = None;
+        
         let data = if data.is_some() {
             data.as_ref()
         } else {
-            (&precomputations).as_ref()
+            prec_may_be = Some(precomputations.as_ref().expect("is some").iter().map(|el| el).collect::<Vec<_>>());
+            prec_may_be.as_ref()
         }.expect("there is aux data in full");
 
         let mut queries = vec![];
+
+        let mut opened_values = vec![];
 
         for (original_poly_lde, original_poly_lde_oracle) in data.iter() {
             let mut original_poly_queries = vec![];
@@ -319,11 +326,18 @@ impl<
             queries.push(original_poly_queries);
         }
 
+        for idx in domain_indexes.clone().into_iter() {
+            let value = < < <FRI as FriIop<F> >::IopType as IOP<F> >::Combiner as CosetCombiner<F>>::get_for_natural_index(q_poly_lde.as_ref(), idx);
+            opened_values.push(value);
+        }
+
+        println!("Will open poly at indexes {:?} for values {:?}", domain_indexes, opened_values);
+
 
         println!("Done in {:?} for max degree {}", start.elapsed(), max_degree);
         println!("Done open multiple");
 
-        (opening_values, (q_poly_fri_proof, queries))
+        (q_poly_fri_proof, queries)
     }
 
     fn verify_single(&self, commitment: &Self::Commitment, at_point: F, claimed_value: F, proof: &Self::OpeningProof, prng: &mut Self::Prng) -> bool {
@@ -398,7 +412,15 @@ impl<
         valid
     }
 
-    fn verify_multiple_openings(&self, commitments: Vec<&Self::Commitment>, at_point: F, claimed_values: &Vec<F>, aggregation_coefficient: F, proof: &Self::OpeningProof, prng: &mut Self::Prng) -> bool {
+    fn verify_multiple_openings(
+        &self, 
+        commitments: Vec<&Self::Commitment>, 
+        at_points: Vec<F>, 
+        claimed_values: &Vec<F>, 
+        aggregation_coefficient: F, 
+        proof: &Self::OpeningProof, 
+        prng: &mut Self::Prng
+    ) -> bool {
         let (q_poly_fri_proof, original_poly_queries_vec) = proof;
 
         let lde_size = self.max_degree_plus_one.next_power_of_two() * self.lde_factor;
@@ -446,6 +468,7 @@ impl<
             let subpoly_queries = &original_poly_queries_vec[subpoly_index];
             let claimed_value = claimed_values[subpoly_index];
             let subpoly_commitment = commitments[subpoly_index];
+            let opening_at = &at_points[subpoly_index];
 
             let mut simulated_q_poly_subvalues = vec![];
 
@@ -460,7 +483,7 @@ impl<
                 num.sub_assign(&claimed_value);
 
                 let mut den = x;
-                den.sub_assign(&at_point);
+                den.sub_assign(&opening_at);
 
                 let den_inversed = den.inverse().expect("denominator is unlikely to be zero in large enough field");
 
@@ -487,6 +510,8 @@ impl<
 
             alpha.mul_assign(&aggregation_coefficient);
         }
+
+        println!("Will open poly at indexes {:?} for simulated values {:?}", domain_indexes, simulated_q_poly_values);
 
         let valid = FRI::verify_proof_with_challenges(q_poly_fri_proof, domain_indexes, &simulated_q_poly_values, &fri_challenges).expect("fri verification should work");
 
@@ -589,13 +614,11 @@ mod test {
 
         let expected_at_z = poly.evaluate_at(&worker, open_at);
 
-        let (opening, proof) = committer.open_single(&poly, open_at, &aux_data, &mut transcript);
-
-        assert!(opening == expected_at_z);
+        let proof = committer.open_single(&poly, open_at, expected_at_z, &aux_data.as_ref(), &mut transcript);
 
         let mut transcript = Blake2sTranscript::<Fr>::new();
 
-        let valid = committer.verify_single(&commitment, open_at, opening, &proof, &mut transcript);
+        let valid = committer.verify_single(&commitment, open_at, expected_at_z, &proof, &mut transcript);
 
         assert!(valid);
     }
@@ -640,17 +663,15 @@ mod test {
 
         let now = Instant::now();
 
-        let (opening, proof) = committer.open_single(&poly, open_at, &aux_data, &mut transcript);
+        let proof = committer.open_single(&poly, open_at, expected_at_z, &aux_data.as_ref(), &mut transcript);
 
         println!("Opening taken {:?}", now.elapsed());
-
-        assert!(opening == expected_at_z);
 
         let mut transcript = Blake2sTranscript::<Fr>::new();
 
         let now = Instant::now();
 
-        let valid = committer.verify_single(&commitment, open_at, opening, &proof, &mut transcript);
+        let valid = committer.verify_single(&commitment, open_at, expected_at_z, &proof, &mut transcript);
 
         println!("Verification taken {:?}", now.elapsed());
 

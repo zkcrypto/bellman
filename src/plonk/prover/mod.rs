@@ -13,6 +13,8 @@ use super::domains::*;
 use crate::plonk::commitments::*;
 use crate::plonk::commitments::transcript::*;
 use crate::plonk::utils::*;
+use crate::plonk::generator::*;
+
 
 #[derive(Debug)]
 struct ProvingAssembly<E: Engine> {
@@ -619,13 +621,15 @@ pub struct PlonkNonhomomorphicProof<E: Engine, S: CommitmentScheme<E::Fr> >{
     pub z_1_commitment: S::Commitment,
     pub z_2_commitment: S::Commitment,
     pub t_commitment: S::Commitment,
-    pub unshifted_openings_proof: S::OpeningProof,
-    pub shifted_openings_proof: S::OpeningProof,
+    pub openings_proof: S::OpeningProof,
+    // pub shifted_openings_proof: S::OpeningProof,
     pub t_opening_proof: S::OpeningProof,
 }
 
 pub fn prove_nonhomomorphic<E: Engine, S: CommitmentScheme<E::Fr, Prng = T>, T: Transcript<E::Fr, Input = S::Commitment>, C: Circuit<E>>(
     circuit: &C, 
+    setup: &PlonkSetup<E, S>,
+    aux: &PlonkSetupAuxData<E, S>,
     meta: S::Meta,
     large_meta: S::Meta
 ) -> Result<PlonkNonhomomorphicProof<E, S>, SynthesisError> {
@@ -795,16 +799,16 @@ pub fn prove_nonhomomorphic<E: Engine, S: CommitmentScheme<E::Fr, Prng = T>, T: 
     let sigma_2_lde = sigma_2.clone().coset_lde(&worker, 4)?;
     let sigma_3_lde = sigma_3.clone().coset_lde(&worker, 4)?;
 
-    let (_q_l_commitment, q_l_aux) = committer.commit_single(&q_l);
-    let (_q_r_commitment, q_r_aux) = committer.commit_single(&q_r);
-    let (_q_o_commitment, q_o_aux) = committer.commit_single(&q_o);
-    let (_q_m_commitment, q_m_aux) = committer.commit_single(&q_m);
-    let (_q_c_commitment, q_c_aux) = committer.commit_single(&q_c);
+    // let (_q_l_commitment, q_l_aux) = committer.commit_single(&q_l);
+    // let (_q_r_commitment, q_r_aux) = committer.commit_single(&q_r);
+    // let (_q_o_commitment, q_o_aux) = committer.commit_single(&q_o);
+    // let (_q_m_commitment, q_m_aux) = committer.commit_single(&q_m);
+    // let (_q_c_commitment, q_c_aux) = committer.commit_single(&q_c);
 
-    let (_s_id_commitment, s_id_aux) = committer.commit_single(&s_id);
-    let (_sigma_1_commitment, sigma_1_aux) = committer.commit_single(&sigma_1);
-    let (_sigma_2_commitment, sigma_2_aux) = committer.commit_single(&sigma_2);
-    let (_sigma_3_commitment, sigma_3_aux) = committer.commit_single(&sigma_3);
+    // let (_s_id_commitment, s_id_aux) = committer.commit_single(&s_id);
+    // let (_sigma_1_commitment, sigma_1_aux) = committer.commit_single(&sigma_1);
+    // let (_sigma_2_commitment, sigma_2_aux) = committer.commit_single(&sigma_2);
+    // let (_sigma_3_commitment, sigma_3_aux) = committer.commit_single(&sigma_3);
 
     // we do not commit those cause those are known already
 
@@ -1017,9 +1021,7 @@ pub fn prove_nonhomomorphic<E: Engine, S: CommitmentScheme<E::Fr, Prng = T>, T: 
     let sigma_2_at_z = sigma_2.evaluate_at(&worker, z);
     let sigma_3_at_z = sigma_3.evaluate_at(&worker, z);
 
-    // let mut inverse_vanishing_at_z = assembly.evaluate_inverse_vanishing_poly(required_domain_size.next_power_of_two(), z);
-
-    // let inverse_vanishing_at_z_no_alphas = inverse_vanishing_at_z;
+    let mut inverse_vanishing_at_z = assembly.evaluate_inverse_vanishing_poly(required_domain_size.next_power_of_two(), z);
 
     let z_1_at_z = z_1.evaluate_at(&worker, z);
     let z_2_at_z = z_2.evaluate_at(&worker, z);
@@ -1027,10 +1029,10 @@ pub fn prove_nonhomomorphic<E: Engine, S: CommitmentScheme<E::Fr, Prng = T>, T: 
     let z_1_shifted_at_z = z_1_shifted.evaluate_at(&worker, z);
     let z_2_shifted_at_z = z_2_shifted.evaluate_at(&worker, z);
 
-    // let l_0_at_z = l_0.evaluate_at(&worker, z);
-    // let l_n_minus_one_at_z = l_n_minus_one.evaluate_at(&worker, z);
-
     let t_at_z = t_poly.evaluate_at(&worker, z);
+
+    let l_0_at_z = l_0.evaluate_at(&worker, z);
+    let l_n_minus_one_at_z = l_n_minus_one.evaluate_at(&worker, z);
 
     {
         transcript.commit_field_element(&a_at_z);
@@ -1050,135 +1052,139 @@ pub fn prove_nonhomomorphic<E: Engine, S: CommitmentScheme<E::Fr, Prng = T>, T: 
 
         transcript.commit_field_element(&t_at_z);
 
+        transcript.commit_field_element(&z_1_at_z);
+        transcript.commit_field_element(&z_2_at_z);
+
         transcript.commit_field_element(&z_1_shifted_at_z);
         transcript.commit_field_element(&z_2_shifted_at_z);
     }
 
-    let unshifted_opening_aggregation_challenge = transcript.get_challenge();
+    let aggregation_challenge = transcript.get_challenge();
 
-    let shifted_opening_aggregation_challenge = transcript.get_challenge();
+    // let shifted_opening_aggregation_challenge = transcript.get_challenge();
 
-    // // this is a sanity check
-    // {
-    //     let mut t_1 = {
-    //         let mut res = q_c_at_z;
+    // this is a sanity check
+    {
+        let mut t_1 = {
+            let mut res = q_c_at_z;
 
-    //         let mut tmp = q_l_at_z;
-    //         tmp.mul_assign(&a_at_z);
-    //         res.add_assign(&tmp);
+            let mut tmp = q_l_at_z;
+            tmp.mul_assign(&a_at_z);
+            res.add_assign(&tmp);
 
-    //         let mut tmp = q_r_at_z;
-    //         tmp.mul_assign(&b_at_z);
-    //         res.add_assign(&tmp);
+            let mut tmp = q_r_at_z;
+            tmp.mul_assign(&b_at_z);
+            res.add_assign(&tmp);
 
-    //         let mut tmp = q_o_at_z;
-    //         tmp.mul_assign(&c_at_z);
-    //         res.add_assign(&tmp);
+            let mut tmp = q_o_at_z;
+            tmp.mul_assign(&c_at_z);
+            res.add_assign(&tmp);
 
-    //         let mut tmp = q_m_at_z;
-    //         tmp.mul_assign(&a_at_z);
-    //         tmp.mul_assign(&b_at_z);
-    //         res.add_assign(&tmp);
+            let mut tmp = q_m_at_z;
+            tmp.mul_assign(&a_at_z);
+            tmp.mul_assign(&b_at_z);
+            res.add_assign(&tmp);
 
-    //         inverse_vanishing_at_z.mul_assign(&alpha);
+            inverse_vanishing_at_z.mul_assign(&alpha);
 
-    //         res.mul_assign(&inverse_vanishing_at_z);
+            res.mul_assign(&inverse_vanishing_at_z);
 
-    //         res
-    //     };
+            res
+        };
 
-    //     {
-    //         let mut res = z_1_at_z;
+        {
+            let mut res = z_1_at_z;
 
-    //         let mut tmp = s_id_at_z;
-    //         tmp.mul_assign(&beta);
-    //         tmp.add_assign(&a_at_z);
-    //         tmp.add_assign(&gamma);
-    //         res.mul_assign(&tmp);
+            let mut tmp = s_id_at_z;
+            tmp.mul_assign(&beta);
+            tmp.add_assign(&a_at_z);
+            tmp.add_assign(&gamma);
+            res.mul_assign(&tmp);
 
-    //         let mut tmp = s_id_at_z;
-    //         tmp.add_assign(&n_fe);
-    //         tmp.mul_assign(&beta);
-    //         tmp.add_assign(&b_at_z);
-    //         tmp.add_assign(&gamma);
-    //         res.mul_assign(&tmp);
+            let mut tmp = s_id_at_z;
+            tmp.add_assign(&n_fe);
+            tmp.mul_assign(&beta);
+            tmp.add_assign(&b_at_z);
+            tmp.add_assign(&gamma);
+            res.mul_assign(&tmp);
 
-    //         let mut tmp = s_id_at_z;
-    //         tmp.add_assign(&two_n_fe);
-    //         tmp.mul_assign(&beta);
-    //         tmp.add_assign(&c_at_z);
-    //         tmp.add_assign(&gamma);
-    //         res.mul_assign(&tmp);
+            let mut tmp = s_id_at_z;
+            tmp.add_assign(&two_n_fe);
+            tmp.mul_assign(&beta);
+            tmp.add_assign(&c_at_z);
+            tmp.add_assign(&gamma);
+            res.mul_assign(&tmp);
 
-    //         res.sub_assign(&z_1_shifted_at_z);
+            res.sub_assign(&z_1_shifted_at_z);
 
-    //         inverse_vanishing_at_z.mul_assign(&alpha);
+            inverse_vanishing_at_z.mul_assign(&alpha);
 
-    //         res.mul_assign(&inverse_vanishing_at_z);
+            res.mul_assign(&inverse_vanishing_at_z);
 
-    //         t_1.add_assign(&res);
-    //     }
+            t_1.add_assign(&res);
+        }
 
-    //     {
-    //         let mut res = z_2_at_z;
+        {
+            let mut res = z_2_at_z;
 
-    //         let mut tmp = sigma_1_at_z;
-    //         tmp.mul_assign(&beta);
-    //         tmp.add_assign(&a_at_z);
-    //         tmp.add_assign(&gamma);
-    //         res.mul_assign(&tmp);
+            let mut tmp = sigma_1_at_z;
+            tmp.mul_assign(&beta);
+            tmp.add_assign(&a_at_z);
+            tmp.add_assign(&gamma);
+            res.mul_assign(&tmp);
 
-    //         let mut tmp = sigma_2_at_z;
-    //         tmp.mul_assign(&beta);
-    //         tmp.add_assign(&b_at_z);
-    //         tmp.add_assign(&gamma);
-    //         res.mul_assign(&tmp);
+            let mut tmp = sigma_2_at_z;
+            tmp.mul_assign(&beta);
+            tmp.add_assign(&b_at_z);
+            tmp.add_assign(&gamma);
+            res.mul_assign(&tmp);
 
-    //         let mut tmp = sigma_3_at_z;
-    //         tmp.mul_assign(&beta);
-    //         tmp.add_assign(&c_at_z);
-    //         tmp.add_assign(&gamma);
-    //         res.mul_assign(&tmp);
+            let mut tmp = sigma_3_at_z;
+            tmp.mul_assign(&beta);
+            tmp.add_assign(&c_at_z);
+            tmp.add_assign(&gamma);
+            res.mul_assign(&tmp);
 
-    //         res.sub_assign(&z_2_shifted_at_z);
+            res.sub_assign(&z_2_shifted_at_z);
 
-    //         inverse_vanishing_at_z.mul_assign(&alpha);
+            inverse_vanishing_at_z.mul_assign(&alpha);
 
-    //         res.mul_assign(&inverse_vanishing_at_z);
+            res.mul_assign(&inverse_vanishing_at_z);
 
-    //         t_1.add_assign(&res);
-    //     }
+            t_1.add_assign(&res);
+        }
 
-    //     {
-    //         let mut res = z_1_shifted_at_z;
-    //         res.sub_assign(&z_2_shifted_at_z);
-    //         res.mul_assign(&l_n_minus_one_at_z);
+        {
+            let mut res = z_1_shifted_at_z;
+            res.sub_assign(&z_2_shifted_at_z);
+            res.mul_assign(&l_n_minus_one_at_z);
 
-    //         inverse_vanishing_at_z.mul_assign(&alpha);
+            inverse_vanishing_at_z.mul_assign(&alpha);
 
-    //         res.mul_assign(&inverse_vanishing_at_z);
+            res.mul_assign(&inverse_vanishing_at_z);
 
-    //         t_1.add_assign(&res);
-    //     }
+            t_1.add_assign(&res);
+        }
 
-    //     {
-    //         let mut res = z_1_at_z;
-    //         res.sub_assign(&z_2_at_z);
-    //         res.mul_assign(&l_0_at_z);
+        {
+            let mut res = z_1_at_z;
+            res.sub_assign(&z_2_at_z);
+            res.mul_assign(&l_0_at_z);
 
-    //         inverse_vanishing_at_z.mul_assign(&alpha);
+            inverse_vanishing_at_z.mul_assign(&alpha);
 
-    //         res.mul_assign(&inverse_vanishing_at_z);
+            res.mul_assign(&inverse_vanishing_at_z);
 
-    //         t_1.add_assign(&res);
-    //     }
+            t_1.add_assign(&res);
+        }
 
-    //     assert_eq!(t_at_z, t_1);
-    // }
+        assert_eq!(t_at_z, t_1, "sanity check failed");
+    }
 
     // we do NOT compute linearization polynomial for non-homomorphic case
 
-    let opening_point = z;
+    let mut z_by_omega = z;
+    z_by_omega.mul_assign(&z_1.omega);
 
     let opening_polynomials = vec![
         &a_poly,
@@ -1195,130 +1201,148 @@ pub fn prove_nonhomomorphic<E: Engine, S: CommitmentScheme<E::Fr, Prng = T>, T: 
         &sigma_3,
         &z_1,
         &z_2,
-    ];
-
-    let degrees: Vec<usize> = opening_polynomials.iter().map(|el| el.size()).collect();
-
-    let z_1_aux = z_1_aux.unwrap();
-    let z_2_aux = z_2_aux.unwrap();
-
-    let precomputations = Some(vec![
-        a_aux_data.unwrap(),
-        b_aux_data.unwrap(),
-        c_aux_data.unwrap(),
-        q_l_aux.unwrap(),
-        q_r_aux.unwrap(),
-        q_o_aux.unwrap(),
-        q_m_aux.unwrap(),
-        q_c_aux.unwrap(),
-        s_id_aux.unwrap(),
-        sigma_1_aux.unwrap(),
-        sigma_2_aux.unwrap(),
-        sigma_3_aux.unwrap(),
-        z_1_aux,
-        z_2_aux,
-    ]);
-
-    let (unshifted_opening_values, unshifted_proof) = committer.open_multiple(
-        opening_polynomials, 
-        degrees, 
-        unshifted_opening_aggregation_challenge,
-        opening_point, 
-        &precomputations, 
-        &mut transcript
-    );
-
-    let (t_opening, t_opening_proof) = large_committer.open_single(
-        &t_poly,
-        opening_point,
-        &t_aux, 
-        &mut transcript
-    ); 
-
-    let mut opening_point = z;
-    opening_point.mul_assign(&z_1.omega);
-
-    let opening_polynomials = vec![
         &z_1,
         &z_2,
     ];
 
     let degrees: Vec<usize> = opening_polynomials.iter().map(|el| el.size()).collect();
 
-    let mut precomputations = precomputations.unwrap();
-
-    let z_2_aux = precomputations.pop().unwrap();
-    let z_1_aux = precomputations.pop().unwrap();
-
     let precomputations = Some(vec![
-        z_1_aux,
-        z_2_aux,
+        a_aux_data.as_ref().expect("is some"),
+        b_aux_data.as_ref().expect("is some"),
+        c_aux_data.as_ref().expect("is some"),
+        aux.q_l_aux.as_ref().expect("is some"),
+        aux.q_r_aux.as_ref().expect("is some"),
+        aux.q_o_aux.as_ref().expect("is some"),
+        aux.q_m_aux.as_ref().expect("is some"),
+        aux.q_c_aux.as_ref().expect("is some"),
+        aux.s_id_aux.as_ref().expect("is some"),
+        aux.sigma_1_aux.as_ref().expect("is some"),
+        aux.sigma_2_aux.as_ref().expect("is some"),
+        aux.sigma_3_aux.as_ref().expect("is some"),
+        z_1_aux.as_ref().expect("is some"),
+        z_2_aux.as_ref().expect("is some"),
+        z_1_aux.as_ref().expect("is some"),
+        z_2_aux.as_ref().expect("is some"),
     ]);
 
-    let (shifted_opening_values, shifted_proof) = committer.open_multiple(
+    let opening_values = vec![
+        a_at_z,
+        b_at_z,
+        c_at_z,
+        q_l_at_z,
+        q_r_at_z,
+        q_o_at_z,
+        q_m_at_z,
+        q_c_at_z,
+        s_id_at_z,
+        sigma_1_at_z,
+        sigma_2_at_z,
+        sigma_3_at_z,
+        z_1_at_z,
+        z_2_at_z,
+        z_1_shifted_at_z,
+        z_2_shifted_at_z
+    ];
+
+    let opening_points = vec![
+        z, 
+        z,
+        z,
+
+        z, 
+        z,
+        z,
+        z,
+        z,
+
+        z,
+        z,
+        z,
+        z,
+
+        z,
+        z,
+
+        z_by_omega,
+        z_by_omega
+    ];
+
+    let multiopen_proof = committer.open_multiple(
         opening_polynomials, 
         degrees, 
-        shifted_opening_aggregation_challenge,
-        opening_point, 
+        aggregation_challenge,
+        opening_points, 
+        opening_values,
         &precomputations, 
         &mut transcript
     );
 
-    let a_opened_at_z = unshifted_opening_values[0];
-    let b_opened_at_z = unshifted_opening_values[1];
-    let c_opened_at_z = unshifted_opening_values[2];
+    let t_opening_proof = large_committer.open_single(
+        &t_poly,
+        z,
+        t_at_z,
+        &t_aux.as_ref(), 
+        &mut transcript
+    ); 
 
-    let q_l_opened_at_z = unshifted_opening_values[3];
-    let q_r_opened_at_z = unshifted_opening_values[4];
-    let q_o_opened_at_z = unshifted_opening_values[5];
-    let q_m_opened_at_z = unshifted_opening_values[6];
-    let q_c_opened_at_z = unshifted_opening_values[7];
 
-    let s_id_opened_at_z = unshifted_opening_values[8];
-    let sigma_1_opened_at_z = unshifted_opening_values[9];
-    let sigma_2_opened_at_z = unshifted_opening_values[10];
-    let sigma_3_opened_at_z = unshifted_opening_values[11];
 
-    let z_1_opened_at_z = unshifted_opening_values[12];
-    let z_2_opened_at_z = unshifted_opening_values[13];
+    // let opening_polynomials = vec![
+    //     &z_1,
+    //     &z_2,
+    // ];
 
-    assert!(a_opened_at_z == a_at_z);
-    assert!(q_l_opened_at_z == q_l_at_z);
-    assert!(z_1_opened_at_z == z_1_at_z);
+    // let degrees: Vec<usize> = opening_polynomials.iter().map(|el| el.size()).collect();
 
-    let z_1_shifted_opened_at_z = shifted_opening_values[0];
-    let z_2_shifted_opened_at_z = shifted_opening_values[1];
+    // let precomputations = Some(vec![
+    //     z_1_aux.as_ref().expect("is some"),
+    //     z_2_aux.as_ref().expect("is some"),
+    // ]);
 
-    assert!(z_1_shifted_opened_at_z == z_1_shifted_at_z);
+    // let opening_values = vec![
+    //     z_1_shifted_at_z,
+    //     z_2_shifted_at_z
+    // ];
 
-    assert!(t_opening == t_at_z);
+    
+
+    // let shifted_proof = committer.open_multiple(
+    //     opening_polynomials, 
+    //     degrees, 
+    //     shifted_opening_aggregation_challenge,
+    //     opening_point, 
+    //     opening_values,
+    //     &precomputations, 
+    //     &mut transcript
+    // );
 
     let proof = PlonkNonhomomorphicProof::<E, S> {
-        a_opening_value: a_opened_at_z,
-        b_opening_value: b_opened_at_z,
-        c_opening_value: c_opened_at_z,
-        q_l_opening_value: q_l_opened_at_z,
-        q_r_opening_value: q_r_opened_at_z,
-        q_o_opening_value: q_o_opened_at_z,
-        q_m_opening_value: q_m_opened_at_z,
-        q_c_opening_value: q_c_opened_at_z,
-        s_id_opening_value: s_id_opened_at_z,
-        sigma_1_opening_value: sigma_1_opened_at_z,
-        sigma_2_opening_value: sigma_2_opened_at_z,
-        sigma_3_opening_value: sigma_3_opened_at_z,
-        z_1_unshifted_opening_value: z_1_opened_at_z,
-        z_2_unshifted_opening_value: z_2_opened_at_z,
-        z_1_shifted_opening_value: z_1_shifted_opened_at_z,
-        z_2_shifted_opening_value: z_2_shifted_opened_at_z,
-        t_opening_value: t_opening,
+        a_opening_value: a_at_z,
+        b_opening_value: b_at_z,
+        c_opening_value: c_at_z,
+        q_l_opening_value: q_l_at_z,
+        q_r_opening_value: q_r_at_z,
+        q_o_opening_value: q_o_at_z,
+        q_m_opening_value: q_m_at_z,
+        q_c_opening_value: q_c_at_z,
+        s_id_opening_value: s_id_at_z,
+        sigma_1_opening_value: sigma_1_at_z,
+        sigma_2_opening_value: sigma_2_at_z,
+        sigma_3_opening_value: sigma_3_at_z,
+        z_1_unshifted_opening_value: z_1_at_z,
+        z_2_unshifted_opening_value: z_2_at_z,
+        z_1_shifted_opening_value: z_1_shifted_at_z,
+        z_2_shifted_opening_value: z_2_shifted_at_z,
+        t_opening_value: t_at_z,
         a_commitment: a_commitment,
         b_commitment: b_commitment,
         c_commitment: c_commitment,
         z_1_commitment: z_1_commitment,
         z_2_commitment: z_2_commitment,
         t_commitment: t_commitment,
-        unshifted_openings_proof: unshifted_proof,
-        shifted_openings_proof: shifted_proof,
+        openings_proof: multiopen_proof,
+        // shifted_openings_proof: shifted_proof,
         t_opening_proof: t_opening_proof,
     };
 
@@ -1502,40 +1526,5 @@ mod test {
         let worker = Worker::new();
 
         let _ = assembly.output_setup_polynomials(&worker).unwrap();
-    }
-
-    #[test]
-    fn test_small_circuit_transparent_proof() {
-        use crate::pairing::bn256::{Bn256, Fr};
-        use crate::plonk::utils::*;
-        use crate::plonk::commitments::transparent::fri::*;
-        use crate::plonk::commitments::transparent::iop::*;
-        use crate::plonk::commitments::transcript::*;
-        use crate::plonk::commitments::transparent::fri::naive_fri::naive_fri::*;
-        use crate::plonk::commitments::transparent::iop::blake2s_trivial_iop::*;
-        use crate::plonk::commitments::*;
-        use crate::plonk::commitments::transparent::*;
-
-        type Iop = TrivialBlake2sIOP<Fr>;
-        type Fri = NaiveFriIop<Fr, Iop>;
-        type Committer = StatelessTransparentCommitter<Fr, Fri, Blake2sTranscript<Fr>>;
-
-        let meta = TransparentCommitterParameters {
-            lde_factor: 16,
-            num_queries: 2,
-            output_coeffs_at_degree_plus_one: 1,
-        };
-
-        let meta_large = TransparentCommitterParameters {
-            lde_factor: 16,
-            num_queries: 2,
-            output_coeffs_at_degree_plus_one: 1,
-        };
-
-        let circuit = TestCircuit::<Bn256> {
-            _marker: PhantomData
-        };
-
-        let proof = prove_nonhomomorphic::<Bn256, Committer, Blake2sTranscript::<Fr>, _>(&circuit, meta, meta_large).unwrap();
     }
 }

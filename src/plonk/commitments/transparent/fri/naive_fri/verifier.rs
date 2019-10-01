@@ -32,11 +32,6 @@ impl<F: PrimeField, I: IOP<F>> NaiveFriIop<F, I> {
         if el != F::one() {
             return Err(SynthesisError::UnexpectedIdentity);
         }
-        let next_domain_size = domain.size / 2;
-        let el = domain_element.pow([next_domain_size]);
-        if el == F::one() {
-            return Err(SynthesisError::UnexpectedIdentity);
-        }
 
         let mut omega = domain.generator;
         let mut omega_inv = omega.inverse().ok_or(
@@ -238,17 +233,20 @@ impl<F: PrimeField, I: IOP<F>> NaiveFriIop<F, I> {
                 let f_at_omega = (&queries[0]).value();
                 if let Some(value) = expected_value {
                     if !coset_values.contains(&domain_idx) {
+                        println!("Coset values {:?} do not containt required index {}", coset_values, domain_idx);
                         return Ok(false);
                     }
 
                     let q: Vec<_> = queries.iter().filter(|el| el.natural_index() == domain_idx).collect();
                     if q.len() != 1 {
+                        println!("Queries containt duplicate opening for required index {}", domain_idx);
                         return Ok(false)
                     }
 
                     let supplied_value = q[0].value();
                     // check in the next domain
                     if supplied_value != value {
+                        println!("Query value {} is not equal to the expected value {} for round {}", supplied_value, value, round);
                         return Ok(false);
                     }
                 }
@@ -309,6 +307,8 @@ impl<F: PrimeField, I: IOP<F>> NaiveFriIop<F, I> {
             let valid = expected_value_from_coefficients == expected_value;
 
             if !valid {
+                println!("Value from supplied coefficients {} is not equal to the value from queries {} for natural index {}", expected_value_from_coefficients, expected_value, natural_element_index);
+                println!("Final coefficients = {:?}", proof.final_coefficients);
                 return Ok(false);
             }
         }

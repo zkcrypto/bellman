@@ -49,25 +49,6 @@ impl<F: PrimeField, I: IOP<F> > FriIop<F> for NaiveFriIop<F, I> {
         prototype.produce_proof(iop_values, natural_first_element_indexes)
     }
 
-    // fn verify_proof_with_transcript<P: Prng<F, Input = < < I::Tree as IopTree<F> >::TreeHasher as IopTreeHasher<F> >::HashOutput> >(
-    //     proof: &Self::Proof,
-    //     natural_element_indexes: Vec<usize>,
-    //     expected_value: &[F],
-    //     prng: &mut P
-    // ) -> Result<bool, SynthesisError> {
-    //     let mut fri_challenges = vec![];
-
-    //     for root in proof.roots.iter() {
-    //         let iop_challenge = {
-    //             prng.commit_input(&root);
-    //             prng.get_challenge()
-    //         };
-
-    //         fri_challenges.push(iop_challenge);
-    //     }
-    //     Self::verify_proof_queries(proof, natural_element_indexes, Self::DEGREE, expected_value, &fri_challenges)
-    // }
-
     fn get_fri_challenges<P: Prng<F, Input = < < I::Tree as IopTree<F> >::TreeHasher as IopTreeHasher<F> >::HashOutput> >(
         proof: &Self::Proof,
         prng: &mut P
@@ -82,8 +63,6 @@ impl<F: PrimeField, I: IOP<F> > FriIop<F> for NaiveFriIop<F, I> {
 
             fri_challenges.push(iop_challenge);
         }
-
-        // fri_challenges.pop().expect("challenges are not empty");
 
         fri_challenges
     }
@@ -300,6 +279,10 @@ impl<F: PrimeField, I: IOP<F>> NaiveFriIop<F, I> {
         let omegas_inv_ref: &[F] = precomputations.omegas_inv_ref();
 
         let mut roots = vec![];
+
+        // step 0: fold totally by 2
+        // step 1: fold totally by 4
+        // etc...
         
         for i in 0..num_steps {
             // we step over 1, omega, omega^2, 
@@ -378,19 +361,20 @@ impl<F: PrimeField, I: IOP<F>> NaiveFriIop<F, I> {
 
         let mut final_poly_coeffs = final_poly_coeffs.into_coeffs();
 
-        // let mut degree_plus_one = final_poly_coeffs.len();
-        // for v in final_poly_coeffs.iter().rev() {
-        //     if v.is_zero() {
-        //         degree_plus_one -= 1;
-        //     } else {
-        //         break;
-        //     }
-        // }
-        // assert!(output_coeffs_at_degree_plus_one >= degree_plus_one);
+        let mut degree = final_poly_coeffs.len() - 1;
+        for c in final_poly_coeffs.iter().rev() {
+            if c.is_zero() {
+                degree -= 1;
+            } else {
+                break
+            }
+        }
+
+        assert!(degree < output_coeffs_at_degree_plus_one, "polynomial degree is too large, coeffs = {:?}", final_poly_coeffs);
 
         final_poly_coeffs.truncate(output_coeffs_at_degree_plus_one);
 
-        println!("Done FRI for size {} in {:?}", lde_values.size()/lde_factor, start.elapsed());
+        println!("Done FRI for degree {} in {:?}", lde_values.size()/lde_factor, start.elapsed());
 
         Ok(FRIProofPrototype {
             l0_commitment,

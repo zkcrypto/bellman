@@ -70,7 +70,7 @@ impl Worker {
         &self,
         elements: usize
     ) -> usize {
-        let chunk_size = if elements < self.cpus {
+        let chunk_size = if elements <= self.cpus {
             1
         } else {
             elements / self.cpus
@@ -83,18 +83,20 @@ impl Worker {
         &self,
         elements: usize
     ) -> usize {
-        if elements < self.cpus {
-            return elements;
-        }
+        let num_spawned = if elements <= self.cpus {
+            elements
+        } else {
+            let chunk = self.get_chunk_size(elements);
+            let mut spawned = elements / chunk;
+            if spawned * chunk < elements {
+                spawned += 1;
+            }
+            assert!(spawned <= 2*self.cpus);
 
-        let chunk_size = self.get_chunk_size(elements);
+            spawned
+        };
 
-        let mut n = elements / chunk_size;
-        if elements % chunk_size != 0 {
-            n += 1;
-        }
-
-        n
+        num_spawned
     }
 }
 

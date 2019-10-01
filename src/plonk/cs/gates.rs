@@ -45,13 +45,30 @@ pub enum Index {
     Aux(usize)
 }
 
-
-#[derive(Debug)]
 pub enum Coeff<E: Engine> {
     Zero,
     One,
     NegativeOne,
     Full(E::Fr),
+}
+
+impl<E: Engine> std::fmt::Debug for Coeff<E> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Coeff::Zero => {
+                write!(f, "Coeff 0x0")
+            },
+            Coeff::One => {
+                write!(f, "Coeff 0x1")
+            },
+            Coeff::NegativeOne => {
+                write!(f, "Coeff -0x1")
+            },
+            Coeff::Full(c) => {
+                write!(f, "Coeff {:?}", c)
+            },
+        }
+    }
 }
 
 impl<E: Engine> Coeff<E> {
@@ -109,7 +126,7 @@ impl<E: Engine> Neg for Coeff<E> {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone)]
 pub struct Gate<E: Engine> {
     a_wire: Variable,
     b_wire: Variable,
@@ -120,6 +137,14 @@ pub struct Gate<E: Engine> {
     pub(crate) q_m: Coeff<E>,
     pub(crate) q_c: Coeff<E>,
 } 
+
+impl<E: Engine> std::fmt::Debug for Gate<E> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Gate A = {:?}, B = {:?}, C = {:?}, q_l = {:?}, q_r = {:?}, q_o = {:?}, q_m = {:?}, q_c = {:?}", 
+        self.a_wire, self.b_wire, self.c_wire, self.q_l, self.q_r, self.q_o, self.q_m, self.q_c)
+
+    }
+}
 
 impl<E:Engine> Gate<E> {
     pub(crate) fn empty() -> Self {
