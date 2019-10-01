@@ -372,7 +372,7 @@ pub fn verify_nonhomomorphic<E: Engine, S: CommitmentScheme<E::Fr, Prng = T>, T:
     let valid = large_committer.verify_single(&proof.t_commitment, z, proof.t_opening_value, &proof.t_opening_proof, &mut transcript);
 
     if !valid {
-        println!("T commitment opening is imvalid");
+        println!("T commitment opening is invalid");
         return Ok(false);
     }
 
@@ -672,7 +672,7 @@ mod test {
         };
 
         let circuit = BenchmarkCircuit::<Bn256> {
-            num_steps: 1_000,
+            num_steps: 1_000_000,
             _marker: PhantomData
         };
 

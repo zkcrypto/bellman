@@ -117,7 +117,7 @@ impl<
         &self, 
         poly: &Polynomial<F, Coefficients>, 
         at_point: F, 
-        opening_value: F, 
+        _opening_value: F, 
         data: &Option<&Self::IntermediateData>, 
         prng: &mut Self::Prng
     ) -> Self::OpeningProof {
@@ -144,6 +144,10 @@ impl<
             &self.worker, 
             prng
         ).expect("FRI must succeed");
+
+        for c in fri_proto.get_final_coefficients().iter() {
+            prng.commit_field_element(&c);
+        }
 
         let mut used_queries: Vec<usize> = vec![];
 
@@ -267,6 +271,10 @@ impl<
             prng
         ).expect("FRI must succeed");
 
+        for c in fri_proto.get_final_coefficients().iter() {
+            prng.commit_field_element(&c);
+        }
+
         let mut used_queries: Vec<usize> = vec![];
 
         let mut domain_indexes = vec![];
@@ -314,8 +322,6 @@ impl<
 
         let mut queries = vec![];
 
-        let mut opened_values = vec![];
-
         for (original_poly_lde, original_poly_lde_oracle) in data.iter() {
             let mut original_poly_queries = vec![];
             for idx in domain_indexes.clone().into_iter() {
@@ -326,12 +332,14 @@ impl<
             queries.push(original_poly_queries);
         }
 
-        for idx in domain_indexes.clone().into_iter() {
-            let value = < < <FRI as FriIop<F> >::IopType as IOP<F> >::Combiner as CosetCombiner<F>>::get_for_natural_index(q_poly_lde.as_ref(), idx);
-            opened_values.push(value);
-        }
+        // let mut opened_values = vec![];
 
-        println!("Will open poly at indexes {:?} for values {:?}", domain_indexes, opened_values);
+        // for idx in domain_indexes.clone().into_iter() {
+        //     let value = < < <FRI as FriIop<F> >::IopType as IOP<F> >::Combiner as CosetCombiner<F>>::get_for_natural_index(q_poly_lde.as_ref(), idx);
+        //     opened_values.push(value);
+        // }
+
+        // println!("Will open poly at indexes {:?} for values {:?}", domain_indexes, opened_values);
 
 
         println!("Done in {:?} for max degree {}", start.elapsed(), max_degree);
@@ -353,6 +361,10 @@ impl<
         // first get FRI challenges
 
         let fri_challenges = FRI::get_fri_challenges(q_poly_fri_proof, prng);
+
+        for c in q_poly_fri_proof.get_final_coefficients().iter() {
+            prng.commit_field_element(&c);
+        }
 
         // then make expected query locations
 
@@ -429,6 +441,10 @@ impl<
         // first get FRI challenges
 
         let fri_challenges = FRI::get_fri_challenges(q_poly_fri_proof, prng);
+
+        for c in q_poly_fri_proof.get_final_coefficients().iter() {
+            prng.commit_field_element(&c);
+        }
 
         // then make expected query locations
 
@@ -511,7 +527,7 @@ impl<
             alpha.mul_assign(&aggregation_coefficient);
         }
 
-        println!("Will open poly at indexes {:?} for simulated values {:?}", domain_indexes, simulated_q_poly_values);
+        // println!("Will open poly at indexes {:?} for simulated values {:?}", domain_indexes, simulated_q_poly_values);
 
         let valid = FRI::verify_proof_with_challenges(q_poly_fri_proof, domain_indexes, &simulated_q_poly_values, &fri_challenges).expect("fri verification should work");
 

@@ -246,8 +246,11 @@ impl<F: PrimeField, I: IOP<F>> NaiveFriIop<F, I> {
     ) -> Result<FRIProofPrototype<F, I>, SynthesisError> {
         println!("Starting FRI");
         let start = Instant::now();
-    
+
+        let mut roots = vec![];
         let l0_commitment: I = I::create(lde_values.as_ref());
+        let root = l0_commitment.get_root();
+        roots.push(root);
         let initial_domain_size = lde_values.size();
 
         assert_eq!(precomputations.domain_size(), initial_domain_size);
@@ -277,8 +280,6 @@ impl<F: PrimeField, I: IOP<F>> NaiveFriIop<F, I> {
         let mut values_slice = lde_values.as_ref();
 
         let omegas_inv_ref: &[F] = precomputations.omegas_inv_ref();
-
-        let mut roots = vec![];
 
         // step 0: fold totally by 2
         // step 1: fold totally by 4
@@ -329,32 +330,32 @@ impl<F: PrimeField, I: IOP<F>> NaiveFriIop<F, I> {
                 }
             });
 
-            let intermediate_iop = I::create(next_values.as_ref());
-            let root = intermediate_iop.get_root();
-            roots.push(root);
-            next_domain_challenge = {
-                prng.commit_input(&intermediate_iop.get_root());
-                prng.get_challenge()
-            };
-            challenges.push(next_domain_challenge);
+            if i < num_steps - 1 {
+                let intermediate_iop = I::create(next_values.as_ref());
+                let root = intermediate_iop.get_root();
+                roots.push(root);
+                next_domain_challenge = {
+                    prng.commit_input(&intermediate_iop.get_root());
+                    prng.get_challenge()
+                };
+                challenges.push(next_domain_challenge);
+                next_domain_size >>= 1;
 
-            next_domain_size >>= 1;
+                intermediate_commitments.push(intermediate_iop);
+            } 
 
-            intermediate_commitments.push(intermediate_iop);
             let next_values_as_poly = Polynomial::from_values(next_values)?;
             intermediate_values.push(next_values_as_poly);
 
-            values_slice = intermediate_values.last().expect("is something").as_ref();
+            values_slice = intermediate_values.last().expect("is something").as_ref();      
         }
 
-        // final challenge is not necessary
-        challenges.pop().expect("will work");
+        let final_root = roots.last().expect("will work").clone();
 
-        let final_root = roots.pop().expect("will work");
-
-        assert!(challenges.len() == num_steps);
-        assert!(intermediate_commitments.len() == num_steps);
-        assert!(intermediate_values.len() == num_steps);
+        assert_eq!(challenges.len(), num_steps);
+        assert_eq!(roots.len(), num_steps);
+        assert_eq!(intermediate_commitments.len(), num_steps-1);
+        assert_eq!(intermediate_values.len(), num_steps);
 
         let final_poly_values = Polynomial::from_values(values_slice.to_vec())?;
         let final_poly_coeffs = final_poly_values.ifft(&worker);
