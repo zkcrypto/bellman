@@ -4,6 +4,7 @@ use crate::plonk::domains::Domain;
 use crate::multicore::Worker;
 use crate::plonk::fft::distribute_powers;
 use crate::plonk::commitments::transparent::fri::FriPrecomputations;
+use crate::plonk::fft::with_precomputation::FftPrecomputations;
 
 pub struct PrecomputedOmegas<F: PrimeField> {
     pub omegas: Vec<F>,
@@ -78,6 +79,22 @@ impl<F: PrimeField> FriPrecomputations<F> for PrecomputedOmegas<F>{
 
     fn omegas_inv_ref(&self) -> &[F] {
         &self.omegas_inv[..]
+    }
+
+    fn domain_size(&self) -> usize {
+        self.domain_size
+    }
+}
+
+impl<F: PrimeField> FftPrecomputations<F> for PrecomputedOmegas<F>{
+    fn new_for_domain_size(size: usize) -> Self {
+        let domain = Domain::<F>::new_for_size(size as u64).expect("domain must exist");
+        let worker = Worker::new();
+        Self::new_for_domain(&domain, &worker)
+    }
+
+    fn element_for_index(&self, index: usize) -> &F {
+        &self.omegas_inv[index]
     }
 
     fn domain_size(&self) -> usize {

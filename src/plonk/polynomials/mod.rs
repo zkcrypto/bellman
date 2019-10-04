@@ -3,6 +3,11 @@ use crate::plonk::domains::*;
 use crate::SynthesisError;
 use crate::multicore::*;
 use crate::plonk::fft::*;
+use crate::plonk::fft::with_precomputation;
+use crate::plonk::fft::with_precomputation::FftPrecomputations;
+
+use crate::plonk::fft::cooley_tukey_ntt;
+use crate::plonk::fft::cooley_tukey_ntt::CTPrecomputations;
 
 pub trait PolynomialForm: Sized + Copy + Clone {}
 
@@ -441,6 +446,8 @@ impl<F: PrimeField> Polynomial<F, Coefficients> {
             Some(1)
         } else {
             let mut threads_per_coset = factor / num_cpus;
+            // TODO: it's not immediately clean if having more threads than (virtual) cores benefits
+            // over underutilization of some (virtual) cores
             if factor % num_cpus != 0 {
                 threads_per_coset += 1;
             }
@@ -486,6 +493,157 @@ impl<F: PrimeField> Polynomial<F, Coefficients> {
                     for v in v.iter_mut() {
                         let coset_idx = idx % factor;
                         let element_idx = idx / factor; 
+                        *v = results_ref[coset_idx][element_idx];
+
+                        idx += 1;
+                    }
+                });
+            }
+        });
+
+        Polynomial::from_values(final_values)
+    }
+
+    pub fn lde_using_multiple_cosets_with_precomputation<P: FftPrecomputations<F>>(
+        self, 
+        worker: &Worker, 
+        factor: usize,
+        precomputed_omegas: &P
+    ) -> Result<Polynomial<F, Values>, SynthesisError> {
+        debug_assert!(self.coeffs.len().is_power_of_two());
+        debug_assert_eq!(self.size(), precomputed_omegas.domain_size());
+        
+        if factor == 1 {
+            return Ok(self.fft(&worker));
+        }
+
+        let num_cpus = worker.cpus;
+        let num_cpus_hint = if num_cpus <= factor {
+            Some(1)
+        } else {
+            let mut threads_per_coset = factor / num_cpus;
+            if factor % num_cpus != 0 {
+                threads_per_coset += 1;
+            }
+            Some(threads_per_coset)
+        };
+
+        assert!(factor.is_power_of_two());
+        let new_size = self.coeffs.len() * factor;
+        let domain = Domain::<F>::new_for_size(new_size as u64)?;
+
+        let mut results = vec![vec![]; factor];
+
+        let coset_omega = domain.generator;
+        let this_domain_omega = self.omega;
+
+        let coeffs = self.coeffs;
+        let log_n = self.exp;
+
+        worker.scope(results.len(), |scope, chunk| {
+            for (i, r) in results.chunks_mut(chunk).enumerate() {
+                let coeffs_for_coset = coeffs.clone();
+                scope.spawn(move |_| {
+                    let mut coset_generator = coset_omega.pow(&[i as u64]);
+                    for r in r.iter_mut() {
+                        let mut c = coeffs_for_coset.clone();
+                        distribute_powers(&mut c, &worker, coset_generator);
+                        with_precomputation::fft::best_fft(&mut c, &worker, &this_domain_omega, log_n, num_cpus_hint, precomputed_omegas);
+                        *r = c;
+                        coset_generator.mul_assign(&coset_omega);
+                    }
+                });
+            }
+        });
+
+        let mut final_values = vec![F::zero(); new_size];
+
+        let results_ref = &results;
+
+        worker.scope(final_values.len(), |scope, chunk| {
+            for (i, v) in final_values.chunks_mut(chunk).enumerate() {
+                scope.spawn(move |_| {
+                    let mut idx = i*chunk;
+                    for v in v.iter_mut() {
+                        let coset_idx = idx % factor;
+                        let element_idx = idx / factor; 
+                        *v = results_ref[coset_idx][element_idx];
+
+                        idx += 1;
+                    }
+                });
+            }
+        });
+
+        Polynomial::from_values(final_values)
+    }
+
+
+    pub fn lde_using_bitreversed_ntt<P: CTPrecomputations<F>>(
+        self, 
+        worker: &Worker, 
+        factor: usize,
+        precomputed_omegas: &P
+    ) -> Result<Polynomial<F, Values>, SynthesisError> {
+        debug_assert!(self.coeffs.len().is_power_of_two());
+        debug_assert_eq!(self.size(), precomputed_omegas.domain_size());
+        
+        if factor == 1 {
+            return Ok(self.fft(&worker));
+        }
+
+        let num_cpus = worker.cpus;
+        let num_cpus_hint = if num_cpus <= factor {
+            Some(1)
+        } else {
+            let mut threads_per_coset = factor / num_cpus;
+            if factor % num_cpus != 0 {
+                threads_per_coset += 1;
+            }
+            Some(threads_per_coset)
+        };
+
+        assert!(factor.is_power_of_two());
+        let new_size = self.coeffs.len() * factor;
+        let domain = Domain::<F>::new_for_size(new_size as u64)?;
+
+        let mut results = vec![self.coeffs.clone(); factor];
+
+        let coset_omega = domain.generator;
+
+        let log_n = self.exp;
+
+        worker.scope(results.len(), |scope, chunk| {
+            for (i, r) in results.chunks_mut(chunk).enumerate() {
+                scope.spawn(move |_| {
+                    let mut coset_generator = coset_omega.pow(&[i as u64]);
+                    for r in r.iter_mut() {
+                        distribute_powers(&mut r[..], &worker, coset_generator);
+                        cooley_tukey_ntt::best_ct_ntt(&mut r[..], &worker, log_n, num_cpus_hint, precomputed_omegas);
+                        coset_generator.mul_assign(&coset_omega);
+                    }
+                });
+            }
+        });
+
+        let mut final_values = vec![F::zero(); new_size];
+
+        let results_ref = &results;
+
+        // copy here is more complicated: to have the value in a natural order
+        // one has to use coset_idx to address the result element
+        // and use bit-reversed lookup for an element index
+
+        let log_n = log_n as usize;
+
+        worker.scope(final_values.len(), |scope, chunk| {
+            for (i, v) in final_values.chunks_mut(chunk).enumerate() {
+                scope.spawn(move |_| {
+                    let mut idx = i*chunk;
+                    for v in v.iter_mut() {
+                        let coset_idx = idx % factor;
+                        let element_idx = idx / factor;
+                        let element_idx = cooley_tukey_ntt::bitreverse(element_idx, log_n) ; 
                         *v = results_ref[coset_idx][element_idx];
 
                         idx += 1;

@@ -1,5 +1,8 @@
+// #![feature(core_intrinsics)]
+
 #![allow(unused_imports)]
 #![allow(unused_macros)]
+#![allow(dead_code)]
 #[macro_use]
 
 extern crate cfg_if;
@@ -7,6 +10,11 @@ pub extern crate pairing;
 extern crate rand;
 extern crate bit_vec;
 extern crate byteorder;
+
+pub use pairing::*;
+
+use crate::pairing::ff as ff;
+pub use ff::*;
 
 #[macro_use]
 mod log;

@@ -1,5 +1,6 @@
 use crate::pairing::ff::PrimeField;
 use crate::multicore::*;
+use super::FftPrecomputations;
 
 fn log2_floor(num: usize) -> u32 {
     assert!(num > 0);
@@ -13,7 +14,14 @@ fn log2_floor(num: usize) -> u32 {
     pow
 }
 
-pub(crate) fn best_fft<F: PrimeField>(a: &mut [F], worker: &Worker, omega: &F, log_n: u32, use_cpus_hint: Option<usize>)
+pub(crate) fn best_fft<F: PrimeField, P: FftPrecomputations<F>>(
+    a: &mut [F], 
+    worker: &Worker, 
+    omega: &F, 
+    log_n: u32, 
+    use_cpus_hint: Option<usize>, 
+    precomputed_omegas: &P
+)
 {
     let log_cpus = if let Some(hint) = use_cpus_hint {
         assert!(hint <= worker.cpus);
@@ -23,13 +31,13 @@ pub(crate) fn best_fft<F: PrimeField>(a: &mut [F], worker: &Worker, omega: &F, l
     };
 
     if log_cpus == 0 || log_n <= log_cpus {
-        serial_fft(a, omega, log_n);
+        serial_fft(a, omega, log_n, 1, precomputed_omegas);
     } else {
-        parallel_fft(a, worker, omega, log_n, log_cpus);
+        parallel_fft(a, worker, omega, log_n, log_cpus, precomputed_omegas);
     }
 }
 
-pub(crate) fn serial_fft<F: PrimeField>(a: &mut [F], omega: &F, log_n: u32)
+pub(crate) fn serial_fft<F: PrimeField, P: FftPrecomputations<F>>(a: &mut [F], omega: &F, log_n: u32, stride: usize, precomputed_omegas: &P)
 {
     #[inline(always)]
     fn bitreverse(mut n: u32, l: u32) -> u32 {
@@ -43,6 +51,11 @@ pub(crate) fn serial_fft<F: PrimeField>(a: &mut [F], omega: &F, log_n: u32)
 
     let n = a.len() as u32;
     assert_eq!(n, 1 << log_n);
+    if stride == 1 {
+        assert_eq!(n as usize, precomputed_omegas.domain_size())
+    } else {
+        assert!((precomputed_omegas.domain_size() / (n as usize)).is_power_of_two());
+    }
 
     for k in 0..n {
         let rk = bitreverse(k, log_n);
@@ -53,19 +66,25 @@ pub(crate) fn serial_fft<F: PrimeField>(a: &mut [F], omega: &F, log_n: u32)
 
     let mut m = 1;
     for _ in 0..log_n {
-        let w_m = omega.pow(&[(n / (2*m)) as u64]);
+        let stride_idx = ((n / (2*m)) as usize) * stride;
+        // let w_m = omega.pow(&[(n / (2*m)) as u64]);
 
         let mut k = 0;
         while k < n {
-            let mut w = F::one();
+            let mut idx = 0;
+            // let mut w = F::one();
             for j in 0..m {
+                
                 let mut t = a[(k+j+m) as usize];
-                t.mul_assign(&w);
+                t.mul_assign(precomputed_omegas.element_for_index(idx));
+                // t.mul_assign(&w);
                 let mut tmp = a[(k+j) as usize];
                 tmp.sub_assign(&t);
                 a[(k+j+m) as usize] = tmp;
                 a[(k+j) as usize].add_assign(&t);
-                w.mul_assign(&w_m);
+                // precomputations save one multiplication here per loop
+                idx += stride_idx;
+                // w.mul_assign(&w_m);
             }
 
             k += 2*m;
@@ -75,15 +94,17 @@ pub(crate) fn serial_fft<F: PrimeField>(a: &mut [F], omega: &F, log_n: u32)
     }
 }
 
-pub(crate) fn parallel_fft<F: PrimeField>(
+pub(crate) fn parallel_fft<F: PrimeField, P: FftPrecomputations<F>>(
     a: &mut [F],
     worker: &Worker,
     omega: &F,
     log_n: u32,
-    log_cpus: u32
+    log_cpus: u32,
+    precomputed_omegas: &P
 )
 {
     assert!(log_n >= log_cpus);
+    assert_eq!(a.len(), precomputed_omegas.domain_size());
 
     let num_cpus = 1 << log_cpus;
     let log_new_n = log_n - log_cpus;
@@ -113,7 +134,7 @@ pub(crate) fn parallel_fft<F: PrimeField>(
                 }
 
                 // Perform sub-FFT
-                serial_fft(tmp, &new_omega, log_new_n);
+                serial_fft(tmp, &new_omega, log_new_n, num_cpus as usize, precomputed_omegas);
             });
         }
     });

@@ -1,7 +1,18 @@
-use ff::PrimeField;
-use super::multicore::*;
+use crate::ff::PrimeField;
+use crate::multicore::*;
 use super::prefetch::*;
-use crate::utils::*;
+
+fn log2_floor(num: usize) -> u32 {
+    assert!(num > 0);
+
+    let mut pow = 0;
+
+    while (1 << (pow+1)) <= num {
+        pow += 1;
+    }
+
+    pow
+}
 
 pub(crate) fn best_fft<F: PrimeField>(a: &mut [F], worker: &Worker, omega: &F, log_n: u32, use_cpus_hint: Option<usize>)
 {

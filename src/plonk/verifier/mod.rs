@@ -825,6 +825,84 @@ mod test {
     }
 
     #[test]
+    fn test_bench_transparent_engine() {
+        use crate::plonk::transparent_engine::*;
+        use crate::plonk::utils::*;
+        use crate::plonk::commitments::transparent::fri::*;
+        use crate::plonk::commitments::transparent::iop::*;
+        use crate::plonk::commitments::transcript::*;
+        use crate::plonk::commitments::transparent::fri::naive_fri::naive_fri::*;
+        use crate::plonk::commitments::transparent::iop::blake2s_trivial_iop::*;
+        use crate::plonk::commitments::*;
+        use crate::plonk::commitments::transparent::*;
+        use crate::plonk::tester::*;
+
+        use std::time::Instant;
+
+        type Iop = TrivialBlake2sIOP<Fr>;
+        type Fri = NaiveFriIop<Fr, Iop>;
+        type Committer = StatelessTransparentCommitter<Fr, Fri, Blake2sTranscript<Fr>>;
+
+        let mut negative_one = Fr::one();
+        negative_one.negate();
+        println!("-1 = {}", negative_one);
+
+        let meta = TransparentCommitterParameters {
+            lde_factor: 16,
+            num_queries: 10,
+            output_coeffs_at_degree_plus_one: 16,
+        };
+
+        let meta_large = TransparentCommitterParameters {
+            lde_factor: 16,
+            num_queries: 10,
+            output_coeffs_at_degree_plus_one: 16,
+        };
+
+        let circuit = BenchmarkCircuit::<Transparent252> {
+            num_steps: 1_000_000,
+            _marker: PhantomData
+        };
+
+        {
+            let mut tester = TestingAssembly::<Transparent252>::new();
+
+            circuit.synthesize(&mut tester).expect("must synthesize");
+
+            let satisfied = tester.is_satisfied();
+
+            assert!(satisfied);
+
+            println!("Circuit is satisfied");
+        }
+
+        println!("Start setup");
+        let start = Instant::now();
+        let (setup, aux) = setup::<Transparent252, Committer, _>(&circuit, meta).unwrap();
+        println!("Setup taken {:?}", start.elapsed());
+
+        println!("Using circuit with N = {}", setup.n);
+
+        let meta = TransparentCommitterParameters {
+            lde_factor: 16,
+            num_queries: 10,
+            output_coeffs_at_degree_plus_one: 16,
+        };
+
+        println!("Start proving");
+        let start = Instant::now();
+        let proof = prove_nonhomomorphic::<Transparent252, Committer, Blake2sTranscript::<Fr>, _>(&circuit, &setup, &aux, meta.clone(), meta_large.clone()).unwrap();
+        println!("Proof taken {:?}", start.elapsed());
+
+        println!("Start verifying");
+        let start = Instant::now();
+        let valid = verify_nonhomomorphic::<Transparent252, Committer, Blake2sTranscript::<Fr>>(&setup, &proof, meta, meta_large).unwrap();
+        println!("Verification with unnecessary precomputation taken {:?}", start.elapsed());
+
+        assert!(valid);
+    }
+
+    #[test]
     fn test_poly_eval_correctness() {
         use rand::{XorShiftRng, SeedableRng, Rand, Rng};
         use crate::pairing::bn256::Fr;
@@ -896,6 +974,52 @@ mod test {
                     assert!(c0 == c1, "failed at value number {} for size {}", i, poly_size);
                 }
             }
+        }
+    }
+
+    #[test]
+    fn test_bench_lde() {
+        use rand::{XorShiftRng, SeedableRng, Rand, Rng};
+        use crate::pairing::bn256::Fr;
+        use crate::pairing::ff::ScalarEngine;
+        use crate::pairing::CurveProjective;
+        use std::time::Instant;
+        use crate::multicore::*;
+        use crate::plonk::commitments::transparent::utils::*;
+
+        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+
+        let poly_sizes = vec![1, 10, 100, 1000, 10_000, 1_000_000, 2_000_000];
+
+        let worker = Worker::new();
+
+        for poly_size in poly_sizes.into_iter() {
+            let coeffs = (0..poly_size).map(|_| Fr::rand(rng)).collect::<Vec<_>>();
+        
+            let poly = Polynomial::<Fr, _>::from_coeffs(coeffs).unwrap();
+            let start = Instant::now();
+            let _eval_result = poly.lde(&worker, 16);
+            println!("LDE with factor 16 for size {} taken {:?}", poly_size, start.elapsed());
+
+            let coeffs = (0..(16*poly_size)).map(|_| Fr::rand(rng)).collect::<Vec<_>>();
+        
+            let poly = Polynomial::<Fr, _>::from_coeffs(coeffs).unwrap();
+            let start = Instant::now();
+            let eval_result = poly.clone().fft(&worker);
+            println!("FFT of the same size taken {:?}", start.elapsed());
+
+            if log2_floor(poly.size()) % 2 == 0 {
+                let log_n = log2_floor(poly.size());
+                let omega = poly.omega;
+                let mut coeffs = poly.into_coeffs();
+                let start = Instant::now();
+                crate::plonk::fft::radix_4::best_fft(&mut coeffs, &worker, &omega, log_n as u32);
+                println!("Radix-4 FFT of the same size taken {:?}", start.elapsed());
+                let to_compare = eval_result.into_coeffs();
+                assert!(to_compare == coeffs);
+            }
+
+
         }
     }
 }

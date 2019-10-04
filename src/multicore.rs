@@ -98,6 +98,15 @@ impl Worker {
 
         num_spawned
     }
+
+    pub fn chunk_size_for_num_spawned_threads(elements: usize, num_threads: usize) -> usize {
+        assert!(elements >= num_threads);
+        if elements % num_threads == 0 {
+            elements / num_threads
+        } else {
+            elements / num_threads + 1
+        }
+    }
 }
 
 pub struct WorkerFuture<T, E> {

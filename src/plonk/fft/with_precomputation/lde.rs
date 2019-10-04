@@ -1,18 +1,5 @@
-use crate::ff::PrimeField;
+use crate::pairing::ff::PrimeField;
 use crate::multicore::*;
-use super::prefetch::*;
-
-fn log2_floor(num: usize) -> u32 {
-    assert!(num > 0);
-
-    let mut pow = 0;
-
-    while (1 << (pow+1)) <= num {
-        pow += 1;
-    }
-
-    pow
-}
 
 pub(crate) fn best_lde<F: PrimeField>(a: &mut [F], worker: &Worker, omega: &F, log_n: u32, lde_factor: usize)
 {
@@ -54,13 +41,9 @@ pub(crate) fn serial_lde<F: PrimeField>(a: &mut [F], omega: &F, log_n: u32, lde_
     }
 
     let n = a.len() as u32;
-    let non_trivial_len = (a.len() / lde_factor) as u32;
     assert_eq!(n, 1 << log_n);
 
     for k in 0..n {
-        if k >= non_trivial_len {
-            break;
-        }
         let rk = bitreverse(k, log_n);
         if k < rk {
             a.swap(rk as usize, k as usize);
@@ -79,16 +62,8 @@ pub(crate) fn serial_lde<F: PrimeField>(a: &mut [F], omega: &F, log_n: u32, lde_
         if is_dense_round(lde_factor, step) {    
             // standard fft
             for k in (0..n).step_by(step_by) {
-                {
-                    prefetch_index::<F>(a, (k + m) as usize);
-                    prefetch_index::<F>(a, k as usize);
-                }
                 let mut w = F::one();
-                for j in 0..(m-1) {
-                    {
-                        prefetch_index::<F>(a, (k+j+1+m) as usize);
-                        prefetch_index::<F>(a, (k+j+1) as usize);
-                    }
+                for j in 0..m {
                     let mut t = a[(k+j+m) as usize];
                     t.mul_assign(&w);
                     let mut tmp = a[(k+j) as usize];
@@ -97,37 +72,14 @@ pub(crate) fn serial_lde<F: PrimeField>(a: &mut [F], omega: &F, log_n: u32, lde_
                     a[(k+j) as usize].add_assign(&t);
                     w.mul_assign(&w_m);
                 } 
-
-                let j = m - 1;
-                let mut t = a[(k+j+m) as usize];
-                t.mul_assign(&w);
-                let mut tmp = a[(k+j) as usize];
-                tmp.sub_assign(&t);
-                a[(k+j+m) as usize] = tmp;
-                a[(k+j) as usize].add_assign(&t);
-                w.mul_assign(&w_m);
             }
         } else {
             // have some pain trying to save on memory reads and multiplications
             for k in (0..n).step_by(step_by) {
-                {
-                    let odd_idx = (k + m) as usize;
-                    let even_idx = k as usize;
-                    if is_non_zero(even_idx, lde_factor, step) || is_non_zero(odd_idx, lde_factor, step) {
-                        prefetch_index::<F>(a, odd_idx);
-                        prefetch_index::<F>(a, even_idx);
-                    }
-                }
                 let mut w = F::one();
-                for j in 0..(m-1) {
+                for j in 0..m {
                     let odd_idx = (k+j+m) as usize;
                     let even_idx = (k+j) as usize;
-                    {
-                        if is_non_zero(even_idx+1, lde_factor, step) || is_non_zero(odd_idx+1, lde_factor, step) {
-                            prefetch_index::<F>(a, odd_idx + 1);
-                            prefetch_index::<F>(a, even_idx + 1);
-                        }
-                    }
 
                     let odd_is_non_zero = is_non_zero(odd_idx, lde_factor, step);
                     let even_is_non_zero = is_non_zero(even_idx, lde_factor, step);
@@ -165,47 +117,6 @@ pub(crate) fn serial_lde<F: PrimeField>(a: &mut [F], omega: &F, log_n: u32, lde_
 
                     w.mul_assign(&w_m);
                 }
-
-                let j = m-1;
-
-                let odd_idx = (k+j+m) as usize;
-                let even_idx = (k+j) as usize;
-
-                let odd_is_non_zero = is_non_zero(odd_idx, lde_factor, step);
-                let even_is_non_zero = is_non_zero(even_idx, lde_factor, step);
-
-                // debug_assert!(!a[odd_idx].is_zero() == odd_is_non_zero, "expected for idx = {} to be non-zero: {} for step {}, value: {}", odd_idx, odd_is_non_zero, step, a[odd_idx]);
-                // debug_assert!(!a[even_idx].is_zero() == even_is_non_zero, "expected for idx = {} to be non-zero: {} for step {}, value: {}", even_idx, even_is_non_zero, step, a[even_idx]);
-
-                match (odd_is_non_zero, even_is_non_zero) {
-                    (true, true) => {
-                        let mut t = a[odd_idx];
-                        t.mul_assign(&w);
-
-                        let mut tmp = a[even_idx];
-                        tmp.sub_assign(&t);
-
-                        a[odd_idx] = tmp;
-                        a[even_idx].add_assign(&t);
-                    },
-                    (false, true) => {
-                        a[odd_idx] = a[even_idx];
-                    },
-                    (true, false) => {
-                        let mut t = a[odd_idx];
-                        t.mul_assign(&w);
-
-                        let mut tmp = t;
-                        tmp.negate();
-                        
-                        a[odd_idx] = tmp;
-                        a[even_idx] = t;
-                    },
-                    (false, false) => {
-                    }
-                }
-
-                w.mul_assign(&w_m);
             }
         }
 
@@ -257,7 +168,7 @@ pub(crate) fn parallel_lde<F: PrimeField>(
 
                 let new_lde_factor = lde_factor >> log_cpus;
                 if new_lde_factor <= 1 {
-                    super::prefetch_fft::serial_fft(tmp, &new_omega, log_new_n);
+                    super::fft::serial_fft(tmp, &new_omega, log_new_n);
                 } else {
                     serial_lde(tmp, &new_omega, log_new_n, new_lde_factor);
                 }
@@ -330,7 +241,7 @@ pub(crate) fn parallel_lde<F: PrimeField>(
 // }
 
 // #[test]
-// fn test_small_prefetch_serial_lde() {
+// fn test_small_serial_lde() {
 //     use rand::{XorShiftRng, SeedableRng, Rand};
 //     const LOG_N: usize = 2;
 //     const BASE: usize = 1 << LOG_N;
@@ -367,7 +278,7 @@ pub(crate) fn parallel_lde<F: PrimeField>(
 // }
 
 // #[test]
-// fn test_large_prefetch_serial_lde() {
+// fn test_large_serial_lde() {
 //     use rand::{XorShiftRng, SeedableRng, Rand};
 //     const LOG_N: usize = 20;
 //     const BASE: usize = 1 << LOG_N;
@@ -404,7 +315,7 @@ pub(crate) fn parallel_lde<F: PrimeField>(
 // }
 
 // #[test]
-// fn test_large_prefetch_lde() {
+// fn test_large_lde() {
 //     use rand::{XorShiftRng, SeedableRng, Rand};
 //     const LOG_N: usize = 22;
 //     const BASE: usize = 1 << LOG_N;
@@ -440,7 +351,6 @@ pub(crate) fn parallel_lde<F: PrimeField>(
 //     let mut lde = coeffs.clone();
 //     best_lde(&mut lde, &worker, &omega, log_n, LDE_FACTOR);
 //     println!("LDE taken {}ms", now.elapsed().as_millis());
-
 
 //     assert!(naive_lde.into_coeffs() == lde);
 // }
