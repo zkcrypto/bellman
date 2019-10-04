@@ -626,6 +626,37 @@ pub struct PlonkNonhomomorphicProof<E: Engine, S: CommitmentScheme<E::Fr> >{
     pub t_opening_proof: S::OpeningProof,
 }
 
+pub struct PlonkChunkedNonhomomorphicProof<E: Engine, S: CommitmentScheme<E::Fr> >{
+    pub a_opening_value: E::Fr,
+    pub b_opening_value: E::Fr,
+    pub c_opening_value: E::Fr,
+    pub q_l_opening_value: E::Fr,
+    pub q_r_opening_value: E::Fr,
+    pub q_o_opening_value: E::Fr,
+    pub q_m_opening_value: E::Fr,
+    pub q_c_opening_value: E::Fr,
+    pub s_id_opening_value: E::Fr,
+    pub sigma_1_opening_value: E::Fr,
+    pub sigma_2_opening_value: E::Fr,
+    pub sigma_3_opening_value: E::Fr,
+    pub z_1_unshifted_opening_value: E::Fr,
+    pub z_2_unshifted_opening_value: E::Fr,
+    pub z_1_shifted_opening_value: E::Fr,
+    pub z_2_shifted_opening_value: E::Fr,
+    pub t_low_opening_value: E::Fr,
+    pub t_mid_opening_value: E::Fr,
+    pub t_high_opening_value: E::Fr,
+    pub a_commitment: S::Commitment,
+    pub b_commitment: S::Commitment,
+    pub c_commitment: S::Commitment,
+    pub z_1_commitment: S::Commitment,
+    pub z_2_commitment: S::Commitment,
+    pub t_low_commitment: S::Commitment,
+    pub t_mid_commitment: S::Commitment,
+    pub t_high_commitment: S::Commitment,
+    pub openings_proof: S::OpeningProof,
+}
+
 pub fn prove_nonhomomorphic<E: Engine, S: CommitmentScheme<E::Fr, Prng = T>, T: Transcript<E::Fr, Input = S::Commitment>, C: Circuit<E>>(
     circuit: &C, 
     setup: &PlonkSetup<E, S>,
@@ -798,17 +829,6 @@ pub fn prove_nonhomomorphic<E: Engine, S: CommitmentScheme<E::Fr, Prng = T>, T: 
     let sigma_1_lde = sigma_1.clone().coset_lde(&worker, 4)?;
     let sigma_2_lde = sigma_2.clone().coset_lde(&worker, 4)?;
     let sigma_3_lde = sigma_3.clone().coset_lde(&worker, 4)?;
-
-    // let (_q_l_commitment, q_l_aux) = committer.commit_single(&q_l);
-    // let (_q_r_commitment, q_r_aux) = committer.commit_single(&q_r);
-    // let (_q_o_commitment, q_o_aux) = committer.commit_single(&q_o);
-    // let (_q_m_commitment, q_m_aux) = committer.commit_single(&q_m);
-    // let (_q_c_commitment, q_c_aux) = committer.commit_single(&q_c);
-
-    // let (_s_id_commitment, s_id_aux) = committer.commit_single(&s_id);
-    // let (_sigma_1_commitment, sigma_1_aux) = committer.commit_single(&sigma_1);
-    // let (_sigma_2_commitment, sigma_2_aux) = committer.commit_single(&sigma_2);
-    // let (_sigma_3_commitment, sigma_3_aux) = committer.commit_single(&sigma_3);
 
     // we do not commit those cause those are known already
 
@@ -1344,6 +1364,697 @@ pub fn prove_nonhomomorphic<E: Engine, S: CommitmentScheme<E::Fr, Prng = T>, T: 
         openings_proof: multiopen_proof,
         // shifted_openings_proof: shifted_proof,
         t_opening_proof: t_opening_proof,
+    };
+
+    Ok(proof)
+}
+
+pub fn prove_nonhomomorphic_chunked<E: Engine, S: CommitmentScheme<E::Fr, Prng = T>, T: Transcript<E::Fr, Input = S::Commitment>, C: Circuit<E>>(
+    circuit: &C, 
+    aux: &PlonkSetupAuxData<E, S>,
+    meta: S::Meta,
+) -> Result<PlonkChunkedNonhomomorphicProof<E, S>, SynthesisError> {
+    assert!(S::IS_HOMOMORPHIC == false);
+
+    let mut assembly = ProvingAssembly::<E>::new();
+    circuit.synthesize(&mut assembly)?;
+    assembly.finalize();
+
+    let num_gates = assembly.num_gates();
+
+    let committer = S::new_for_size(num_gates.next_power_of_two(), meta);
+
+    let worker = Worker::new();
+
+    let mut transcript = T::new();
+
+    let n = assembly.input_gates.len() + assembly.aux_gates.len();
+
+    // we need n+1 to be a power of two and can not have n to be power of two
+    let required_domain_size = n + 1;
+    assert!(required_domain_size.is_power_of_two());
+
+    println!("Start work with polynomials");
+
+    let (w_l, w_r, w_o) = assembly.make_wire_assingments();
+
+    let w_l = Polynomial::<E::Fr, Values>::from_values_unpadded(w_l)?;
+    let w_r = Polynomial::<E::Fr, Values>::from_values_unpadded(w_r)?;
+    let w_o = Polynomial::<E::Fr, Values>::from_values_unpadded(w_o)?;
+
+    let a_poly = w_l.clone_padded_to_domain()?.ifft(&worker);
+    let b_poly = w_r.clone_padded_to_domain()?.ifft(&worker);
+    let c_poly = w_o.clone_padded_to_domain()?.ifft(&worker);
+
+    let (a_commitment, a_aux_data) = committer.commit_single(&a_poly);
+    let (b_commitment, b_aux_data) = committer.commit_single(&b_poly);
+    let (c_commitment, c_aux_data) = committer.commit_single(&c_poly);
+
+    transcript.commit_input(&a_commitment);
+    transcript.commit_input(&b_commitment);
+    transcript.commit_input(&c_commitment);
+
+    // TODO: Add public inputs
+
+    let beta = transcript.get_challenge();
+    let gamma = transcript.get_challenge();
+
+    let mut w_l_plus_gamma = w_l.clone();
+    w_l_plus_gamma.add_constant(&worker, &gamma);
+
+    let mut w_r_plus_gamma = w_r.clone();
+    w_r_plus_gamma.add_constant(&worker, &gamma);
+
+    let mut w_o_plus_gamma = w_o.clone();
+    w_o_plus_gamma.add_constant(&worker, &gamma);
+
+    let z_1 = {
+        let n = assembly.input_gates.len() + assembly.aux_gates.len();
+        let s_id_1: Vec<_> = (1..=n).collect();
+        let s_id_1 = convert_to_field_elements(&s_id_1, &worker);
+        let s_id_1 = Polynomial::<E::Fr, Values>::from_values_unpadded(s_id_1)?;
+        let mut w_l_contribution = w_l_plus_gamma.clone();
+        w_l_contribution.add_assign_scaled(&worker, &s_id_1, &beta);
+        drop(s_id_1);
+
+        let s_id_2: Vec<_> = ((n+1)..=(2*n)).collect();
+        let s_id_2 = convert_to_field_elements(&s_id_2, &worker);
+        let s_id_2 = Polynomial::<E::Fr, Values>::from_values_unpadded(s_id_2)?;
+        let mut w_r_contribution = w_r_plus_gamma.clone();
+        w_r_contribution.add_assign_scaled(&worker, &s_id_2, &beta);
+        drop(s_id_2);
+        w_l_contribution.mul_assign(&worker, &w_r_contribution);
+        drop(w_r_contribution);
+
+        let s_id_3: Vec<_> = ((2*n+1)..=(3*n)).collect();
+        let s_id_3 = convert_to_field_elements(&s_id_3, &worker);
+        let s_id_3 = Polynomial::<E::Fr, Values>::from_values_unpadded(s_id_3)?;
+        let mut w_o_contribution = w_o_plus_gamma.clone();
+        w_o_contribution.add_assign_scaled(&worker, &s_id_3, &beta);
+        drop(s_id_3);
+        w_l_contribution.mul_assign(&worker, &w_o_contribution);
+        drop(w_o_contribution);
+
+        let grand_product = w_l_contribution.calculate_grand_product(&worker)?;
+
+        drop(w_l_contribution);
+
+        let values = grand_product.into_coeffs();
+        assert!((values.len() + 1).is_power_of_two());
+        let mut prepadded = Vec::with_capacity(values.len() + 1);
+        prepadded.push(E::Fr::one());
+        prepadded.extend(values);
+
+        Polynomial::<E::Fr, Values>::from_values(prepadded)?
+    };
+
+    let z_2 = {
+        let (sigma_1, sigma_2, sigma_3) = assembly.calculate_permutations_as_in_a_paper();
+
+        let sigma_1 = convert_to_field_elements(&sigma_1, &worker);
+        let sigma_1 = Polynomial::<E::Fr, Values>::from_values_unpadded(sigma_1)?;
+        let mut w_l_contribution = w_l_plus_gamma.clone();
+        w_l_contribution.add_assign_scaled(&worker, &sigma_1, &beta);
+        drop(sigma_1);
+
+        let sigma_2 = convert_to_field_elements(&sigma_2, &worker);
+        let sigma_2 = Polynomial::<E::Fr, Values>::from_values_unpadded(sigma_2)?;
+        let mut w_r_contribution = w_r_plus_gamma.clone();
+        w_r_contribution.add_assign_scaled(&worker, &sigma_2, &beta);
+        drop(sigma_2);
+        w_l_contribution.mul_assign(&worker, &w_r_contribution);
+        drop(w_r_contribution);
+
+        let sigma_3 = convert_to_field_elements(&sigma_3, &worker);
+        let sigma_3 = Polynomial::<E::Fr, Values>::from_values_unpadded(sigma_3)?;
+        let mut w_o_contribution = w_o_plus_gamma.clone();
+        w_o_contribution.add_assign_scaled(&worker, &sigma_3, &beta);
+        drop(sigma_3);
+        w_l_contribution.mul_assign(&worker, &w_o_contribution);
+        drop(w_o_contribution);
+
+        let grand_product = w_l_contribution.calculate_grand_product(&worker)?;
+
+        drop(w_l_contribution);
+
+        let values = grand_product.into_coeffs();
+        assert!((values.len() + 1).is_power_of_two());
+        let mut prepadded = Vec::with_capacity(values.len() + 1);
+        prepadded.push(E::Fr::one());
+        prepadded.extend(values);
+
+        let z_2 = Polynomial::<E::Fr, Values>::from_values(prepadded)?;
+
+        z_2
+    };
+
+    let z_1 = z_1.ifft(&worker);
+    let z_2 = z_2.ifft(&worker);
+
+    let (z_1_commitment, z_1_aux) = committer.commit_single(&z_1);
+    let (z_2_commitment, z_2_aux) = committer.commit_single(&z_2);
+
+    transcript.commit_input(&z_1_commitment);
+    transcript.commit_input(&z_2_commitment);
+
+    let mut z_1_shifted = z_1.clone();
+    z_1_shifted.distribute_powers(&worker, z_1.omega);
+    
+    let mut z_2_shifted = z_2.clone();
+    z_2_shifted.distribute_powers(&worker, z_2.omega);
+    
+    let a_lde = a_poly.clone().coset_lde(&worker, 4)?;
+    let b_lde = b_poly.clone().coset_lde(&worker, 4)?;
+    let c_lde = c_poly.clone().coset_lde(&worker, 4)?;
+
+    let (q_l, q_r, q_o, q_m, q_c, s_id, sigma_1, sigma_2, sigma_3) = assembly.output_setup_polynomials(&worker)?;
+
+    let q_l_lde = q_l.clone().coset_lde(&worker, 4)?;
+    let q_r_lde = q_r.clone().coset_lde(&worker, 4)?;
+    let q_o_lde = q_o.clone().coset_lde(&worker, 4)?;
+    let q_m_lde = q_m.clone().coset_lde(&worker, 4)?;
+    let q_c_lde = q_c.clone().coset_lde(&worker, 4)?;
+    let s_id_lde = s_id.clone().coset_lde(&worker, 4)?;
+    let sigma_1_lde = sigma_1.clone().coset_lde(&worker, 4)?;
+    let sigma_2_lde = sigma_2.clone().coset_lde(&worker, 4)?;
+    let sigma_3_lde = sigma_3.clone().coset_lde(&worker, 4)?;
+
+    // we do not commit those cause those are known already
+
+    let n_fe = E::Fr::from_str(&n.to_string()).expect("must be valid field element");
+    let mut two_n_fe = n_fe;
+    two_n_fe.double();
+
+    let alpha = transcript.get_challenge();
+
+    let mut vanishing_poly_inverse = assembly.calculate_inverse_vanishing_polynomial_in_a_coset(&worker, q_c_lde.size(), required_domain_size.next_power_of_two())?;
+
+    let mut t_1 = {
+        let mut t_1 = q_c_lde;
+
+        let mut q_l_by_a = q_l_lde;
+        q_l_by_a.mul_assign(&worker, &a_lde);
+        t_1.add_assign(&worker, &q_l_by_a);
+        drop(q_l_by_a);
+
+        let mut q_r_by_b = q_r_lde;
+        q_r_by_b.mul_assign(&worker, &b_lde);
+        t_1.add_assign(&worker, &q_r_by_b);
+        drop(q_r_by_b);
+
+        let mut q_o_by_c = q_o_lde;
+        q_o_by_c.mul_assign(&worker, &c_lde);
+        t_1.add_assign(&worker, &q_o_by_c);
+        drop(q_o_by_c);
+
+        let mut q_m_by_ab = q_m_lde;
+        q_m_by_ab.mul_assign(&worker, &a_lde);
+        q_m_by_ab.mul_assign(&worker, &b_lde);
+        t_1.add_assign(&worker, &q_m_by_ab);
+        drop(q_m_by_ab);
+
+        vanishing_poly_inverse.scale(&worker, alpha);
+
+        t_1.mul_assign(&worker, &vanishing_poly_inverse);
+
+        t_1
+    };
+
+    let z_1_lde = z_1.clone().coset_lde(&worker, 4)?;
+
+    let z_1_shifted_lde = z_1_shifted.clone().coset_lde(&worker, 4)?;
+
+    let z_2_lde = z_2.clone().coset_lde(&worker, 4)?;
+
+    let z_2_shifted_lde = z_2_shifted.clone().coset_lde(&worker, 4)?;
+
+    {
+        // TODO: May be optimize number of additions
+        let mut contrib_z_1 = z_1_lde.clone();
+
+        let mut s_id_by_beta = s_id_lde;
+        s_id_by_beta.scale(&worker, beta);
+
+        let mut n_by_beta = n_fe;
+        n_by_beta.mul_assign(&beta);
+
+        let mut a_perm = s_id_by_beta.clone();
+        a_perm.add_constant(&worker, &gamma);
+        a_perm.add_assign(&worker, &a_lde);
+        contrib_z_1.mul_assign(&worker, &a_perm);
+        drop(a_perm);
+
+        s_id_by_beta.add_constant(&worker, &n_by_beta);
+
+        let mut b_perm = s_id_by_beta.clone();
+
+        b_perm.add_constant(&worker, &gamma);
+        b_perm.add_assign(&worker, &b_lde);
+        contrib_z_1.mul_assign(&worker, &b_perm);
+        drop(b_perm);
+
+        s_id_by_beta.add_constant(&worker, &n_by_beta);
+
+        let mut c_perm = s_id_by_beta;
+        c_perm.add_constant(&worker, &gamma);
+        c_perm.add_assign(&worker, &c_lde);
+        contrib_z_1.mul_assign(&worker, &c_perm);
+        drop(c_perm);
+
+        contrib_z_1.sub_assign(&worker, &z_1_shifted_lde);
+
+        vanishing_poly_inverse.scale(&worker, alpha);
+
+        contrib_z_1.mul_assign(&worker, &vanishing_poly_inverse);
+
+        t_1.add_assign(&worker, &contrib_z_1);
+    }
+
+        {
+        // TODO: May be optimize number of additions
+        let mut contrib_z_2 = z_2_lde.clone();
+
+        let mut a_perm = sigma_1_lde;
+        a_perm.scale(&worker, beta);
+        a_perm.add_constant(&worker, &gamma);
+        a_perm.add_assign(&worker, &a_lde);
+        contrib_z_2.mul_assign(&worker, &a_perm);
+        drop(a_perm);
+
+
+        let mut b_perm = sigma_2_lde;
+        b_perm.scale(&worker, beta);
+        b_perm.add_constant(&worker, &gamma);
+        b_perm.add_assign(&worker, &b_lde);
+        contrib_z_2.mul_assign(&worker, &b_perm);
+        drop(b_perm);
+
+        let mut c_perm = sigma_3_lde;
+        c_perm.scale(&worker, beta);
+        c_perm.add_constant(&worker, &gamma);
+        c_perm.add_assign(&worker, &c_lde);
+        contrib_z_2.mul_assign(&worker, &c_perm);
+        drop(c_perm);
+
+        contrib_z_2.sub_assign(&worker, &z_2_shifted_lde);
+
+        vanishing_poly_inverse.scale(&worker, alpha);
+
+        contrib_z_2.mul_assign(&worker, &vanishing_poly_inverse);
+
+        t_1.add_assign(&worker, &contrib_z_2);
+    }
+
+    drop(a_lde);
+    drop(b_lde);
+    drop(c_lde);
+
+    let l_0 = assembly.calculate_lagrange_poly(&worker, required_domain_size.next_power_of_two(), 0)?;
+    let l_n_minus_one = assembly.calculate_lagrange_poly(&worker, required_domain_size.next_power_of_two(), n-1)?;
+
+    {
+        let mut z_1_minus_z_2_shifted = z_1_shifted_lde.clone();
+        z_1_minus_z_2_shifted.sub_assign(&worker, &z_2_shifted_lde);
+
+        let l = l_n_minus_one.clone().coset_lde(&worker, 4)?;
+
+        z_1_minus_z_2_shifted.mul_assign(&worker, &l);
+        drop(l);
+
+        vanishing_poly_inverse.scale(&worker, alpha);
+
+        z_1_minus_z_2_shifted.mul_assign(&worker, &vanishing_poly_inverse);
+
+        t_1.add_assign(&worker, &z_1_minus_z_2_shifted);
+    }
+
+    {
+        let mut z_1_minus_z_2= z_1_lde.clone();
+        z_1_minus_z_2.sub_assign(&worker, &z_2_lde);
+
+        let l = l_0.clone().coset_lde(&worker, 4)?;
+
+        z_1_minus_z_2.mul_assign(&worker, &l);
+        drop(l);
+
+        vanishing_poly_inverse.scale(&worker, alpha);
+
+        z_1_minus_z_2.mul_assign(&worker, &vanishing_poly_inverse);
+
+        t_1.add_assign(&worker, &z_1_minus_z_2);
+    }
+
+    let t_poly = t_1.icoset_fft(&worker);
+
+    println!("End work with polynomials");
+
+    let mut t_poly_parts = t_poly.break_into_multiples(required_domain_size)?;
+
+    t_poly_parts.pop().expect("last part is irrelevant");
+    let t_poly_high = t_poly_parts.pop().expect("high exists");
+    let t_poly_mid = t_poly_parts.pop().expect("mid exists");
+    let t_poly_low = t_poly_parts.pop().expect("low exists");
+
+    let (t_low_commitment, t_low_aux) = committer.commit_single(&t_poly_low);
+    let (t_mid_commitment, t_mid_aux) = committer.commit_single(&t_poly_mid);
+    let (t_high_commitment, t_high_aux) = committer.commit_single(&t_poly_high);
+
+    transcript.commit_input(&t_low_commitment);
+    transcript.commit_input(&t_mid_commitment);
+    transcript.commit_input(&t_high_commitment);
+
+    let z = transcript.get_challenge();
+
+    let a_at_z = a_poly.evaluate_at(&worker, z);
+    let b_at_z = b_poly.evaluate_at(&worker, z);
+    let c_at_z = c_poly.evaluate_at(&worker, z);
+
+    let q_l_at_z = q_l.evaluate_at(&worker, z);
+    let q_r_at_z = q_r.evaluate_at(&worker, z);
+    let q_o_at_z = q_o.evaluate_at(&worker, z);
+    let q_m_at_z = q_m.evaluate_at(&worker, z);
+    let q_c_at_z = q_c.evaluate_at(&worker, z);
+
+    let s_id_at_z = s_id.evaluate_at(&worker, z);
+    let sigma_1_at_z = sigma_1.evaluate_at(&worker, z);
+    let sigma_2_at_z = sigma_2.evaluate_at(&worker, z);
+    let sigma_3_at_z = sigma_3.evaluate_at(&worker, z);
+
+    let mut inverse_vanishing_at_z = assembly.evaluate_inverse_vanishing_poly(required_domain_size.next_power_of_two(), z);
+
+    let z_1_at_z = z_1.evaluate_at(&worker, z);
+    let z_2_at_z = z_2.evaluate_at(&worker, z);
+
+    let z_1_shifted_at_z = z_1_shifted.evaluate_at(&worker, z);
+    let z_2_shifted_at_z = z_2_shifted.evaluate_at(&worker, z);
+
+    let t_low_at_z = t_poly_low.evaluate_at(&worker, z);
+    let t_mid_at_z = t_poly_mid.evaluate_at(&worker, z);
+    let t_high_at_z = t_poly_high.evaluate_at(&worker, z);
+
+    let l_0_at_z = l_0.evaluate_at(&worker, z);
+    let l_n_minus_one_at_z = l_n_minus_one.evaluate_at(&worker, z);
+
+    {
+        transcript.commit_field_element(&a_at_z);
+        transcript.commit_field_element(&b_at_z);
+        transcript.commit_field_element(&c_at_z);
+
+        transcript.commit_field_element(&q_l_at_z);
+        transcript.commit_field_element(&q_r_at_z);
+        transcript.commit_field_element(&q_o_at_z);
+        transcript.commit_field_element(&q_m_at_z);
+        transcript.commit_field_element(&q_c_at_z);
+
+        transcript.commit_field_element(&s_id_at_z);
+        transcript.commit_field_element(&sigma_1_at_z);
+        transcript.commit_field_element(&sigma_2_at_z);
+        transcript.commit_field_element(&sigma_3_at_z);
+
+        transcript.commit_field_element(&t_low_at_z);
+        transcript.commit_field_element(&t_mid_at_z);
+        transcript.commit_field_element(&t_high_at_z);
+
+        transcript.commit_field_element(&z_1_at_z);
+        transcript.commit_field_element(&z_2_at_z);
+
+        transcript.commit_field_element(&z_1_shifted_at_z);
+        transcript.commit_field_element(&z_2_shifted_at_z);
+    }
+
+    let aggregation_challenge = transcript.get_challenge();
+
+    let z_in_pow_of_domain_size = z.pow([required_domain_size as u64]);
+
+    // this is a sanity check
+    {
+        let mut t_1 = {
+            let mut res = q_c_at_z;
+
+            let mut tmp = q_l_at_z;
+            tmp.mul_assign(&a_at_z);
+            res.add_assign(&tmp);
+
+            let mut tmp = q_r_at_z;
+            tmp.mul_assign(&b_at_z);
+            res.add_assign(&tmp);
+
+            let mut tmp = q_o_at_z;
+            tmp.mul_assign(&c_at_z);
+            res.add_assign(&tmp);
+
+            let mut tmp = q_m_at_z;
+            tmp.mul_assign(&a_at_z);
+            tmp.mul_assign(&b_at_z);
+            res.add_assign(&tmp);
+
+            inverse_vanishing_at_z.mul_assign(&alpha);
+
+            res.mul_assign(&inverse_vanishing_at_z);
+
+            res
+        };
+
+        {
+            let mut res = z_1_at_z;
+
+            let mut tmp = s_id_at_z;
+            tmp.mul_assign(&beta);
+            tmp.add_assign(&a_at_z);
+            tmp.add_assign(&gamma);
+            res.mul_assign(&tmp);
+
+            let mut tmp = s_id_at_z;
+            tmp.add_assign(&n_fe);
+            tmp.mul_assign(&beta);
+            tmp.add_assign(&b_at_z);
+            tmp.add_assign(&gamma);
+            res.mul_assign(&tmp);
+
+            let mut tmp = s_id_at_z;
+            tmp.add_assign(&two_n_fe);
+            tmp.mul_assign(&beta);
+            tmp.add_assign(&c_at_z);
+            tmp.add_assign(&gamma);
+            res.mul_assign(&tmp);
+
+            res.sub_assign(&z_1_shifted_at_z);
+
+            inverse_vanishing_at_z.mul_assign(&alpha);
+
+            res.mul_assign(&inverse_vanishing_at_z);
+
+            t_1.add_assign(&res);
+        }
+
+        {
+            let mut res = z_2_at_z;
+
+            let mut tmp = sigma_1_at_z;
+            tmp.mul_assign(&beta);
+            tmp.add_assign(&a_at_z);
+            tmp.add_assign(&gamma);
+            res.mul_assign(&tmp);
+
+            let mut tmp = sigma_2_at_z;
+            tmp.mul_assign(&beta);
+            tmp.add_assign(&b_at_z);
+            tmp.add_assign(&gamma);
+            res.mul_assign(&tmp);
+
+            let mut tmp = sigma_3_at_z;
+            tmp.mul_assign(&beta);
+            tmp.add_assign(&c_at_z);
+            tmp.add_assign(&gamma);
+            res.mul_assign(&tmp);
+
+            res.sub_assign(&z_2_shifted_at_z);
+
+            inverse_vanishing_at_z.mul_assign(&alpha);
+
+            res.mul_assign(&inverse_vanishing_at_z);
+
+            t_1.add_assign(&res);
+        }
+
+        {
+            let mut res = z_1_shifted_at_z;
+            res.sub_assign(&z_2_shifted_at_z);
+            res.mul_assign(&l_n_minus_one_at_z);
+
+            inverse_vanishing_at_z.mul_assign(&alpha);
+
+            res.mul_assign(&inverse_vanishing_at_z);
+
+            t_1.add_assign(&res);
+        }
+
+        {
+            let mut res = z_1_at_z;
+            res.sub_assign(&z_2_at_z);
+            res.mul_assign(&l_0_at_z);
+
+            inverse_vanishing_at_z.mul_assign(&alpha);
+
+            res.mul_assign(&inverse_vanishing_at_z);
+
+            t_1.add_assign(&res);
+        }
+
+        let mut t_at_z = E::Fr::zero();
+        t_at_z.add_assign(&t_low_at_z);
+
+        let mut tmp = z_in_pow_of_domain_size;
+        tmp.mul_assign(&t_mid_at_z);
+        t_at_z.add_assign(&tmp);
+
+        let mut tmp = z_in_pow_of_domain_size;
+        tmp.mul_assign(&z_in_pow_of_domain_size);
+        tmp.mul_assign(&t_high_at_z);
+        t_at_z.add_assign(&tmp);
+
+        assert_eq!(t_at_z, t_1, "sanity check failed");
+    }
+
+    // we do NOT compute linearization polynomial for non-homomorphic case
+
+    let mut z_by_omega = z;
+    z_by_omega.mul_assign(&z_1.omega);
+
+    let opening_polynomials = vec![
+        &a_poly,
+        &b_poly,
+        &c_poly,
+        &q_l,
+        &q_r,
+        &q_o,
+        &q_m,
+        &q_c,
+        &s_id,
+        &sigma_1,
+        &sigma_2,
+        &sigma_3,
+        &z_1,
+        &z_2,
+        &z_1,
+        &z_2,
+        &t_poly_low,
+        &t_poly_mid,
+        &t_poly_high
+    ];
+
+    let degrees: Vec<usize> = opening_polynomials.iter().map(|el| el.size()).collect();
+
+    let precomputations = Some(vec![
+        a_aux_data.as_ref().expect("is some"),
+        b_aux_data.as_ref().expect("is some"),
+        c_aux_data.as_ref().expect("is some"),
+        aux.q_l_aux.as_ref().expect("is some"),
+        aux.q_r_aux.as_ref().expect("is some"),
+        aux.q_o_aux.as_ref().expect("is some"),
+        aux.q_m_aux.as_ref().expect("is some"),
+        aux.q_c_aux.as_ref().expect("is some"),
+        aux.s_id_aux.as_ref().expect("is some"),
+        aux.sigma_1_aux.as_ref().expect("is some"),
+        aux.sigma_2_aux.as_ref().expect("is some"),
+        aux.sigma_3_aux.as_ref().expect("is some"),
+        z_1_aux.as_ref().expect("is some"),
+        z_2_aux.as_ref().expect("is some"),
+        z_1_aux.as_ref().expect("is some"),
+        z_2_aux.as_ref().expect("is some"),
+        t_low_aux.as_ref().expect("is some"),
+        t_mid_aux.as_ref().expect("is some"),
+        t_high_aux.as_ref().expect("is some"),
+    ]);
+
+    let opening_values = vec![
+        a_at_z,
+        b_at_z,
+        c_at_z,
+        q_l_at_z,
+        q_r_at_z,
+        q_o_at_z,
+        q_m_at_z,
+        q_c_at_z,
+        s_id_at_z,
+        sigma_1_at_z,
+        sigma_2_at_z,
+        sigma_3_at_z,
+        z_1_at_z,
+        z_2_at_z,
+        z_1_shifted_at_z,
+        z_2_shifted_at_z,
+        t_low_at_z,
+        t_mid_at_z,
+        t_high_at_z,
+    ];
+
+    let opening_points = vec![
+        z, 
+        z,
+        z,
+
+        z, 
+        z,
+        z,
+        z,
+        z,
+
+        z,
+        z,
+        z,
+        z,
+
+        z,
+        z,
+
+        z_by_omega,
+        z_by_omega,
+
+        z,
+        z,
+        z,
+    ];
+
+    let multiopen_proof = committer.open_multiple(
+        opening_polynomials, 
+        degrees, 
+        aggregation_challenge,
+        opening_points, 
+        opening_values,
+        &precomputations, 
+        &mut transcript
+    );
+
+    let proof = PlonkChunkedNonhomomorphicProof::<E, S> {
+        a_opening_value: a_at_z,
+        b_opening_value: b_at_z,
+        c_opening_value: c_at_z,
+        q_l_opening_value: q_l_at_z,
+        q_r_opening_value: q_r_at_z,
+        q_o_opening_value: q_o_at_z,
+        q_m_opening_value: q_m_at_z,
+        q_c_opening_value: q_c_at_z,
+        s_id_opening_value: s_id_at_z,
+        sigma_1_opening_value: sigma_1_at_z,
+        sigma_2_opening_value: sigma_2_at_z,
+        sigma_3_opening_value: sigma_3_at_z,
+        z_1_unshifted_opening_value: z_1_at_z,
+        z_2_unshifted_opening_value: z_2_at_z,
+        z_1_shifted_opening_value: z_1_shifted_at_z,
+        z_2_shifted_opening_value: z_2_shifted_at_z,
+        t_low_opening_value: t_low_at_z,
+        t_mid_opening_value: t_mid_at_z,
+        t_high_opening_value: t_high_at_z,
+        a_commitment: a_commitment,
+        b_commitment: b_commitment,
+        c_commitment: c_commitment,
+        z_1_commitment: z_1_commitment,
+        z_2_commitment: z_2_commitment,
+        t_low_commitment: t_low_commitment,
+        t_mid_commitment: t_mid_commitment,
+        t_high_commitment: t_high_commitment,
+        openings_proof: multiopen_proof,
     };
 
     Ok(proof)

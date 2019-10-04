@@ -16,6 +16,7 @@ use crate::plonk::commitments::transcript::Prng;
 use crate::plonk::commitments::transparent::fri::*;
 use crate::plonk::commitments::transparent::iop::*;
 use crate::plonk::commitments::transcript::*;
+use crate::plonk::fft::cooley_tukey_ntt::{CTPrecomputations, BitReversedOmegas};
 
 // Such committer uses external transcript for all the operations
 pub struct StatelessTransparentCommitter<
@@ -28,7 +29,8 @@ pub struct StatelessTransparentCommitter<
     output_coeffs_at_degree_plus_one: usize,
     num_queries: usize,
     worker: Worker,
-    precomputed_values: PrecomputedInvOmegas<F>,
+    precomputed_inverse_omegas: PrecomputedInvOmegas<F>,
+    precomputed_bitreversed_omegas: BitReversedOmegas<F>,
     _marker_fri: std::marker::PhantomData<FRI>,
     _marker_t: std::marker::PhantomData<T>
 }
@@ -71,9 +73,11 @@ impl<
         assert!(meta.lde_factor.is_power_of_two());
         assert!(meta.output_coeffs_at_degree_plus_one.is_power_of_two());
         let lde_domain_size = base_size*meta.lde_factor;
+        let base_domain = Domain::<F>::new_for_size(base_size as u64).expect("domain of large enough size should exist");
         let lde_domain = Domain::<F>::new_for_size(lde_domain_size as u64).expect("domain of large enough size should exist");
         let worker = Worker::new();
-        let precomputations = PrecomputedInvOmegas::<F>::new_for_domain(&lde_domain, &worker);
+        let omegas_inv_precomp = PrecomputedInvOmegas::<F>::new_for_domain(&lde_domain, &worker);
+        let omegas_bitrev_precomp = BitReversedOmegas::<F>::new_for_domain(&base_domain, &worker);
 
         StatelessTransparentCommitter::<F, FRI, T> {
             max_degree_plus_one: max_degree_plus_one,
@@ -81,14 +85,17 @@ impl<
             output_coeffs_at_degree_plus_one: meta.output_coeffs_at_degree_plus_one,
             num_queries: meta.num_queries,
             worker: worker,
-            precomputed_values: precomputations,
+            precomputed_inverse_omegas: omegas_inv_precomp,
+            precomputed_bitreversed_omegas: omegas_bitrev_precomp,
             _marker_fri: std::marker::PhantomData,
             _marker_t: std::marker::PhantomData
         }
     }
 
     fn precompute(&self, poly: &Polynomial<F, Coefficients>) -> Option<Self::IntermediateData> {
-        let original_poly_lde = poly.clone().lde(&self.worker, self.lde_factor).expect("must make an LDE");
+        assert!(poly.size() == self.max_degree_plus_one);
+        let original_poly_lde = poly.clone().lde_using_bitreversed_ntt(&self.worker, self.lde_factor, &self.precomputed_bitreversed_omegas).expect("must make an LDE");
+        // let original_poly_lde = poly.clone().lde(&self.worker, self.lde_factor).expect("must make an LDE");
         let original_tree = < < FRI as FriIop<F> >::IopType as IOP<F> >::create(&original_poly_lde.as_ref());
 
         Some((original_poly_lde, original_tree))
@@ -97,8 +104,8 @@ impl<
     fn commit_single(&self, poly: &Polynomial<F, Coefficients>) -> (Self::Commitment, Option<Self::IntermediateData>) {
         println!("Start commit single");
         let start = Instant::now();
-
-        let original_poly_lde = poly.clone().lde(&self.worker, self.lde_factor).expect("must make an LDE");
+        let original_poly_lde = poly.clone().lde_using_bitreversed_ntt(&self.worker, self.lde_factor, &self.precomputed_bitreversed_omegas).expect("must make an LDE");
+        // let original_poly_lde = poly.clone().lde(&self.worker, self.lde_factor).expect("must make an LDE");
         let original_tree = < < FRI as FriIop<F> >::IopType as IOP<F> >::create(&original_poly_lde.as_ref());
         let commitment = original_tree.get_root();
 
@@ -132,7 +139,8 @@ impl<
         };
 
         let q_poly = Polynomial::<F, Coefficients>::from_coeffs(division_result).expect("must be small enough");
-        let q_poly_lde = q_poly.lde(&self.worker, self.lde_factor).expect("must make an LDE");
+        let q_poly_lde = q_poly.lde_using_bitreversed_ntt(&self.worker, self.lde_factor, &self.precomputed_bitreversed_omegas).expect("must make an LDE");
+        // let q_poly_lde = q_poly.lde(&self.worker, self.lde_factor).expect("must make an LDE");
 
         let lde_size = q_poly_lde.size();
 
@@ -140,7 +148,7 @@ impl<
             &q_poly_lde, 
             self.lde_factor, 
             self.output_coeffs_at_degree_plus_one, 
-            &self.precomputed_values, 
+            &self.precomputed_inverse_omegas, 
             &self.worker, 
             prng
         ).expect("FRI must succeed");
@@ -258,7 +266,9 @@ impl<
 
         let q_poly = q_poly.expect("now it's aggregated");
 
-        let q_poly_lde = q_poly.lde(&self.worker, self.lde_factor).expect("must make an LDE");
+        let q_poly_lde = q_poly.lde_using_bitreversed_ntt(&self.worker, self.lde_factor, &self.precomputed_bitreversed_omegas).expect("must make an LDE");
+
+        // let q_poly_lde = q_poly.lde(&self.worker, self.lde_factor).expect("must make an LDE");
 
         let lde_size = q_poly_lde.size();
 
@@ -266,7 +276,7 @@ impl<
             &q_poly_lde, 
             self.lde_factor, 
             self.output_coeffs_at_degree_plus_one, 
-            &self.precomputed_values, 
+            &self.precomputed_inverse_omegas, 
             &self.worker, 
             prng
         ).expect("FRI must succeed");

@@ -355,6 +355,44 @@ impl<F: PrimeField> Polynomial<F, Coefficients> {
     // }
 
     #[inline(always)]
+    pub fn break_into_multiples(self, size: usize) -> Result<Vec<Polynomial<F, Coefficients>>, SynthesisError> {
+        let mut coeffs = self.coeffs;
+
+        let (mut num_parts, last_size) = if coeffs.len() % size == 0 {
+            let num_parts = coeffs.len() / size;
+
+            (num_parts, 0)
+        } else {
+            let num_parts = coeffs.len() / size;
+            let last_size = coeffs.len() - num_parts * size;
+
+            (num_parts, last_size)
+        };
+
+        let mut rev_results = Vec::with_capacity(num_parts);
+
+        if last_size != 0 {
+            let drain = coeffs.split_off(coeffs.len() - last_size);
+            rev_results.push(drain);
+            num_parts -= 1;
+        }
+
+        for _ in 0..num_parts {
+            let drain = coeffs.split_off(coeffs.len() - size);
+            rev_results.push(drain);
+        }
+
+        let mut results = Vec::with_capacity(num_parts);
+
+        for c in rev_results.into_iter().rev() {
+            let poly = Polynomial::<F, Coefficients>::from_coeffs(c)?;
+            results.push(poly);
+        }
+
+        Ok(results)
+    }
+
+    #[inline(always)]
     pub fn lde(self, worker: &Worker, factor: usize) -> Result<Polynomial<F, Values>, SynthesisError> {
         self.lde_using_multiple_cosets(worker, factor)
         // self.filtering_lde(worker, factor)

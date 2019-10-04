@@ -22,6 +22,7 @@ pub mod engine {
 pub use self::engine::Transparent252;
 
 pub(crate) mod proth;
+pub(crate) mod proth_engine;
 
 
 #[cfg(test)]

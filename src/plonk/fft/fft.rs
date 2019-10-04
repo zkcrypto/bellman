@@ -17,7 +17,13 @@ pub(crate) fn best_fft<F: PrimeField>(a: &mut [F], worker: &Worker, omega: &F, l
 {
     let log_cpus = if let Some(hint) = use_cpus_hint {
         assert!(hint <= worker.cpus);
-        log2_floor(hint)
+        let hint = if hint > 0 {
+            log2_floor(hint)
+        } else {
+            0
+        };
+
+        hint
     } else {
         worker.log_num_cpus()
     };

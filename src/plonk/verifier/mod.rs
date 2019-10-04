@@ -396,6 +396,329 @@ pub fn verify_nonhomomorphic<E: Engine, S: CommitmentScheme<E::Fr, Prng = T>, T:
     Ok(valid)
 }
 
+pub fn verify_nonhomomorphic_chunked<E: Engine, S: CommitmentScheme<E::Fr, Prng = T>, T: Transcript<E::Fr, Input = S::Commitment>>(
+    setup: &PlonkSetup<E, S>,
+    proof: &PlonkChunkedNonhomomorphicProof<E, S>, 
+    meta: S::Meta
+) -> Result<bool, SynthesisError> {
+    assert!(S::IS_HOMOMORPHIC == false);
+
+    let num_gates = setup.n;
+
+    let committer = S::new_for_size(num_gates.next_power_of_two(), meta);
+
+    let mut transcript = T::new();
+
+    // we need n+1 to be a power of two and can not have n to be power of two
+    let required_domain_size = setup.n + 1;
+    assert!(required_domain_size.is_power_of_two());
+
+    transcript.commit_input(&proof.a_commitment);
+    transcript.commit_input(&proof.b_commitment);
+    transcript.commit_input(&proof.c_commitment);
+
+    let beta = transcript.get_challenge();
+    let gamma = transcript.get_challenge();
+
+    transcript.commit_input(&proof.z_1_commitment);
+    transcript.commit_input(&proof.z_2_commitment);
+
+    // we do not commit those cause those are known already
+
+    let n_fe = E::Fr::from_str(&setup.n.to_string()).expect("must be valid field element");
+    let mut two_n_fe = n_fe;
+    two_n_fe.double();
+
+    let alpha = transcript.get_challenge();
+
+    transcript.commit_input(&proof.t_low_commitment);
+    transcript.commit_input(&proof.t_mid_commitment);
+    transcript.commit_input(&proof.t_high_commitment);
+
+    let z = transcript.get_challenge();
+
+    // this is a sanity check
+
+    let a_at_z = proof.a_opening_value;
+    let b_at_z = proof.b_opening_value;
+    let c_at_z = proof.c_opening_value;
+
+    let q_l_at_z = proof.q_l_opening_value;
+    let q_r_at_z = proof.q_r_opening_value;
+    let q_o_at_z = proof.q_o_opening_value;
+    let q_m_at_z = proof.q_m_opening_value;
+    let q_c_at_z = proof.q_c_opening_value;
+
+    let s_id_at_z = proof.s_id_opening_value;
+    let sigma_1_at_z = proof.sigma_1_opening_value;
+    let sigma_2_at_z = proof.sigma_2_opening_value;
+    let sigma_3_at_z = proof.sigma_3_opening_value;
+
+    let mut inverse_vanishing_at_z = evaluate_inverse_vanishing_poly::<E>(required_domain_size, z);
+
+    let z_1_at_z = proof.z_1_unshifted_opening_value;
+    let z_2_at_z = proof.z_2_unshifted_opening_value;
+
+    let z_1_shifted_at_z = proof.z_1_shifted_opening_value;
+    let z_2_shifted_at_z = proof.z_2_shifted_opening_value;
+
+    let l_0_at_z = evaluate_lagrange_poly::<E>(required_domain_size, 0, z);
+    let l_n_minus_one_at_z = evaluate_lagrange_poly::<E>(required_domain_size, setup.n - 1, z);
+
+    let t_low_at_z = proof.t_low_opening_value;
+    let t_mid_at_z = proof.t_mid_opening_value;
+    let t_high_at_z = proof.t_high_opening_value;
+
+    let z_in_pow_of_domain_size = z.pow([required_domain_size as u64]);
+
+    let mut t_at_z = E::Fr::zero();
+    t_at_z.add_assign(&t_low_at_z);
+
+    let mut tmp = z_in_pow_of_domain_size;
+    tmp.mul_assign(&t_mid_at_z);
+    t_at_z.add_assign(&tmp);
+
+    let mut tmp = z_in_pow_of_domain_size;
+    tmp.mul_assign(&z_in_pow_of_domain_size);
+    tmp.mul_assign(&t_high_at_z);
+    t_at_z.add_assign(&tmp);
+
+    {
+        transcript.commit_field_element(&a_at_z);
+        transcript.commit_field_element(&b_at_z);
+        transcript.commit_field_element(&c_at_z);
+
+        transcript.commit_field_element(&q_l_at_z);
+        transcript.commit_field_element(&q_r_at_z);
+        transcript.commit_field_element(&q_o_at_z);
+        transcript.commit_field_element(&q_m_at_z);
+        transcript.commit_field_element(&q_c_at_z);
+
+        transcript.commit_field_element(&s_id_at_z);
+        transcript.commit_field_element(&sigma_1_at_z);
+        transcript.commit_field_element(&sigma_2_at_z);
+        transcript.commit_field_element(&sigma_3_at_z);
+
+        transcript.commit_field_element(&t_low_at_z);
+        transcript.commit_field_element(&t_mid_at_z);
+        transcript.commit_field_element(&t_high_at_z);
+
+        transcript.commit_field_element(&z_1_at_z);
+        transcript.commit_field_element(&z_2_at_z);
+
+        transcript.commit_field_element(&z_1_shifted_at_z);
+        transcript.commit_field_element(&z_2_shifted_at_z);
+    }
+
+    let aggregation_challenge = transcript.get_challenge();
+
+    // TODO: add public inputs
+
+    // verify by blindly assembling a t poly
+    let mut t_1 = {
+        let mut res = q_c_at_z;
+
+        let mut tmp = q_l_at_z;
+        tmp.mul_assign(&a_at_z);
+        res.add_assign(&tmp);
+
+        let mut tmp = q_r_at_z;
+        tmp.mul_assign(&b_at_z);
+        res.add_assign(&tmp);
+
+        let mut tmp = q_o_at_z;
+        tmp.mul_assign(&c_at_z);
+        res.add_assign(&tmp);
+
+        let mut tmp = q_m_at_z;
+        tmp.mul_assign(&a_at_z);
+        tmp.mul_assign(&b_at_z);
+        res.add_assign(&tmp);
+
+        inverse_vanishing_at_z.mul_assign(&alpha);
+
+        res.mul_assign(&inverse_vanishing_at_z);
+
+        res
+    };
+
+    {
+        let mut res = z_1_at_z;
+
+        let mut tmp = s_id_at_z;
+        tmp.mul_assign(&beta);
+        tmp.add_assign(&a_at_z);
+        tmp.add_assign(&gamma);
+        res.mul_assign(&tmp);
+
+        let mut tmp = s_id_at_z;
+        tmp.add_assign(&n_fe);
+        tmp.mul_assign(&beta);
+        tmp.add_assign(&b_at_z);
+        tmp.add_assign(&gamma);
+        res.mul_assign(&tmp);
+
+        let mut tmp = s_id_at_z;
+        tmp.add_assign(&two_n_fe);
+        tmp.mul_assign(&beta);
+        tmp.add_assign(&c_at_z);
+        tmp.add_assign(&gamma);
+        res.mul_assign(&tmp);
+
+        res.sub_assign(&z_1_shifted_at_z);
+
+        inverse_vanishing_at_z.mul_assign(&alpha);
+
+        res.mul_assign(&inverse_vanishing_at_z);
+
+        t_1.add_assign(&res);
+    }
+
+    {
+        let mut res = z_2_at_z;
+
+        let mut tmp = sigma_1_at_z;
+        tmp.mul_assign(&beta);
+        tmp.add_assign(&a_at_z);
+        tmp.add_assign(&gamma);
+        res.mul_assign(&tmp);
+
+        let mut tmp = sigma_2_at_z;
+        tmp.mul_assign(&beta);
+        tmp.add_assign(&b_at_z);
+        tmp.add_assign(&gamma);
+        res.mul_assign(&tmp);
+
+        let mut tmp = sigma_3_at_z;
+        tmp.mul_assign(&beta);
+        tmp.add_assign(&c_at_z);
+        tmp.add_assign(&gamma);
+        res.mul_assign(&tmp);
+
+        res.sub_assign(&z_2_shifted_at_z);
+
+        inverse_vanishing_at_z.mul_assign(&alpha);
+
+        res.mul_assign(&inverse_vanishing_at_z);
+
+        t_1.add_assign(&res);
+    }
+
+    {
+        let mut res = z_1_shifted_at_z;
+        res.sub_assign(&z_2_shifted_at_z);
+        res.mul_assign(&l_n_minus_one_at_z);
+
+        inverse_vanishing_at_z.mul_assign(&alpha);
+
+        res.mul_assign(&inverse_vanishing_at_z);
+
+        t_1.add_assign(&res);
+    }
+
+    {
+        let mut res = z_1_at_z;
+        res.sub_assign(&z_2_at_z);
+        res.mul_assign(&l_0_at_z);
+
+        inverse_vanishing_at_z.mul_assign(&alpha);
+
+        res.mul_assign(&inverse_vanishing_at_z);
+
+        t_1.add_assign(&res);
+    }
+
+    let domain = Domain::<E::Fr>::new_for_size(required_domain_size as u64)?;
+
+    let mut z_by_omega = z;
+    z_by_omega.mul_assign(&domain.generator);
+
+    let commitments = vec![
+        &proof.a_commitment,
+        &proof.b_commitment,
+        &proof.c_commitment,
+        &setup.q_l,
+        &setup.q_r,
+        &setup.q_o,
+        &setup.q_m,
+        &setup.q_c,
+        &setup.s_id,
+        &setup.sigma_1,
+        &setup.sigma_2,
+        &setup.sigma_3,
+        &proof.z_1_commitment,
+        &proof.z_2_commitment,
+        &proof.z_1_commitment,
+        &proof.z_2_commitment,
+        &proof.t_low_commitment,
+        &proof.t_mid_commitment,
+        &proof.t_high_commitment,
+    ];
+
+    let claimed_values = vec![
+        a_at_z,
+        b_at_z,
+        c_at_z,
+        q_l_at_z,
+        q_r_at_z,
+        q_o_at_z,
+        q_m_at_z,
+        q_c_at_z,
+        s_id_at_z,
+        sigma_1_at_z,
+        sigma_2_at_z,
+        sigma_3_at_z,
+        z_1_at_z,
+        z_2_at_z,
+        z_1_shifted_at_z,
+        z_2_shifted_at_z,
+        t_low_at_z,
+        t_mid_at_z,
+        t_high_at_z,
+    ];
+
+    let opening_points = vec![
+        z, 
+        z,
+        z,
+
+        z, 
+        z,
+        z,
+        z,
+        z,
+
+        z,
+        z,
+        z,
+        z,
+
+        z,
+        z,
+
+        z_by_omega,
+        z_by_omega,
+
+        z,
+        z,
+        z,
+    ];
+
+    if t_1 != t_at_z {
+        println!("Recalculated t(z) is not equal to the provided value");
+        return Ok(false);
+    }
+
+    let valid = committer.verify_multiple_openings(commitments, opening_points, &claimed_values, aggregation_challenge, &proof.openings_proof, &mut transcript);
+
+    if !valid {
+        println!("Multiopening is invalid");
+        return Ok(false);
+    }
+
+    Ok(valid)
+}
+
 #[cfg(test)]
 mod test {
 
@@ -826,7 +1149,7 @@ mod test {
 
     #[test]
     fn test_bench_transparent_engine() {
-        use crate::plonk::transparent_engine::*;
+        use crate::plonk::transparent_engine::proth_engine::*;
         use crate::plonk::utils::*;
         use crate::plonk::commitments::transparent::fri::*;
         use crate::plonk::commitments::transparent::iop::*;
@@ -897,6 +1220,72 @@ mod test {
         println!("Start verifying");
         let start = Instant::now();
         let valid = verify_nonhomomorphic::<Transparent252, Committer, Blake2sTranscript::<Fr>>(&setup, &proof, meta, meta_large).unwrap();
+        println!("Verification with unnecessary precomputation taken {:?}", start.elapsed());
+
+        assert!(valid);
+    }
+
+    #[test]
+    fn test_bench_chunked_proof_on_transparent_engine() {
+        use crate::plonk::transparent_engine::proth_engine::*;
+        use crate::plonk::utils::*;
+        use crate::plonk::commitments::transparent::fri::*;
+        use crate::plonk::commitments::transparent::iop::*;
+        use crate::plonk::commitments::transcript::*;
+        use crate::plonk::commitments::transparent::fri::naive_fri::naive_fri::*;
+        use crate::plonk::commitments::transparent::iop::blake2s_trivial_iop::*;
+        use crate::plonk::commitments::*;
+        use crate::plonk::commitments::transparent::*;
+        use crate::plonk::tester::*;
+
+        use std::time::Instant;
+
+        type Iop = TrivialBlake2sIOP<Fr>;
+        type Fri = NaiveFriIop<Fr, Iop>;
+        type Committer = StatelessTransparentCommitter<Fr, Fri, Blake2sTranscript<Fr>>;
+
+        let mut negative_one = Fr::one();
+        negative_one.negate();
+        println!("-1 = {}", negative_one);
+
+        let meta = TransparentCommitterParameters {
+            lde_factor: 16,
+            num_queries: 10,
+            output_coeffs_at_degree_plus_one: 16,
+        };
+
+        let circuit = BenchmarkCircuit::<Transparent252> {
+            num_steps: 1_000_000,
+            _marker: PhantomData
+        };
+
+        {
+            let mut tester = TestingAssembly::<Transparent252>::new();
+
+            circuit.synthesize(&mut tester).expect("must synthesize");
+
+            let satisfied = tester.is_satisfied();
+
+            assert!(satisfied);
+
+            println!("Circuit is satisfied");
+        }
+
+        println!("Start setup");
+        let start = Instant::now();
+        let (setup, aux) = setup::<Transparent252, Committer, _>(&circuit, meta.clone()).unwrap();
+        println!("Setup taken {:?}", start.elapsed());
+
+        println!("Using circuit with N = {}", setup.n);
+
+        println!("Start proving");
+        let start = Instant::now();
+        let proof = prove_nonhomomorphic_chunked::<Transparent252, Committer, Blake2sTranscript::<Fr>, _>(&circuit, &aux, meta.clone()).unwrap();
+        println!("Proof taken {:?}", start.elapsed());
+
+        println!("Start verifying");
+        let start = Instant::now();
+        let valid = verify_nonhomomorphic_chunked::<Transparent252, Committer, Blake2sTranscript::<Fr>>(&setup, &proof, meta).unwrap();
         println!("Verification with unnecessary precomputation taken {:?}", start.elapsed());
 
         assert!(valid);
