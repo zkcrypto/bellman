@@ -62,3 +62,12 @@ pub fn distribute_powers<F: PrimeField>(coeffs: &mut [F], worker: &Worker, g: F)
         }
     });
 }
+
+pub fn distribute_powers_serial<F: PrimeField>(coeffs: &mut [F], g: F)
+{
+    let mut u = F::one();
+    for v in coeffs.iter_mut() {
+        v.mul_assign(&u);
+        u.mul_assign(&g);
+    }
+}

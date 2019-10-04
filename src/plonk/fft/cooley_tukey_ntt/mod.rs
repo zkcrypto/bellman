@@ -135,6 +135,7 @@ pub(crate) fn serial_ct_ntt<F: PrimeField, P: CTPrecomputations<F>>(
 )
 {
     assert_eq!(a.len(), precomputed_omegas.domain_size());
+    assert_eq!(a.len(), (1<<log_n) as usize);
 
     let n = a.len();
     if n == 1 {

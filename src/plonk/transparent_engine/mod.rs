@@ -206,6 +206,56 @@ mod test {
 
         let poly_sizes = vec![1_000_000, 2_000_000, 4_000_000];
 
+        // let poly_sizes = vec![2];
+
+        let worker = Worker::new();
+
+        for poly_size in poly_sizes.into_iter() {
+            let poly_size = poly_size as usize;
+
+            let res1 = {
+                let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+                let coeffs = (0..poly_size).map(|_| Fr::rand(rng)).collect::<Vec<_>>();
+            
+                let poly = Polynomial::<Fr, _>::from_coeffs(coeffs).unwrap();
+                let start = Instant::now();
+                let eval_result = poly.lde_using_multiple_cosets(&worker, 16).unwrap();
+                println!("LDE with factor 16 for size {} taken {:?}", poly_size, start.elapsed());
+
+                eval_result.into_coeffs()
+            };
+
+            let res2 = {
+                let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+                let coeffs = (0..poly_size).map(|_| Fr::rand(rng)).collect::<Vec<_>>();
+            
+                let poly = Polynomial::<Fr, _>::from_coeffs(coeffs).unwrap();
+                let precomp = BitReversedOmegas::<Fr>::new_for_domain_size(poly.size());
+                let start = Instant::now();
+                let eval_result = poly.lde_using_bitreversed_ntt(&worker, 16, &precomp).unwrap();
+                println!("LDE with factor 16 for size {} with optimized ntt taken {:?}", poly_size, start.elapsed());
+
+                eval_result.into_coeffs()
+            };
+
+            assert_eq!(res1, res2);
+
+            assert!(res1 == res2);
+        }
+    }
+
+    #[test]
+    fn test_bench_noalloc_bit_reversed_ploth_lde() {
+        use rand::{XorShiftRng, SeedableRng, Rand, Rng};
+        use super::proth::Fr as Fr;
+        use crate::plonk::polynomials::*;
+        use std::time::Instant;
+        use crate::multicore::*;
+        use crate::plonk::commitments::transparent::utils::*;
+        use crate::plonk::fft::cooley_tukey_ntt::{CTPrecomputations, BitReversedOmegas};
+
+        let poly_sizes = vec![32, 64,1_000_000, 2_000_000, 4_000_000];
+
         let worker = Worker::new();
 
         for poly_size in poly_sizes.into_iter() {
@@ -230,15 +280,48 @@ mod test {
                 let poly = Polynomial::<Fr, _>::from_coeffs(coeffs).unwrap();
                 let precomp = BitReversedOmegas::<Fr>::new_for_domain_size(poly.size());
                 let start = Instant::now();
-                let eval_result = poly.lde_using_bitreversed_ntt(&worker, 16, &precomp).unwrap();
+                let eval_result = poly.lde_using_bitreversed_ntt_no_allocations_lowest_bits_reversed(&worker, 16, &precomp).unwrap();
                 println!("LDE with factor 16 for size {} with optimized ntt taken {:?}", poly_size, start.elapsed());
 
                 eval_result.into_coeffs()
             };
 
-            assert!(res1 == res2);
+            use crate::ff::PrimeField;
+
+            fn check_permutation<F: PrimeField>(one: &[F], two: &[F]) -> (bool, Vec<usize>) {
+                let mut permutation: Vec<usize> = (0..one.len()).collect();
+                let mut valid = true;
+
+                for (i, el) in one.iter().enumerate() {
+                    let mut idx = 0;
+                    let mut found = false;
+                    for (j, el2) in two.iter().enumerate() {
+                        if *el == *el2 {
+                            idx = j;
+                            found = true;
+                            break;
+                        }
+                    }
+                    if !found {
+                        println!("Not found for {}", i);
+                        valid = false;
+                        break;
+                    }
+                    permutation[i] = idx;
+                }
+
+                (valid, permutation)
+            }
+
+            if poly_size < 1000 {
+                let (valid, permutation) = check_permutation(&res1, &res2);
+
+                assert!(valid);
+            }
         }
     }
+
+    
 }
 
 
