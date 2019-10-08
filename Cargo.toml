@@ -7,19 +7,19 @@ homepage = "https://github.com/ebfull/bellman"
 license = "MIT/Apache-2.0"
 name = "bellman"
 repository = "https://github.com/ebfull/bellman"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2018"
 
 [dependencies]
 bit-vec = "0.4.4"
 blake2s_simd = "0.5"
-ff = { path = "../ff" }
+ff = { version = "0.5.0", path = "../ff" }
 futures = "0.1"
 futures-cpupool = { version = "0.1", optional = true }
-group = { path = "../group" }
+group = { version = "0.2.0", path = "../group" }
 num_cpus = { version = "1", optional = true }
 crossbeam = { version = "0.7", optional = true }
-pairing = { path = "../pairing", optional = true }
+pairing = { version = "0.15.0", path = "../pairing", optional = true }
 rand_core = "0.5"
 byteorder = "1"
 
@@ -38,3 +38,6 @@ default = ["groth16", "multicore"]
 name = "mimc"
 path = "tests/mimc.rs"
 required-features = ["groth16"]
+
+[badges]
+maintenance = { status = "actively-developed" }
