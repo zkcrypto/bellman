@@ -1741,4 +1741,72 @@ mod test {
             }
         }
     }
+
+    #[test]
+    fn test_alloc_conditionally() {
+        {
+            let mut cs = TestConstraintSystem::<Bls12>::new();
+            let b = AllocatedBit::alloc(&mut cs, Some(false)).unwrap();
+
+            let value = None;
+            // if value is none, fail with SynthesisError
+            let is_err = AllocatedBit::alloc_conditionally(
+                cs.namespace(|| "alloc_conditionally"),
+                value,
+                &b,
+            )
+            .is_err();
+            assert!(is_err);
+        }
+
+        {
+            // since value is true, b must be false, so it should succeed
+            let mut cs = TestConstraintSystem::<Bls12>::new();
+
+            let value = Some(true);
+            let b = AllocatedBit::alloc(&mut cs, Some(false)).unwrap();
+            let allocated_value = AllocatedBit::alloc_conditionally(
+                cs.namespace(|| "alloc_conditionally"),
+                value,
+                &b,
+            )
+            .unwrap();
+
+            assert_eq!(allocated_value.get_value().unwrap(), true);
+            assert!(cs.is_satisfied());
+        }
+
+        {
+            // since value is true, b must be false, so it should fail
+            let mut cs = TestConstraintSystem::<Bls12>::new();
+
+            let value = Some(true);
+            let b = AllocatedBit::alloc(&mut cs, Some(true)).unwrap();
+            AllocatedBit::alloc_conditionally(cs.namespace(|| "alloc_conditionally"), value, &b)
+                .unwrap();
+
+            assert!(!cs.is_satisfied());
+        }
+
+        {
+            // since value is false, we don't care about the value of the bit
+
+            let value = Some(false);
+            //check with false bit
+            let mut cs = TestConstraintSystem::<Bls12>::new();
+            let b1 = AllocatedBit::alloc(&mut cs, Some(false)).unwrap();
+            AllocatedBit::alloc_conditionally(cs.namespace(|| "alloc_conditionally"), value, &b1)
+                .unwrap();
+
+            assert!(cs.is_satisfied());
+
+            //check with true bit
+            let mut cs = TestConstraintSystem::<Bls12>::new();
+            let b2 = AllocatedBit::alloc(&mut cs, Some(true)).unwrap();
+            AllocatedBit::alloc_conditionally(cs.namespace(|| "alloc_conditionally"), value, &b2)
+                .unwrap();
+
+            assert!(cs.is_satisfied());
+        }
+    }
 }

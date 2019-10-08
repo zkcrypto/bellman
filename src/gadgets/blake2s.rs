@@ -552,4 +552,145 @@ mod test {
             }
         }
     }
+
+    #[test]
+    fn test_blake2s_256_vars() {
+        let data: Vec<u8> = hex!("be9f9c485e670acce8b1516a378176161b20583637b6f1c536fbc1158a0a3296831df2920e57a442d5738f4be4dd6be89dd7913fc8b4d1c0a815646a4d674b77f7caf313bd880bf759fcac27037c48c2b2a20acd2fd5248e3be426c84a341c0a3c63eaf36e0d537d10b8db5c6e4c801832c41eb1a3ed602177acded8b4b803bd34339d99a18b71df399641cc8dfae2ad193fcd74b5913e704551777160d14c78f2e8d5c32716a8599c1080cb89a40ccd6ba596694a8b4a065d9f2d0667ef423ed2e418093caff884540858b4f4b62acd47edcea880523e1b1cda8eb225c128c2e9e83f14f6e7448c5733a195cac7d79a53dde5083172462c45b2f799e42af1c9").to_vec();
+        assert_eq!(data.len(), 256);
+
+        let mut cs = TestConstraintSystem::<Bls12>::new();
+
+        let mut input_bits = vec![];
+
+        for (byte_i, input_byte) in data.into_iter().enumerate() {
+            for bit_i in 0..8 {
+                let cs = cs.namespace(|| format!("input bit {} {}", byte_i, bit_i));
+
+                input_bits.push(
+                    AllocatedBit::alloc(cs, Some((input_byte >> bit_i) & 1u8 == 1u8))
+                        .unwrap()
+                        .into(),
+                );
+            }
+        }
+
+        let r = blake2s(&mut cs, &input_bits, b"12345678").unwrap();
+
+        assert!(cs.is_satisfied());
+
+        let expected = hex!("0af5695115ced92c8a0341e43869209636e9aa6472e4576f0f2b996cf812b30e");
+
+        let mut out = r.into_iter();
+        for b in expected.into_iter() {
+            for i in 0..8 {
+                let c = out.next().unwrap().get_value().unwrap();
+
+                assert_eq!(c, (b >> i) & 1u8 == 1u8);
+            }
+        }
+    }
+
+    #[test]
+    fn test_blake2s_700_vars() {
+        let data: Vec<u8> = hex!("5dcfe8bab4c758d2eb1ddb7ef337583e0df3e2c358e1755b7cd303a658de9a1227eed1d1114179a5c3c38d692ff2cf2d4e5c92a9516de750106774bbf9f7d063f707f4c9b6a02c0a77e4feb99e036c3ccaee7d1a31cb144093aa074bc9da608f8ff30b39c3c60e4a243cc0bbd406d1262a7d6607b31c60275c6bcc8b0ac49a06a4b629a98693c5f7640f3bca45e4977cfabc5b17f52838af3433b1fd407dbbdc131e8e4bd58bcee85bbab4b57b656c6a2ec6cf852525bc8423675e2bf29159139cd5df99db94719f3f7167230e0d5bd76f6d7891b656732cef9c3c0d48a5fa3d7a879988157b39015a85451b25af0301ca5e759ac35fea79dca38c673ec6db9f3885d9103e2dcb3304bd3d59b0b1d01babc97ef8a74d91b6ab6bf50f29eb5adf7250a28fd85db37bff0133193635da69caeefc72979cf3bef1d2896d847eea7e8a81e0927893dbd010feb6fb845d0399007d9a148a0596d86cd8f4192631f975c560f4de8da5f712c161342063af3c11029d93d6df7ff46db48343499de9ec4786cac059c4025ef418c9fe40132428ff8b91259d71d1709ff066add84ae944b45a817f60b4c1bf719e39ae23e9b413469db2310793e9137cf38741e5dd2a3c138a566dbde1950c00071b20ac457b46ba9b0a7ebdddcc212bd228d2a4c4146a970e54158477247c27871af1564b176576e9fd43bf63740bf77434bc4ea3b1a4b430e1a11714bf43160145578a575c3f78ddeaa48de97f73460f26f8df2b5d63e31800100d16bc27160fea5ced5a977ef541cfe8dadc7b3991ed1c0d4f16a3076bbfed96ba3e155113e794987af8abb133f06feefabc2ac32eb4d4d4ba1541ca08b9e518d2e74b7f946b0cbd2663d58c689359b9a565821acc619011233d1011963fa302cde34fc9c5ba2e03eeb2512f547391e940d56218e22ae325f2dfa38d4bae35744ee707aa5dc9c17674025d15390a08f5c452343546ef6da0f7").to_vec();
+        assert_eq!(data.len(), 700);
+
+        let mut cs = TestConstraintSystem::<Bls12>::new();
+
+        let mut input_bits = vec![];
+
+        for (byte_i, input_byte) in data.into_iter().enumerate() {
+            for bit_i in 0..8 {
+                let cs = cs.namespace(|| format!("input bit {} {}", byte_i, bit_i));
+
+                input_bits.push(
+                    AllocatedBit::alloc(cs, Some((input_byte >> bit_i) & 1u8 == 1u8))
+                        .unwrap()
+                        .into(),
+                );
+            }
+        }
+
+        let r = blake2s(&mut cs, &input_bits, b"12345678").unwrap();
+
+        assert!(cs.is_satisfied());
+
+        let expected = hex!("2ab8f0683167ba220eef19dccf4f9b1a8193cc09b35e0235842323950530f18a");
+
+        let mut out = r.into_iter();
+        for b in expected.into_iter() {
+            for i in 0..8 {
+                let c = out.next().unwrap().get_value().unwrap();
+
+                assert_eq!(c, (b >> i) & 1u8 == 1u8);
+            }
+        }
+    }
+
+    #[test]
+    fn test_blake2s_test_vectors() {
+        let mut rng = XorShiftRng::from_seed([
+            0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06,
+            0xbc, 0xe5,
+        ]);
+
+        let expecteds = [
+            hex!("a1309e334376c8f36a736a4ab0e691ef931ee3ebdb9ea96187127136fea622a1"),
+            hex!("82fefff60f265cea255252f7c194a7f93965dffee0609ef74eb67f0d76cd41c6"),
+        ];
+        for i in 0..2 {
+            let mut h = Blake2sParams::new()
+                .hash_length(32)
+                .personal(b"12345678")
+                .to_state();
+            let input_len = 1024;
+            let data: Vec<u8> = (0..input_len).map(|_| rng.next_u32() as u8).collect();
+
+            h.update(&data);
+
+            let hash_result = h.finalize();
+
+            let mut cs = TestConstraintSystem::<Bls12>::new();
+
+            let mut input_bits = vec![];
+
+            for (byte_i, input_byte) in data.into_iter().enumerate() {
+                for bit_i in 0..8 {
+                    let cs = cs.namespace(|| format!("input bit {} {}", byte_i, bit_i));
+
+                    input_bits.push(
+                        AllocatedBit::alloc(cs, Some((input_byte >> bit_i) & 1u8 == 1u8))
+                            .unwrap()
+                            .into(),
+                    );
+                }
+            }
+
+            let r = blake2s(&mut cs, &input_bits, b"12345678").unwrap();
+
+            assert!(cs.is_satisfied());
+
+            let mut s = hash_result
+                .as_ref()
+                .iter()
+                .flat_map(|&byte| (0..8).map(move |i| (byte >> i) & 1u8 == 1u8));
+
+            for b in r {
+                match b {
+                    Boolean::Is(b) => {
+                        assert!(s.next().unwrap() == b.get_value().unwrap());
+                    }
+                    Boolean::Not(b) => {
+                        assert!(s.next().unwrap() != b.get_value().unwrap());
+                    }
+                    Boolean::Constant(b) => {
+                        assert!(input_len == 0);
+                        assert!(s.next().unwrap() == b);
+                    }
+                }
+            }
+
+            assert_eq!(expecteds[i], hash_result.as_bytes());
+        }
+    }
 }
