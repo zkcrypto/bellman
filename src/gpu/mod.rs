@@ -7,6 +7,11 @@ mod sources;
 pub use self::sources::*;
 
 #[cfg(feature = "gpu")]
+mod utils;
+#[cfg(feature = "gpu")]
+pub use self::utils::*;
+
+#[cfg(feature = "gpu")]
 mod structs;
 #[cfg(feature = "gpu")]
 pub use self::structs::*;

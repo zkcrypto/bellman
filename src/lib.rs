@@ -7,6 +7,7 @@ extern crate futures_cpupool;
 extern crate num_cpus;
 extern crate paired;
 extern crate rand;
+extern crate log;
 
 #[cfg(feature = "gpu")]
 extern crate itertools;

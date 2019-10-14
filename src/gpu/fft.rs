@@ -1,9 +1,11 @@
+use log::info;
 use ocl::{ProQue, Buffer, MemFlags};
 use std::cmp;
 use ff::PrimeField;
-use super::error::GPUResult;
+use super::error::{GPUResult, GPUError};
 use super::sources;
 use super::structs;
+use super::utils;
 
 // NOTE: Please read `structs.rs` for an explanation for unsafe transmutes of this code!
 
@@ -23,7 +25,10 @@ impl<F> FFTKernel<F> where F: PrimeField {
 
     pub fn create(n: u32) -> GPUResult<FFTKernel::<F>> {
         let src = sources::fft_kernel::<F>();
-        let pq = ProQue::builder().src(src).dims(n).build()?;
+        let devices = utils::get_devices(utils::GPU_NVIDIA_PLATFORM_NAME)?;
+        if devices.len() == 0 { return Err(GPUError {msg: "No working GPUs found!".to_string()} ); }
+        let device = devices[0]; // Select the first device for FFT
+        let pq = ProQue::builder().device(device).src(src).dims(n).build()?;
         let srcbuff = Buffer::builder().queue(pq.queue().clone())
             .flags(MemFlags::new().read_write()).len(n)
             .build()?;
@@ -36,6 +41,9 @@ impl<F> FFTKernel<F> where F: PrimeField {
         let omgbuff = Buffer::builder().queue(pq.queue().clone())
             .flags(MemFlags::new().read_write()).len(LOG2_MAX_ELEMENTS)
             .build()?;
+
+        info!("FFT: 1 working device(s) selected.");
+        info!("FFT: Device 0: {}", pq.device().name()?);
 
         Ok(FFTKernel {proque: pq,
                       fft_src_buffer: srcbuff,

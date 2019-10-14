@@ -13,15 +13,10 @@ __kernel void POINT_bellman_multiexp(
     __global POINT_projective *buckets,
     __global POINT_projective *results,
     __global EXPONENT *exps,
-    uint skip,
     uint n,
     uint num_groups,
     uint num_windows,
     uint window_size) {
-
-  // Bases are skipped by `self.1` elements, when converted from (Arc<Vec<G>>, usize) to Source
-  // https://github.com/zkcrypto/bellman/blob/10c5010fd9c2ca69442dc9775ea271e286e776d8/src/multiexp.rs#L38
-  bases += skip;
 
   // We have `num_windows` * `num_groups` threads per multiexp.
   uint gid = get_global_id(0);

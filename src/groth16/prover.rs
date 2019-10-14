@@ -18,6 +18,8 @@ use multiexp::{multiexp, DensityTracker, FullDensity, gpu_multiexp_supported};
 
 use multicore::Worker;
 
+use log::info;
+
 fn eval<E: Engine>(
     lc: &LinearCombination<E>,
     mut input_density: Option<&mut DensityTracker>,
@@ -211,13 +213,13 @@ where
     let mut log_d = 0u32; while (1 << log_d) < prover.a.len() { log_d += 1; }
 
     let mut multiexp_kern = gpu_multiexp_supported::<E>(log_d).ok();
-    if multiexp_kern.is_some() { println!("GPU Multiexp is supported!"); }
-    else { println!("GPU Multiexp is NOT supported!"); }
+    if multiexp_kern.is_some() { info!("GPU Multiexp is supported!"); }
+    else { info!("GPU Multiexp is NOT supported!"); }
 
     let h = {
         let mut fft_kern = gpu_fft_supported::<E>(log_d).ok();
-        if fft_kern.is_some() { println!("GPU FFT is supported!"); }
-        else { println!("GPU FFT is NOT supported!"); }
+        if fft_kern.is_some() { info!("GPU FFT is supported!"); }
+        else { info!("GPU FFT is NOT supported!"); }
 
         let mut a = EvaluationDomain::from_coeffs(prover.a)?;
         let mut b = EvaluationDomain::from_coeffs(prover.b)?;
