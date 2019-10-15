@@ -160,12 +160,18 @@ impl<E> MultiexpKernel<E> where E: Engine {
             n: usize)
             -> GPUResult<(<G as CurveAffine>::Projective)>
             where G: CurveAffine {
+        if n == 0 {
+            return Ok(<G as CurveAffine>::Projective::zero());
+        }
+
         let num_devices = self.0.len();
         let chunk_size = ((n as f64) / (num_devices as f64)).ceil() as usize;
 
         // Bases are skipped by `self.1` elements, when converted from (Arc<Vec<G>>, usize) to Source
         // https://github.com/zkcrypto/bellman/blob/10c5010fd9c2ca69442dc9775ea271e286e776d8/src/multiexp.rs#L38
         let bases = &bases[skip..];
+        
+        let exps = &exps[..n];
 
         match thread::scope(|s| {
             let mut acc = <G as CurveAffine>::Projective::zero();
