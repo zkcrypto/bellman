@@ -27,7 +27,7 @@ pub struct MultiexpKernel<E>(PhantomData::<E>) where E: Engine;
 
 impl<E> MultiexpKernel<E> where E: Engine {
 
-    pub fn create(_: u32) -> GPUResult<MultiexpKernel<E>> {
+    pub fn create() -> GPUResult<MultiexpKernel<E>> {
         return Err(GPUError {msg: "GPU accelerator is not enabled!".to_string()});
     }
 

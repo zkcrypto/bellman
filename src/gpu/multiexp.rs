@@ -16,6 +16,7 @@ use crossbeam::thread;
 const NUM_GROUPS : usize = 334; // Partition the bases into `NUM_GROUPS` groups
 const WINDOW_SIZE : usize = 10; // Exponents are 255bit long, divide exponents into `WINDOW_SIZE` bit windows
 const NUM_WINDOWS : usize = 26; // Then we will have Ceil(256/`WINDOW_SIZE`) windows per exponent
+const CHUNK_SIZE : usize = 25_000_000; // Maximum number of base elements we can pass to a GPU
 // So each group will have `NUM_WINDOWS` threads and as there are `NUM_GROUPS` groups, there will
 // be `NUM_GROUPS` * `NUM_WINDOWS` threads in total.
 
@@ -138,12 +139,11 @@ pub struct MultiexpKernel<E>(Vec<SingleMultiexpKernel<E>>) where E: Engine;
 
 impl<E> MultiexpKernel<E> where E: Engine {
 
-    pub fn create(n: u32) -> GPUResult<MultiexpKernel<E>> {
+    pub fn create() -> GPUResult<MultiexpKernel<E>> {
         let devices = utils::get_devices(utils::GPU_NVIDIA_PLATFORM_NAME)?;
         if devices.len() == 0 { return Err(GPUError {msg: "No working GPUs found!".to_string()} ); }
-        let chunk_size = ((n as f64) / (devices.len() as f64)).ceil() as u32;
         let mut kernels = Vec::new();
-        for dev in devices.into_iter().map(|device| { SingleMultiexpKernel::<E>::create(device, chunk_size) }) {
+        for dev in devices.into_iter().map(|device| { SingleMultiexpKernel::<E>::create(device, CHUNK_SIZE as u32) }) {
             kernels.push(dev?);
         }
         info!("Multiexp: {} working device(s) selected.", kernels.len());
@@ -170,7 +170,7 @@ impl<E> MultiexpKernel<E> where E: Engine {
         // Bases are skipped by `self.1` elements, when converted from (Arc<Vec<G>>, usize) to Source
         // https://github.com/zkcrypto/bellman/blob/10c5010fd9c2ca69442dc9775ea271e286e776d8/src/multiexp.rs#L38
         let bases = &bases[skip..];
-        
+
         let exps = &exps[..n];
 
         match thread::scope(|s| {
@@ -178,11 +178,16 @@ impl<E> MultiexpKernel<E> where E: Engine {
             let mut threads = Vec::new();
             for ((bases, exps), kern) in bases.chunks(chunk_size).zip(exps.chunks(chunk_size)).zip(self.0.iter_mut()) {
                 threads.push(s.spawn(move |s| {
-                    kern.multiexp(bases, exps, bases.len())
+                    let mut acc = <G as CurveAffine>::Projective::zero();
+                    for (bases, exps) in bases.chunks(CHUNK_SIZE).zip(exps.chunks(CHUNK_SIZE)) {
+                        let result = kern.multiexp(bases, exps, bases.len()).unwrap();
+                        acc.add_assign(&result);
+                    }
+                    acc
                 }));
             }
             for t in threads {
-                let result = t.join().unwrap().unwrap();
+                let result = t.join().unwrap();
                 acc.add_assign(&result);
             }
             acc

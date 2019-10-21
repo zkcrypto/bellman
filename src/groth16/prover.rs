@@ -212,11 +212,7 @@ where
 
     let mut log_d = 0u32; while (1 << log_d) < prover.a.len() { log_d += 1; }
 
-    let mut multiexp_kern = gpu_multiexp_supported::<E>(log_d).ok();
-    if multiexp_kern.is_some() { info!("GPU Multiexp is supported!"); }
-    else { info!("GPU Multiexp is NOT supported!"); }
-
-    let h = {
+    let a = {
         let mut fft_kern = gpu_fft_supported::<E>(log_d).ok();
         if fft_kern.is_some() { info!("GPU FFT is supported!"); }
         else { info!("GPU FFT is NOT supported!"); }
@@ -242,10 +238,14 @@ where
         let a_len = a.len() - 1;
         a.truncate(a_len);
         // TODO: parallelize if it's even helpful
-        let a = Arc::new(a.into_iter().map(|s| s.0.into_repr()).collect::<Vec<_>>());
-
-        multiexp(&worker, params.get_h(a.len())?, FullDensity, a, &mut multiexp_kern)
+        Arc::new(a.into_iter().map(|s| s.0.into_repr()).collect::<Vec<_>>())
     };
+
+    let mut multiexp_kern = gpu_multiexp_supported::<E>(log_d).ok();
+    if multiexp_kern.is_some() { info!("GPU Multiexp is supported!"); }
+    else { info!("GPU Multiexp is NOT supported!"); }
+
+    let h = multiexp(&worker, params.get_h(a.len())?, FullDensity, a, &mut multiexp_kern);
 
     // TODO: parallelize if it's even helpful
     let input_assignment = Arc::new(

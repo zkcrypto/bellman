@@ -351,7 +351,7 @@ pub fn gpu_multiexp_supported<E>(log_d: u32) -> gpu::GPUResult<gpu::MultiexpKern
     use rand::Rand;
     let pool = Worker::new();
     let rng = &mut rand::thread_rng();
-    let mut kern = Some(gpu::MultiexpKernel::<E>::create(TEST_SIZE)?);
+    let mut kern = Some(gpu::MultiexpKernel::<E>::create()?);
     let bases_g1 = Arc::new((0..TEST_SIZE).map(|_| E::G1::rand(rng).into_affine()).collect::<Vec<_>>());
     let bases_g2 = Arc::new((0..TEST_SIZE).map(|_| E::G2::rand(rng).into_affine()).collect::<Vec<_>>());
     let exps = Arc::new((0..TEST_SIZE).map(|_| E::Fr::rand(rng).into_repr()).collect::<Vec<_>>());
@@ -359,7 +359,7 @@ pub fn gpu_multiexp_supported<E>(log_d: u32) -> gpu::GPUResult<gpu::MultiexpKern
     let cpu_g1 = multiexp(&pool, (bases_g1.clone(), 0), FullDensity, exps.clone(), &mut None).wait().unwrap();
     let gpu_g2 = multiexp(&pool, (bases_g2.clone(), 0), FullDensity, exps.clone(), &mut kern).wait().unwrap();
     let cpu_g2 = multiexp(&pool, (bases_g2.clone(), 0), FullDensity, exps.clone(), &mut None).wait().unwrap();
-    if cpu_g1 == gpu_g1 && cpu_g2 == gpu_g2 { Ok(gpu::MultiexpKernel::<E>::create(1 << log_d)?) }
+    if cpu_g1 == gpu_g1 && cpu_g2 == gpu_g2 { Ok(kern.unwrap()) }
     else { Err(gpu::GPUError {msg: "GPU Multiexp not supported!".to_string()} ) }
 }
 
@@ -372,7 +372,7 @@ pub fn gpu_multiexp_consistency() {
 
     const MAX_LOG_D: usize = 20;
     const START_LOG_D: usize = 10;
-    let mut kern = gpu::MultiexpKernel::<Bls12>::create(1 << MAX_LOG_D).ok();
+    let mut kern = gpu::MultiexpKernel::<Bls12>::create().ok();
     if kern.is_none() { panic!("Cannot initialize kernel!"); }
     let pool = Worker::new();
 
