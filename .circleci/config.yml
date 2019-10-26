@@ -28,6 +28,10 @@ commands:
           name: Test (<< parameters.target >>)
           command: TARGET=<< parameters.target >> cargo test
           no_output_timeout: 15m
+      - run:
+          name: Test (GPU) (<< parameters.target >>)
+          command: TARGET=<< parameters.target >> cargo test --features gpu
+          no_output_timeout: 15m          
 
 jobs:
   cargo_fetch:
