@@ -13,6 +13,9 @@ extern crate log;
 extern crate itertools;
 #[cfg(feature = "gpu")]
 extern crate ocl;
+#[cfg(feature = "gpu")]
+#[macro_use]
+extern crate lazy_static;
 
 mod gpu;
 pub mod domain;
