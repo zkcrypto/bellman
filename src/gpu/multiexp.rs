@@ -140,10 +140,10 @@ pub struct MultiexpKernel<E>(Vec<SingleMultiexpKernel<E>>) where E: Engine;
 impl<E> MultiexpKernel<E> where E: Engine {
 
     pub fn create() -> GPUResult<MultiexpKernel<E>> {
-        let devices = utils::get_devices(utils::GPU_NVIDIA_PLATFORM_NAME)?;
+        let devices = &utils::GPU_NVIDIA_DEVICES;
         if devices.len() == 0 { return Err(GPUError {msg: "No working GPUs found!".to_string()} ); }
         let mut kernels = Vec::new();
-        for dev in devices.into_iter().map(|device| { SingleMultiexpKernel::<E>::create(device, CHUNK_SIZE as u32) }) {
+        for dev in devices.iter().map(|device| { SingleMultiexpKernel::<E>::create(*device, CHUNK_SIZE as u32) }) {
             kernels.push(dev?);
         }
         info!("Multiexp: {} working device(s) selected.", kernels.len());
