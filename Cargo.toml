@@ -22,7 +22,9 @@ paired = "0.15"
 log = "0.4.8"
 ocl = { version = "0.19", optional = true }
 itertools = { version = "0.8.0", optional = true }
+lazy_static = { version = "1.4.0", optional = true }
 
 [features]
 default = []
-gpu = ["ocl", "itertools"]
+gpu = ["ocl", "itertools", "lazy_static"]
+gpu-test = ["gpu"]

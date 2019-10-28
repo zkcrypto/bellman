@@ -559,7 +559,7 @@ pub fn gpu_fft_supported<E>(log_d: u32) -> gpu::GPUResult<gpu::FFTKernel<E::Fr>>
     else { Err(gpu::GPUError {msg: "GPU FFT not supported!".to_string()} ) }
 }
 
-#[cfg(feature = "gpu")]
+#[cfg(feature = "gpu-test")]
 #[test]
 pub fn gpu_fft_consistency() {
     use std::time::Instant;

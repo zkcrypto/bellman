@@ -16,7 +16,7 @@ use crossbeam::thread;
 const NUM_GROUPS : usize = 334; // Partition the bases into `NUM_GROUPS` groups
 const WINDOW_SIZE : usize = 10; // Exponents are 255bit long, divide exponents into `WINDOW_SIZE` bit windows
 const NUM_WINDOWS : usize = 26; // Then we will have Ceil(256/`WINDOW_SIZE`) windows per exponent
-const CHUNK_SIZE : usize = 25_000_000; // Maximum number of base elements we can pass to a GPU
+const CHUNK_SIZE : usize = 15_000_000; // Maximum number of base elements we can pass to a GPU
 // So each group will have `NUM_WINDOWS` threads and as there are `NUM_GROUPS` groups, there will
 // be `NUM_GROUPS` * `NUM_WINDOWS` threads in total.
 
@@ -140,10 +140,10 @@ pub struct MultiexpKernel<E>(Vec<SingleMultiexpKernel<E>>) where E: Engine;
 impl<E> MultiexpKernel<E> where E: Engine {
 
     pub fn create() -> GPUResult<MultiexpKernel<E>> {
-        let devices = utils::get_devices(utils::GPU_NVIDIA_PLATFORM_NAME)?;
+        let devices = &utils::GPU_NVIDIA_DEVICES;
         if devices.len() == 0 { return Err(GPUError {msg: "No working GPUs found!".to_string()} ); }
         let mut kernels = Vec::new();
-        for dev in devices.into_iter().map(|device| { SingleMultiexpKernel::<E>::create(device, CHUNK_SIZE as u32) }) {
+        for dev in devices.iter().map(|device| { SingleMultiexpKernel::<E>::create(*device, CHUNK_SIZE as u32) }) {
             kernels.push(dev?);
         }
         info!("Multiexp: {} working device(s) selected.", kernels.len());

@@ -25,7 +25,7 @@ impl<F> FFTKernel<F> where F: PrimeField {
 
     pub fn create(n: u32) -> GPUResult<FFTKernel::<F>> {
         let src = sources::fft_kernel::<F>();
-        let devices = utils::get_devices(utils::GPU_NVIDIA_PLATFORM_NAME)?;
+        let devices = &utils::GPU_NVIDIA_DEVICES;
         if devices.len() == 0 { return Err(GPUError {msg: "No working GPUs found!".to_string()} ); }
         let device = devices[0]; // Select the first device for FFT
         let pq = ProQue::builder().device(device).src(src).dims(n).build()?;
