@@ -20,7 +20,7 @@ byteorder = "1"
 ff = "0.4.0"
 paired = "0.15"
 log = "0.4.8"
-ocl = { git = "https://github.com/filecoin-project/ocl", branch = "master", optional = true }
+ocl = { version = "0.19.4", package = "fil-ocl", optional = true }
 itertools = { version = "0.8.0", optional = true }
 lazy_static = { version = "1.4.0", optional = true }
 
