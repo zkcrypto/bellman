@@ -33,3 +33,13 @@ impl From<ocl::Error> for GPUError {
         GPUError {msg: error.to_string() }
     }
 }
+
+#[cfg(feature = "gpu")]
+impl From<std::boxed::Box<dyn std::any::Any + std::marker::Send>> for GPUError {
+    fn from(e: std::boxed::Box<dyn std::any::Any + std::marker::Send>) -> Self {
+        match &e.downcast_ref::<Self>() {
+            &Some(err) => err.clone(),
+            &None => GPUError {msg: "An unknown GPU error happened!".to_string()}
+        }
+    }
+}

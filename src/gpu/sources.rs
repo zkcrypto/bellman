@@ -81,16 +81,11 @@ fn multiexp(point: &str, exp: &str) -> String {
         .replace("EXPONENT", exp);;
 }
 
-pub fn fft_kernel<F>() -> String where F: PrimeField {
-    return String::from(format!("{}\n{}\n{}",
-        DEFS_SRC,
-        field::<F>("Fr"), fft("Fr")));
-}
-
 // WARNING: This function works only with Short Weierstrass Jacobian curves with Fq2 extension field.
-pub fn multiexp_kernel<E>() -> String where E: Engine {
-    return String::from(format!("{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
+pub fn kernel<E>() -> String where E: Engine {
+    return String::from(format!("{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
         DEFS_SRC,
+        field::<E::Fr>("Fr"), fft("Fr"),
         exponent::<E::Fr>("Exp"),
         field::<E::Fq>("Fq"), ec("Fq", "G1"), multiexp("G1", "Exp"),
         field2("Fq2", "Fq"), ec("Fq2", "G2"), multiexp("G2", "Exp")));

@@ -346,12 +346,13 @@ fn test_with_bls12() {
     assert_eq!(naive, fast);
 }
 
-pub fn gpu_multiexp_supported<E>(log_d: u32) -> gpu::GPUResult<gpu::MultiexpKernel<E>> where E: Engine {
+pub fn gpu_multiexp_supported<E>() -> gpu::GPUResult<gpu::MultiexpKernel<E>> where E: Engine {
     const TEST_SIZE : u32 = 1024;
+    const CHUNK_SIZE: usize = 8388608;
     use rand::Rand;
     let pool = Worker::new();
     let rng = &mut rand::thread_rng();
-    let mut kern = Some(gpu::MultiexpKernel::<E>::create()?);
+    let mut kern = Some(gpu::MultiexpKernel::<E>::create(CHUNK_SIZE)?);
     let bases_g1 = Arc::new((0..TEST_SIZE).map(|_| E::G1::rand(rng).into_affine()).collect::<Vec<_>>());
     let bases_g2 = Arc::new((0..TEST_SIZE).map(|_| E::G2::rand(rng).into_affine()).collect::<Vec<_>>());
     let exps = Arc::new((0..TEST_SIZE).map(|_| E::Fr::rand(rng).into_repr()).collect::<Vec<_>>());
@@ -370,9 +371,10 @@ pub fn gpu_multiexp_consistency() {
     use paired::bls12_381::Bls12;
     use rand::{self, Rand};
 
+    const CHUNK_SIZE: usize = 1048576;
     const MAX_LOG_D: usize = 20;
     const START_LOG_D: usize = 10;
-    let mut kern = gpu::MultiexpKernel::<Bls12>::create().ok();
+    let mut kern = gpu::MultiexpKernel::<Bls12>::create(CHUNK_SIZE).ok();
     if kern.is_none() { panic!("Cannot initialize kernel!"); }
     let pool = Worker::new();
 

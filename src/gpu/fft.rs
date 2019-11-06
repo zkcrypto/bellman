@@ -1,11 +1,12 @@
 use log::info;
 use ocl::{ProQue, Buffer, MemFlags};
 use std::cmp;
-use ff::PrimeField;
+use ff::Field;
+use paired::Engine;
 use super::error::{GPUResult, GPUError};
-use super::sources;
 use super::structs;
-use super::utils;
+use super::sources;
+use super::GPU_NVIDIA_DEVICES;
 
 // NOTE: Please read `structs.rs` for an explanation for unsafe transmutes of this code!
 
@@ -13,22 +14,23 @@ const LOG2_MAX_ELEMENTS : usize = 32; // At most 2^32 elements is supported.
 const MAX_RADIX_DEGREE : u32 = 8; // Radix256
 const MAX_LOCAL_WORK_SIZE_DEGREE : u32 = 7; // 128
 
-pub struct FFTKernel<F> where F: PrimeField {
+pub struct FFTKernel<E> where E: Engine {
     proque: ProQue,
-    fft_src_buffer: Buffer<structs::PrimeFieldStruct<F>>,
-    fft_dst_buffer: Buffer<structs::PrimeFieldStruct<F>>,
-    fft_pq_buffer: Buffer<structs::PrimeFieldStruct<F>>,
-    fft_omg_buffer: Buffer<structs::PrimeFieldStruct<F>>
+    fft_src_buffer: Buffer<structs::PrimeFieldStruct<E::Fr>>,
+    fft_dst_buffer: Buffer<structs::PrimeFieldStruct<E::Fr>>,
+    fft_pq_buffer: Buffer<structs::PrimeFieldStruct<E::Fr>>,
+    fft_omg_buffer: Buffer<structs::PrimeFieldStruct<E::Fr>>
 }
 
-impl<F> FFTKernel<F> where F: PrimeField {
+impl<E> FFTKernel<E> where E: Engine {
 
-    pub fn create(n: u32) -> GPUResult<FFTKernel::<F>> {
-        let src = sources::fft_kernel::<F>();
-        let devices = &utils::GPU_NVIDIA_DEVICES;
-        if devices.len() == 0 { return Err(GPUError {msg: "No working GPUs found!".to_string()} ); }
+    pub fn create(n: u32) -> GPUResult<FFTKernel::<E>> {
+        let src = sources::kernel::<E>();
+        let devices = &GPU_NVIDIA_DEVICES;
+        if devices.is_empty() { return Err(GPUError {msg: "No working GPUs found!".to_string()} ); }
         let device = devices[0]; // Select the first device for FFT
         let pq = ProQue::builder().device(device).src(src).dims(n).build()?;
+
         let srcbuff = Buffer::builder().queue(pq.queue().clone())
             .flags(MemFlags::new().read_write()).len(n)
             .build()?;
@@ -67,7 +69,7 @@ impl<F> FFTKernel<F> where F: PrimeField {
             .arg(if in_src { &self.fft_dst_buffer } else { &self.fft_src_buffer })
             .arg(&self.fft_pq_buffer)
             .arg(&self.fft_omg_buffer)
-            .arg_local::<structs::PrimeFieldStruct::<F>>(1 << deg)
+            .arg_local::<structs::PrimeFieldStruct::<E::Fr>>(1 << deg)
             .arg(n)
             .arg(lgp)
             .arg(deg)
@@ -78,14 +80,14 @@ impl<F> FFTKernel<F> where F: PrimeField {
     }
 
     /// Share some precalculated values between threads to boost the performance
-    fn setup_pq(&mut self, omega: &F, n: usize, max_deg: u32) -> ocl::Result<()>  {
+    fn setup_pq(&mut self, omega: &E::Fr, n: usize, max_deg: u32) -> ocl::Result<()>  {
 
         // Precalculate:
         // [omega^(0/(2^(deg-1))), omega^(1/(2^(deg-1))), ..., omega^((2^(deg-1)-1)/(2^(deg-1)))]
-        let mut tpq = vec![structs::PrimeFieldStruct::<F>::default(); 1 << max_deg >> 1];
-        let pq = unsafe { std::mem::transmute::<&mut [structs::PrimeFieldStruct::<F>], &mut [F]>(&mut tpq) };
+        let mut tpq = vec![structs::PrimeFieldStruct::<E::Fr>::default(); 1 << max_deg >> 1];
+        let pq = unsafe { std::mem::transmute::<&mut [structs::PrimeFieldStruct::<E::Fr>], &mut [E::Fr]>(&mut tpq) };
         let tw = omega.pow([(n >> max_deg) as u64]);
-        pq[0] = F::one();
+        pq[0] = E::Fr::one();
         if max_deg > 1 {
             pq[1] = tw;
             for i in 2..(1 << max_deg >> 1) {
@@ -96,8 +98,8 @@ impl<F> FFTKernel<F> where F: PrimeField {
         self.fft_pq_buffer.write(&tpq).enq()?;
 
         // Precalculate [omega, omega^2, omega^4, omega^8, ..., omega^(2^31)]
-        let mut tom = vec![structs::PrimeFieldStruct::<F>::default(); 32];
-        let om = unsafe { std::mem::transmute::<&mut [structs::PrimeFieldStruct::<F>], &mut [F]>(&mut tom) };
+        let mut tom = vec![structs::PrimeFieldStruct::<E::Fr>::default(); 32];
+        let om = unsafe { std::mem::transmute::<&mut [structs::PrimeFieldStruct::<E::Fr>], &mut [E::Fr]>(&mut tom) };
         om[0] = *omega;
         for i in 1..LOG2_MAX_ELEMENTS { om[i] = om[i-1].pow([2u64]); }
         self.fft_omg_buffer.write(&tom).enq()?;
@@ -108,10 +110,10 @@ impl<F> FFTKernel<F> where F: PrimeField {
     /// Performs FFT on `a`
     /// * `omega` - Special value `omega` is used for FFT over finite-fields
     /// * `lgn` - Specifies log2 of number of elements
-    pub fn radix_fft(&mut self, a: &mut [F], omega: &F, lgn: u32) -> GPUResult<()> {
+    pub fn radix_fft(&mut self, a: &mut [E::Fr], omega: &E::Fr, lgn: u32) -> GPUResult<()> {
         let n = 1 << lgn;
 
-        let ta = unsafe { std::mem::transmute::<&mut [F], &mut [structs::PrimeFieldStruct::<F>]>(a) };
+        let ta = unsafe { std::mem::transmute::<&mut [E::Fr], &mut [structs::PrimeFieldStruct::<E::Fr>]>(a) };
 
         let max_deg = cmp::min(MAX_RADIX_DEGREE, lgn);
         self.setup_pq(omega, n, max_deg)?;
@@ -134,10 +136,10 @@ impl<F> FFTKernel<F> where F: PrimeField {
 
     /// Multiplies all of the elements in `a` by `field`
     /// * `lgn` - Specifies log2 of number of elements
-    pub fn mul_by_field(&mut self, a: &mut [F], field: &F, lgn: u32) -> GPUResult<()> {
+    pub fn mul_by_field(&mut self, a: &mut [E::Fr], field: &E::Fr, lgn: u32) -> GPUResult<()> {
         let n = 1u32 << lgn;
-        let ta = unsafe { std::mem::transmute::<&mut [F], &mut [structs::PrimeFieldStruct::<F>]>(a) };
-        let field = structs::PrimeFieldStruct::<F>(*field);
+        let ta = unsafe { std::mem::transmute::<&mut [E::Fr], &mut [structs::PrimeFieldStruct::<E::Fr>]>(a) };
+        let field = structs::PrimeFieldStruct::<E::Fr>(*field);
         self.fft_src_buffer.write(&*ta).enq()?;
         let kernel = self.proque.kernel_builder("mul_by_field")
             .global_work_size([n])

@@ -77,11 +77,11 @@ impl<E: Engine, G: Group<E>> EvaluationDomain<E, G> {
         })
     }
 
-    pub fn fft(&mut self, worker: &Worker, kern: &mut Option<gpu::FFTKernel<E::Fr>>) {
+    pub fn fft(&mut self, worker: &Worker, kern: &mut Option<gpu::FFTKernel<E>>) {
         best_fft(kern, &mut self.coeffs, worker, &self.omega, self.exp);
     }
 
-    pub fn ifft(&mut self, worker: &Worker, kern: &mut Option<gpu::FFTKernel<E::Fr>>) {
+    pub fn ifft(&mut self, worker: &Worker, kern: &mut Option<gpu::FFTKernel<E>>) {
         best_fft(kern, &mut self.coeffs, worker, &self.omegainv, self.exp);
 
         if let Some(ref mut k) = kern {
@@ -119,12 +119,12 @@ impl<E: Engine, G: Group<E>> EvaluationDomain<E, G> {
             .unwrap();
     }
 
-    pub fn coset_fft(&mut self, worker: &Worker, kern: &mut Option<gpu::FFTKernel<E::Fr>>) {
+    pub fn coset_fft(&mut self, worker: &Worker, kern: &mut Option<gpu::FFTKernel<E>>) {
         self.distribute_powers(worker, E::Fr::multiplicative_generator());
         self.fft(worker, kern);
     }
 
-    pub fn icoset_fft(&mut self, worker: &Worker, kern: &mut Option<gpu::FFTKernel<E::Fr>>) {
+    pub fn icoset_fft(&mut self, worker: &Worker, kern: &mut Option<gpu::FFTKernel<E>>) {
         let geninv = self.geninv;
 
         self.ifft(worker, kern);
@@ -143,7 +143,7 @@ impl<E: Engine, G: Group<E>> EvaluationDomain<E, G> {
     /// The target polynomial is the zero polynomial in our
     /// evaluation domain, so we must perform division over
     /// a coset.
-    pub fn divide_by_z_on_coset(&mut self, worker: &Worker, kern: &mut Option<gpu::FFTKernel<E::Fr>>) {
+    pub fn divide_by_z_on_coset(&mut self, worker: &Worker, kern: &mut Option<gpu::FFTKernel<E>>) {
         let i = self
             .z(&E::Fr::multiplicative_generator())
             .inverse()
@@ -278,7 +278,7 @@ impl<E: Engine> Group<E> for Scalar<E> {
     }
 }
 
-fn best_fft<E: Engine, T: Group<E>>(kern: &mut Option<gpu::FFTKernel<E::Fr>>, a: &mut [T], worker: &Worker, omega: &E::Fr, log_n: u32)
+fn best_fft<E: Engine, T: Group<E>>(kern: &mut Option<gpu::FFTKernel<E>>, a: &mut [T], worker: &Worker, omega: &E::Fr, log_n: u32)
 {
     if let Some(ref mut k) = kern {
         gpu_fft(k, a, omega, log_n).expect("GPU FFT failed!");
@@ -292,7 +292,7 @@ fn best_fft<E: Engine, T: Group<E>>(kern: &mut Option<gpu::FFTKernel<E::Fr>>, a:
     }
 }
 
-pub fn gpu_fft<E: Engine, T: Group<E>>(kern: &mut gpu::FFTKernel<E::Fr>, a: &mut [T], omega: &E::Fr, log_n: u32) -> gpu::GPUResult<()>
+pub fn gpu_fft<E: Engine, T: Group<E>>(kern: &mut gpu::FFTKernel<E>, a: &mut [T], omega: &E::Fr, log_n: u32) -> gpu::GPUResult<()>
 {
     // EvaluationDomain module is supposed to work only with E::Fr elements, and not CurveProjective
     // points. The Bellman authors have implemented an unnecessarry abstraction called Group<E>
@@ -306,7 +306,7 @@ pub fn gpu_fft<E: Engine, T: Group<E>>(kern: &mut gpu::FFTKernel<E::Fr>, a: &mut
     Ok(())
 }
 
-pub fn gpu_mul_by_field<E: Engine, T: Group<E>>(kern: &mut gpu::FFTKernel<E::Fr>, a: &mut [T], minv: &E::Fr, log_n: u32) -> gpu::GPUResult<()>
+pub fn gpu_mul_by_field<E: Engine, T: Group<E>>(kern: &mut gpu::FFTKernel<E>, a: &mut [T], minv: &E::Fr, log_n: u32) -> gpu::GPUResult<()>
 {
     // The reason of unsafety is same as above.
     let a = unsafe { std::mem::transmute::<&mut [T], &mut [E::Fr]>(a) };
@@ -544,18 +544,18 @@ fn parallel_fft_consistency() {
     test_consistency::<Bls12, _>(rng);
 }
 
-pub fn gpu_fft_supported<E>(log_d: u32) -> gpu::GPUResult<gpu::FFTKernel<E::Fr>> where E: Engine {
+pub fn gpu_fft_supported<E>(log_d: u32) -> gpu::GPUResult<gpu::FFTKernel<E>> where E: Engine {
     let log_test_size : u32 = std::cmp::min(E::Fr::S - 1, 10);
     let test_size : u32 = 1 << log_test_size;
     use rand::Rand;
     let rng = &mut rand::thread_rng();
-    let mut kern = gpu::FFTKernel::create(test_size)?;
+    let mut kern = gpu::FFTKernel::create(1 << log_d)?;
     let elems = (0..test_size).map(|_| Scalar::<E>(E::Fr::rand(rng))).collect::<Vec<_>>();
     let mut v1 = EvaluationDomain::from_coeffs(elems.clone()).unwrap();
     let mut v2 = EvaluationDomain::from_coeffs(elems.clone()).unwrap();
     gpu_fft(&mut kern, &mut v1.coeffs, &v1.omega, log_test_size)?;
     serial_fft(&mut v2.coeffs, &v2.omega, log_test_size);
-    if v1.coeffs == v2.coeffs { Ok(gpu::FFTKernel::create(1 << log_d)?) }
+    if v1.coeffs == v2.coeffs { Ok(kern) }
     else { Err(gpu::GPUError {msg: "GPU FFT not supported!".to_string()} ) }
 }
 

@@ -241,7 +241,7 @@ where
         Arc::new(a.into_iter().map(|s| s.0.into_repr()).collect::<Vec<_>>())
     };
 
-    let mut multiexp_kern = gpu_multiexp_supported::<E>(log_d).ok();
+    let mut multiexp_kern = gpu_multiexp_supported::<E>().ok();
     if multiexp_kern.is_some() { info!("GPU Multiexp is supported!"); }
     else { info!("GPU Multiexp is NOT supported!"); }
 

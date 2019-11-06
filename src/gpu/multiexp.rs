@@ -5,9 +5,9 @@ use std::sync::Arc;
 use ff::{PrimeField, ScalarEngine};
 use paired::{CurveAffine, CurveProjective};
 use super::error::{GPUResult, GPUError};
-use super::sources;
 use super::structs;
-use super::utils;
+use super::sources;
+use super::GPU_NVIDIA_DEVICES;
 use crossbeam::thread;
 
 // NOTE: Please read `structs.rs` for an explanation for unsafe transmutes of this code!
@@ -16,7 +16,6 @@ use crossbeam::thread;
 const NUM_GROUPS : usize = 334; // Partition the bases into `NUM_GROUPS` groups
 const WINDOW_SIZE : usize = 10; // Exponents are 255bit long, divide exponents into `WINDOW_SIZE` bit windows
 const NUM_WINDOWS : usize = 26; // Then we will have Ceil(256/`WINDOW_SIZE`) windows per exponent
-const CHUNK_SIZE : usize = 15_000_000; // Maximum number of base elements we can pass to a GPU
 // So each group will have `NUM_WINDOWS` threads and as there are `NUM_GROUPS` groups, there will
 // be `NUM_GROUPS` * `NUM_WINDOWS` threads in total.
 
@@ -41,7 +40,7 @@ pub struct SingleMultiexpKernel<E> where E: Engine {
 impl<E> SingleMultiexpKernel<E> where E: Engine {
 
     pub fn create(d: Device, n: u32) -> GPUResult<SingleMultiexpKernel<E>> {
-        let src = sources::multiexp_kernel::<E>();
+        let src = sources::kernel::<E>();
         let pq = ProQue::builder().device(d).src(src).dims(n).build()?;
 
         let g1basebuff = Buffer::builder().queue(pq.queue().clone()).flags(MemFlags::new().read_write()).len(n).build()?;
@@ -135,22 +134,23 @@ impl<E> SingleMultiexpKernel<E> where E: Engine {
 }
 
 // A struct that containts several multiexp kernels for different devices
-pub struct MultiexpKernel<E>(Vec<SingleMultiexpKernel<E>>) where E: Engine;
+pub struct MultiexpKernel<E> where E: Engine {
+    kernels: Vec<SingleMultiexpKernel<E>>,
+    chunk_size: usize
+}
 
 impl<E> MultiexpKernel<E> where E: Engine {
 
-    pub fn create() -> GPUResult<MultiexpKernel<E>> {
-        let devices = &utils::GPU_NVIDIA_DEVICES;
-        if devices.len() == 0 { return Err(GPUError {msg: "No working GPUs found!".to_string()} ); }
-        let mut kernels = Vec::new();
-        for dev in devices.iter().map(|device| { SingleMultiexpKernel::<E>::create(*device, CHUNK_SIZE as u32) }) {
-            kernels.push(dev?);
-        }
+    pub fn create(chunk_size: usize) -> GPUResult<MultiexpKernel<E>> {
+        let kernels : Vec<_> = GPU_NVIDIA_DEVICES.iter().map(|d| {
+            SingleMultiexpKernel::<E>::create(*d, chunk_size as u32)
+        }).filter(|res| res.is_ok()).map(|res| res.unwrap()).collect();
+        if kernels.is_empty() { return Err(GPUError {msg: "No working GPUs found!".to_string()} ); }
         info!("Multiexp: {} working device(s) selected.", kernels.len());
         for (i, k) in kernels.iter().enumerate() {
             info!("Multiexp: Device {}: {}", i, k.proque.device().name()?);
         }
-        return Ok(MultiexpKernel::<E>(kernels));
+        return Ok(MultiexpKernel::<E>{kernels, chunk_size});
     }
 
     pub fn multiexp<G>(&mut self,
@@ -164,41 +164,36 @@ impl<E> MultiexpKernel<E> where E: Engine {
             return Ok(<G as CurveAffine>::Projective::zero());
         }
 
-        let num_devices = self.0.len();
+        let num_devices = self.kernels.len();
         let chunk_size = ((n as f64) / (num_devices as f64)).ceil() as usize;
-
+        let device_chunk_size = self.chunk_size;
         // Bases are skipped by `self.1` elements, when converted from (Arc<Vec<G>>, usize) to Source
         // https://github.com/zkcrypto/bellman/blob/10c5010fd9c2ca69442dc9775ea271e286e776d8/src/multiexp.rs#L38
         let bases = &bases[skip..];
 
         let exps = &exps[..n];
 
-        match thread::scope(|s| {
+        match thread::scope(|s| -> Result<<G as CurveAffine>::Projective, GPUError> {
             let mut acc = <G as CurveAffine>::Projective::zero();
             let mut threads = Vec::new();
-            for ((bases, exps), kern) in bases.chunks(chunk_size).zip(exps.chunks(chunk_size)).zip(self.0.iter_mut()) {
-                threads.push(s.spawn(move |s| {
+            for ((bases, exps), kern) in bases.chunks(chunk_size).zip(exps.chunks(chunk_size)).zip(self.kernels.iter_mut()) {
+                threads.push(s.spawn(move |_| -> Result<<G as CurveAffine>::Projective, GPUError> {
                     let mut acc = <G as CurveAffine>::Projective::zero();
-                    for (bases, exps) in bases.chunks(CHUNK_SIZE).zip(exps.chunks(CHUNK_SIZE)) {
-                        let result = kern.multiexp(bases, exps, bases.len()).unwrap();
+                    for (bases, exps) in bases.chunks(device_chunk_size).zip(exps.chunks(device_chunk_size)) {
+                        let result = kern.multiexp(bases, exps, bases.len())?;
                         acc.add_assign(&result);
                     }
-                    acc
+                    Ok(acc)
                 }));
             }
             for t in threads {
-                let result = t.join().unwrap();
-                acc.add_assign(&result);
+                let result = t.join()?;
+                acc.add_assign(&result?);
             }
-            acc
+            Ok(acc)
         }) {
-            Ok(acc) => { Ok(acc) },
-            Err(e) => {
-                match &e.downcast_ref::<GPUError>() {
-                    &Some(err) => Err(err.clone()),
-                    &None => Err(GPUError {msg: "Multigpu Multiexp failed!".to_string()})
-                }
-            }
+            Ok(res) => { res },
+            Err(e) => { Err(GPUError::from(e)) }
         }
     }
 }
