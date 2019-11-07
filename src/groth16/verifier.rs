@@ -1,10 +1,9 @@
-use paired::{CurveAffine, CurveProjective, Engine};
-
 use ff::PrimeField;
+use groupy::{CurveAffine, CurveProjective};
+use paired::{Engine, PairingCurveAffine};
 
 use super::{PreparedVerifyingKey, Proof, VerifyingKey};
-
-use SynthesisError;
+use crate::SynthesisError;
 
 pub fn prepare_verifying_key<E: Engine>(vk: &VerifyingKey<E>) -> PreparedVerifyingKey<E> {
     let mut gamma = vk.gamma_g2;
@@ -49,7 +48,7 @@ pub fn verify_proof<'a, E: Engine>(
             (&acc.into_affine().prepare(), &pvk.neg_gamma_g2),
             (&proof.c.prepare(), &pvk.neg_delta_g2),
         ]
-        .into_iter(),
+        .iter(),
     ))
     .unwrap()
         == pvk.alpha_g1_beta_g2)

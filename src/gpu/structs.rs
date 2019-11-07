@@ -1,6 +1,6 @@
-use paired::{CurveAffine, CurveProjective};
-use ff::{PrimeField};
+use ff::PrimeField;
 use ocl::traits::OclPrm;
+use paired::{CurveAffine, CurveProjective};
 
 // Everything that needs to be copied to GPU needs to implement OclPrm trait.
 // This module implements a generic OclPrm version of PrimeField, CurveAffine and CurveProjective
@@ -13,23 +13,38 @@ use ocl::traits::OclPrm;
 #[derive(PartialEq, Debug, Clone, Copy)]
 #[repr(transparent)]
 pub struct PrimeFieldStruct<T>(pub T);
-impl<T> Default for PrimeFieldStruct<T> where T: PrimeField {
-    fn default() -> Self { PrimeFieldStruct::<T>(T::zero()) }
+impl<T> Default for PrimeFieldStruct<T>
+where
+    T: PrimeField,
+{
+    fn default() -> Self {
+        PrimeFieldStruct::<T>(T::zero())
+    }
 }
-unsafe impl<T> OclPrm for PrimeFieldStruct<T> where T: PrimeField { }
+unsafe impl<T> OclPrm for PrimeFieldStruct<T> where T: PrimeField {}
 
 #[derive(PartialEq, Debug, Clone, Copy)]
 #[repr(transparent)]
 pub struct CurveAffineStruct<T>(pub T);
-impl<T> Default for CurveAffineStruct<T> where T: CurveAffine {
-    fn default() -> Self { CurveAffineStruct::<T>(T::zero()) }
+impl<T> Default for CurveAffineStruct<T>
+where
+    T: CurveAffine,
+{
+    fn default() -> Self {
+        CurveAffineStruct::<T>(T::zero())
+    }
 }
-unsafe impl<T> OclPrm for CurveAffineStruct<T> where T: CurveAffine { }
+unsafe impl<T> OclPrm for CurveAffineStruct<T> where T: CurveAffine {}
 
 #[derive(PartialEq, Debug, Clone, Copy)]
 #[repr(transparent)]
 pub struct CurveProjectiveStruct<T>(pub T);
-impl<T> Default for CurveProjectiveStruct<T> where T: CurveProjective {
-    fn default() -> Self { CurveProjectiveStruct::<T>(T::zero()) }
+impl<T> Default for CurveProjectiveStruct<T>
+where
+    T: CurveProjective,
+{
+    fn default() -> Self {
+        CurveProjectiveStruct::<T>(T::zero())
+    }
 }
-unsafe impl<T> OclPrm for CurveProjectiveStruct<T> where T: CurveProjective { }
+unsafe impl<T> OclPrm for CurveProjectiveStruct<T> where T: CurveProjective {}

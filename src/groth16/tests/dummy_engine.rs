@@ -2,9 +2,10 @@ use ff::{
     Field, LegendreSymbol, PrimeField, PrimeFieldDecodingError, PrimeFieldRepr, ScalarEngine,
     SqrtField,
 };
-use paired::{CurveAffine, CurveProjective, EncodedPoint, Engine, GroupDecodingError};
+use groupy::{CurveAffine, CurveProjective, EncodedPoint, GroupDecodingError};
+use paired::{Engine, PairingCurveAffine};
 
-use rand::{Rand, Rng};
+use rand_core::RngCore;
 use std::cmp::Ordering;
 use std::fmt;
 use std::num::Wrapping;
@@ -15,18 +16,16 @@ const MODULUS_R: Wrapping<u32> = Wrapping(64513);
 pub struct Fr(Wrapping<u32>);
 
 impl fmt::Display for Fr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         write!(f, "{}", (self.0).0)
     }
 }
 
-impl Rand for Fr {
-    fn rand<R: Rng>(rng: &mut R) -> Self {
-        Fr(Wrapping(rng.gen()) % MODULUS_R)
-    }
-}
-
 impl Field for Fr {
+    fn random<R: RngCore>(rng: &mut R) -> Self {
+        Fr(Wrapping(rng.next_u32()) % MODULUS_R)
+    }
+
     fn zero() -> Self {
         Fr(Wrapping(0))
     }
@@ -149,14 +148,8 @@ impl PartialOrd for FrRepr {
     }
 }
 
-impl Rand for FrRepr {
-    fn rand<R: Rng>(rng: &mut R) -> Self {
-        FrRepr([rng.gen()])
-    }
-}
-
 impl fmt::Display for FrRepr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         write!(f, "{}", (self.0)[0])
     }
 }
@@ -278,8 +271,8 @@ impl Engine for DummyEngine {
     where
         I: IntoIterator<
             Item = &'a (
-                &'a <Self::G1Affine as CurveAffine>::Prepared,
-                &'a <Self::G2Affine as CurveAffine>::Prepared,
+                &'a <Self::G1Affine as PairingCurveAffine>::Prepared,
+                &'a <Self::G2Affine as PairingCurveAffine>::Prepared,
             ),
         >,
     {
@@ -306,6 +299,10 @@ impl CurveProjective for Fr {
     type Scalar = Fr;
     type Engine = DummyEngine;
 
+    fn random<R: RngCore>(rng: &mut R) -> Self {
+        <Fr as Field>::random(rng)
+    }
+
     fn zero() -> Self {
         <Fr as Field>::zero()
     }
@@ -318,7 +315,7 @@ impl CurveProjective for Fr {
         <Fr as Field>::is_zero(self)
     }
 
-    fn batch_normalization<S: ::std::borrow::BorrowMut<Self>>(v: &mut [S]) {}
+    fn batch_normalization<S: ::std::borrow::BorrowMut<Self>>(_v: &mut [S]) {}
 
     fn is_normalized(&self) -> bool {
         true
@@ -358,7 +355,7 @@ impl CurveProjective for Fr {
         3
     }
 
-    fn hash(input: &[u8]) -> Self {
+    fn hash(_input: &[u8]) -> Self {
         unimplemented!()
     }
 }
@@ -367,7 +364,7 @@ impl CurveProjective for Fr {
 pub struct FakePoint;
 
 impl std::hash::Hash for FakePoint {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+    fn hash<H: std::hash::Hasher>(&self, _state: &mut H) {
         unimplemented!()
     }
 }
@@ -409,11 +406,8 @@ impl EncodedPoint for FakePoint {
 }
 
 impl CurveAffine for Fr {
-    type Pair = Fr;
-    type PairingResult = Fr;
     type Compressed = FakePoint;
     type Uncompressed = FakePoint;
-    type Prepared = Fr;
     type Projective = Fr;
     type Base = Fr;
     type Scalar = Fr;
@@ -444,15 +438,21 @@ impl CurveAffine for Fr {
         res
     }
 
+    fn into_projective(&self) -> Self::Projective {
+        *self
+    }
+}
+
+impl PairingCurveAffine for Fr {
+    type Prepared = Fr;
+    type Pair = Fr;
+    type PairingResult = Fr;
+
     fn prepare(&self) -> Self::Prepared {
         *self
     }
 
     fn pairing_with(&self, other: &Self::Pair) -> Self::PairingResult {
         self.mul(*other)
-    }
-
-    fn into_projective(&self) -> Self::Projective {
-        *self
     }
 }

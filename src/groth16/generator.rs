@@ -1,18 +1,18 @@
-use rand::Rng;
+use rand_core::RngCore;
 
 use std::sync::Arc;
 
-use paired::{CurveAffine, CurveProjective, Engine, Wnaf};
-
 use ff::{Field, PrimeField};
+use groupy::{CurveAffine, CurveProjective, Wnaf};
+use paired::Engine;
 
 use super::{Parameters, VerifyingKey};
 
-use {Circuit, ConstraintSystem, Index, LinearCombination, SynthesisError, Variable};
+use crate::{Circuit, ConstraintSystem, Index, LinearCombination, SynthesisError, Variable};
 
-use domain::{EvaluationDomain, Scalar};
+use crate::domain::{EvaluationDomain, Scalar};
 
-use multicore::Worker;
+use crate::multicore::Worker;
 
 /// Generates a random common reference string for
 /// a circuit.
@@ -23,15 +23,15 @@ pub fn generate_random_parameters<E, C, R>(
 where
     E: Engine,
     C: Circuit<E>,
-    R: Rng,
+    R: RngCore,
 {
-    let g1 = rng.gen();
-    let g2 = rng.gen();
-    let alpha = rng.gen();
-    let beta = rng.gen();
-    let gamma = rng.gen();
-    let delta = rng.gen();
-    let tau = rng.gen();
+    let g1 = E::G1::random(rng);
+    let g2 = E::G2::random(rng);
+    let alpha = E::Fr::random(rng);
+    let beta = E::Fr::random(rng);
+    let gamma = E::Fr::random(rng);
+    let delta = E::Fr::random(rng);
+    let tau = E::Fr::random(rng);
 
     generate_parameters::<E, C>(circuit, g1, g2, alpha, beta, gamma, delta, tau)
 }
@@ -225,20 +225,18 @@ where
         // Compute powers of tau
         {
             let powers_of_tau = powers_of_tau.as_mut();
-            worker
-                .scope(powers_of_tau.len(), |scope, chunk| {
-                    for (i, powers_of_tau) in powers_of_tau.chunks_mut(chunk).enumerate() {
-                        scope.spawn(move |_| {
-                            let mut current_tau_power = tau.pow(&[(i * chunk) as u64]);
+            worker.scope(powers_of_tau.len(), |scope, chunk| {
+                for (i, powers_of_tau) in powers_of_tau.chunks_mut(chunk).enumerate() {
+                    scope.spawn(move |_scope| {
+                        let mut current_tau_power = tau.pow(&[(i * chunk) as u64]);
 
-                            for p in powers_of_tau {
-                                p.0 = current_tau_power;
-                                current_tau_power.mul_assign(&tau);
-                            }
-                        });
-                    }
-                })
-                .unwrap();
+                        for p in powers_of_tau {
+                            p.0 = current_tau_power;
+                            current_tau_power.mul_assign(&tau);
+                        }
+                    });
+                }
+            });
         }
 
         // coeff = t(x) / delta
@@ -246,31 +244,29 @@ where
         coeff.mul_assign(&delta_inverse);
 
         // Compute the H query with multiple threads
-        worker
-            .scope(h.len(), |scope, chunk| {
-                for (h, p) in h
-                    .chunks_mut(chunk)
-                    .zip(powers_of_tau.as_ref().chunks(chunk))
-                {
-                    let mut g1_wnaf = g1_wnaf.shared();
+        worker.scope(h.len(), |scope, chunk| {
+            for (h, p) in h
+                .chunks_mut(chunk)
+                .zip(powers_of_tau.as_ref().chunks(chunk))
+            {
+                let mut g1_wnaf = g1_wnaf.shared();
 
-                    scope.spawn(move |_| {
-                        // Set values of the H query to g1^{(tau^i * t(tau)) / delta}
-                        for (h, p) in h.iter_mut().zip(p.iter()) {
-                            // Compute final exponent
-                            let mut exp = p.0;
-                            exp.mul_assign(&coeff);
+                scope.spawn(move |_scope| {
+                    // Set values of the H query to g1^{(tau^i * t(tau)) / delta}
+                    for (h, p) in h.iter_mut().zip(p.iter()) {
+                        // Compute final exponent
+                        let mut exp = p.0;
+                        exp.mul_assign(&coeff);
 
-                            // Exponentiate
-                            *h = g1_wnaf.scalar(exp.into_repr());
-                        }
+                        // Exponentiate
+                        *h = g1_wnaf.scalar(exp.into_repr());
+                    }
 
-                        // Batch normalize
-                        E::G1::batch_normalization(h);
-                    });
-                }
-            })
-            .unwrap();
+                    // Batch normalize
+                    E::G1::batch_normalization(h);
+                });
+            }
+        });
     }
 
     // Use inverse FFT to convert powers of tau to Lagrange coefficients
@@ -321,82 +317,80 @@ where
         assert_eq!(a.len(), ext.len());
 
         // Evaluate polynomials in multiple threads
-        worker
-            .scope(a.len(), |scope, chunk| {
-                for ((((((a, b_g1), b_g2), ext), at), bt), ct) in a
-                    .chunks_mut(chunk)
-                    .zip(b_g1.chunks_mut(chunk))
-                    .zip(b_g2.chunks_mut(chunk))
-                    .zip(ext.chunks_mut(chunk))
-                    .zip(at.chunks(chunk))
-                    .zip(bt.chunks(chunk))
-                    .zip(ct.chunks(chunk))
-                {
-                    let mut g1_wnaf = g1_wnaf.shared();
-                    let mut g2_wnaf = g2_wnaf.shared();
+        worker.scope(a.len(), |scope, chunk| {
+            for ((((((a, b_g1), b_g2), ext), at), bt), ct) in a
+                .chunks_mut(chunk)
+                .zip(b_g1.chunks_mut(chunk))
+                .zip(b_g2.chunks_mut(chunk))
+                .zip(ext.chunks_mut(chunk))
+                .zip(at.chunks(chunk))
+                .zip(bt.chunks(chunk))
+                .zip(ct.chunks(chunk))
+            {
+                let mut g1_wnaf = g1_wnaf.shared();
+                let mut g2_wnaf = g2_wnaf.shared();
 
-                    scope.spawn(move |_| {
-                        for ((((((a, b_g1), b_g2), ext), at), bt), ct) in a
-                            .iter_mut()
-                            .zip(b_g1.iter_mut())
-                            .zip(b_g2.iter_mut())
-                            .zip(ext.iter_mut())
-                            .zip(at.iter())
-                            .zip(bt.iter())
-                            .zip(ct.iter())
-                        {
-                            fn eval_at_tau<E: Engine>(
-                                powers_of_tau: &[Scalar<E>],
-                                p: &[(E::Fr, usize)],
-                            ) -> E::Fr {
-                                let mut acc = E::Fr::zero();
+                scope.spawn(move |_scope| {
+                    for ((((((a, b_g1), b_g2), ext), at), bt), ct) in a
+                        .iter_mut()
+                        .zip(b_g1.iter_mut())
+                        .zip(b_g2.iter_mut())
+                        .zip(ext.iter_mut())
+                        .zip(at.iter())
+                        .zip(bt.iter())
+                        .zip(ct.iter())
+                    {
+                        fn eval_at_tau<E: Engine>(
+                            powers_of_tau: &[Scalar<E>],
+                            p: &[(E::Fr, usize)],
+                        ) -> E::Fr {
+                            let mut acc = E::Fr::zero();
 
-                                for &(ref coeff, index) in p {
-                                    let mut n = powers_of_tau[index].0;
-                                    n.mul_assign(coeff);
-                                    acc.add_assign(&n);
-                                }
-
-                                acc
+                            for &(ref coeff, index) in p {
+                                let mut n = powers_of_tau[index].0;
+                                n.mul_assign(coeff);
+                                acc.add_assign(&n);
                             }
 
-                            // Evaluate QAP polynomials at tau
-                            let mut at = eval_at_tau(powers_of_tau, at);
-                            let mut bt = eval_at_tau(powers_of_tau, bt);
-                            let ct = eval_at_tau(powers_of_tau, ct);
-
-                            // Compute A query (in G1)
-                            if !at.is_zero() {
-                                *a = g1_wnaf.scalar(at.into_repr());
-                            }
-
-                            // Compute B query (in G1/G2)
-                            if !bt.is_zero() {
-                                let bt_repr = bt.into_repr();
-                                *b_g1 = g1_wnaf.scalar(bt_repr);
-                                *b_g2 = g2_wnaf.scalar(bt_repr);
-                            }
-
-                            at.mul_assign(&beta);
-                            bt.mul_assign(&alpha);
-
-                            let mut e = at;
-                            e.add_assign(&bt);
-                            e.add_assign(&ct);
-                            e.mul_assign(inv);
-
-                            *ext = g1_wnaf.scalar(e.into_repr());
+                            acc
                         }
 
-                        // Batch normalize
-                        E::G1::batch_normalization(a);
-                        E::G1::batch_normalization(b_g1);
-                        E::G2::batch_normalization(b_g2);
-                        E::G1::batch_normalization(ext);
-                    });
-                }
-            })
-            .unwrap();
+                        // Evaluate QAP polynomials at tau
+                        let mut at = eval_at_tau(powers_of_tau, at);
+                        let mut bt = eval_at_tau(powers_of_tau, bt);
+                        let ct = eval_at_tau(powers_of_tau, ct);
+
+                        // Compute A query (in G1)
+                        if !at.is_zero() {
+                            *a = g1_wnaf.scalar(at.into_repr());
+                        }
+
+                        // Compute B query (in G1/G2)
+                        if !bt.is_zero() {
+                            let bt_repr = bt.into_repr();
+                            *b_g1 = g1_wnaf.scalar(bt_repr);
+                            *b_g2 = g2_wnaf.scalar(bt_repr);
+                        }
+
+                        at.mul_assign(&beta);
+                        bt.mul_assign(&alpha);
+
+                        let mut e = at;
+                        e.add_assign(&bt);
+                        e.add_assign(&ct);
+                        e.mul_assign(inv);
+
+                        *ext = g1_wnaf.scalar(e.into_repr());
+                    }
+
+                    // Batch normalize
+                    E::G1::batch_normalization(a);
+                    E::G1::batch_normalization(b_g1);
+                    E::G2::batch_normalization(b_g2);
+                    E::G1::batch_normalization(ext);
+                });
+            }
+        });
     }
 
     // Evaluate for inputs.
@@ -417,7 +411,7 @@ where
         &worker,
     );
 
-    // Evaluate for auxillary variables.
+    // Evaluate for auxiliary variables.
     eval(
         &g1_wnaf,
         &g2_wnaf,
@@ -457,7 +451,7 @@ where
     };
 
     Ok(Parameters {
-        vk: vk,
+        vk,
         h: Arc::new(h.into_iter().map(|e| e.into_affine()).collect()),
         l: Arc::new(l.into_iter().map(|e| e.into_affine()).collect()),
 

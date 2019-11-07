@@ -1,9 +1,14 @@
-use paired::{CurveAffine, EncodedPoint, Engine};
+//! The [Groth16] proving system.
+//!
+//! [Groth16]: https://eprint.iacr.org/2016/260
 
-use SynthesisError;
+use groupy::{CurveAffine, EncodedPoint};
+use paired::{Engine, PairingCurveAffine};
+
+use crate::multiexp::SourceBuilder;
+use crate::SynthesisError;
 
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use multiexp::SourceBuilder;
 use std::io::{self, Read, Write};
 use std::sync::Arc;
 
@@ -89,7 +94,7 @@ impl<E: Engine> Proof<E> {
                 }
             })?;
 
-        Ok(Proof { a: a, b: b, c: c })
+        Ok(Proof { a, b, c })
     }
 }
 
@@ -207,13 +212,13 @@ impl<E: Engine> VerifyingKey<E> {
         }
 
         Ok(VerifyingKey {
-            alpha_g1: alpha_g1,
-            beta_g1: beta_g1,
-            beta_g2: beta_g2,
-            gamma_g2: gamma_g2,
-            delta_g1: delta_g1,
-            delta_g2: delta_g2,
-            ic: ic,
+            alpha_g1,
+            beta_g1,
+            beta_g2,
+            gamma_g2,
+            delta_g1,
+            delta_g2,
+            ic,
         })
     }
 }
@@ -227,7 +232,7 @@ pub struct Parameters<E: Engine> {
     pub h: Arc<Vec<E::G1Affine>>,
 
     // Elements of the form (beta * u_i(tau) + alpha v_i(tau) + w_i(tau)) / delta
-    // for all auxillary inputs. Variables can never be unconstrained, so this
+    // for all auxiliary inputs. Variables can never be unconstrained, so this
     // never contains points at infinity.
     pub l: Arc<Vec<E::G1Affine>>,
 
@@ -375,7 +380,7 @@ impl<E: Engine> Parameters<E> {
         }
 
         Ok(Parameters {
-            vk: vk,
+            vk,
             h: Arc::new(h),
             l: Arc::new(l),
             a: Arc::new(a),
@@ -389,9 +394,9 @@ pub struct PreparedVerifyingKey<E: Engine> {
     /// Pairing result of alpha*beta
     alpha_g1_beta_g2: E::Fqk,
     /// -gamma in G2
-    neg_gamma_g2: <E::G2Affine as CurveAffine>::Prepared,
+    neg_gamma_g2: <E::G2Affine as PairingCurveAffine>::Prepared,
     /// -delta in G2
-    neg_delta_g2: <E::G2Affine as CurveAffine>::Prepared,
+    neg_delta_g2: <E::G2Affine as PairingCurveAffine>::Prepared,
     /// Copy of IC from `VerifiyingKey`.
     ic: Vec<E::G1Affine>,
 }
@@ -464,11 +469,11 @@ impl<'a, E: Engine> ParameterSource<E> for &'a Parameters<E> {
 #[cfg(test)]
 mod test_with_bls12_381 {
     use super::*;
-    use {Circuit, ConstraintSystem, SynthesisError};
+    use crate::{Circuit, ConstraintSystem, SynthesisError};
 
     use ff::Field;
     use paired::bls12_381::{Bls12, Fr};
-    use rand::{thread_rng, Rand};
+    use rand::thread_rng;
 
     #[test]
     fn serialization() {
@@ -523,8 +528,8 @@ mod test_with_bls12_381 {
         let pvk = prepare_verifying_key::<Bls12>(&params.vk);
 
         for _ in 0..100 {
-            let a = Fr::rand(rng);
-            let b = Fr::rand(rng);
+            let a = Fr::random(rng);
+            let b = Fr::random(rng);
             let mut c = a;
             c.mul_assign(&b);
 
