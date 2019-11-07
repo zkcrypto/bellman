@@ -346,6 +346,7 @@ fn test_with_bls12() {
     assert_eq!(naive, fast);
 }
 
+
 use std::sync::Mutex;
 lazy_static! {
     static ref GPU_MULTIEXP_SUPPORTED: Mutex<Option<bool>> = {
@@ -353,13 +354,14 @@ lazy_static! {
     };
 }
 
-pub fn gpu_multiexp_supported<E>() -> gpu::GPUResult<gpu::MultiexpKernel<E>> where E: Engine {
+pub fn gpu_multiexp_supported<E>(n: usize) -> gpu::GPUResult<gpu::MultiexpKernel<E>> where E: Engine {
     const TEST_SIZE : u32 = 1024;
-    const CHUNK_SIZE: usize = 8388608;
+    const MAX_CHUNK_SIZE : usize = 8388608;
+    let chunk_size = std::cmp::min(MAX_CHUNK_SIZE, n);
     use rand::Rand;
     let pool = Worker::new();
     let rng = &mut rand::thread_rng();
-    let mut kern = Some(gpu::MultiexpKernel::<E>::create(CHUNK_SIZE)?);
+    let mut kern = Some(gpu::MultiexpKernel::<E>::create(chunk_size)?);
     let res = {
         let mut supported = GPU_MULTIEXP_SUPPORTED.lock().unwrap();
         if let Some(res) = *supported { res }
