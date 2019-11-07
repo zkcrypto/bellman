@@ -19,7 +19,7 @@ futures-cpupool = { version = "0.1", optional = true }
 groupy = { version = "0.2.0" }
 num_cpus = { version = "1", optional = true }
 crossbeam = { version = "0.7", optional = true }
-paired = { version = "0.15.0", path = "../pairing", optional = true }
+paired = { git = "https://github.com/filecoin-project/pairing", branch = "update-from-upstream", optional = true }
 rand_core = "0.5"
 byteorder = "1"
 log = "0.4.8"
@@ -30,7 +30,6 @@ rand = "0.7"
 
 [dev-dependencies]
 hex-literal = "0.2"
-
 rand_xorshift = "0.2"
 sha2 = "0.8"
 
