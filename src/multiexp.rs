@@ -346,6 +346,13 @@ fn test_with_bls12() {
     assert_eq!(naive, fast);
 }
 
+use std::sync::Mutex;
+lazy_static! {
+    static ref GPU_MULTIEXP_SUPPORTED: Mutex<Option<bool>> = {
+        Mutex::new(None)
+    };
+}
+
 pub fn gpu_multiexp_supported<E>() -> gpu::GPUResult<gpu::MultiexpKernel<E>> where E: Engine {
     const TEST_SIZE : u32 = 1024;
     const CHUNK_SIZE: usize = 8388608;
@@ -353,14 +360,23 @@ pub fn gpu_multiexp_supported<E>() -> gpu::GPUResult<gpu::MultiexpKernel<E>> whe
     let pool = Worker::new();
     let rng = &mut rand::thread_rng();
     let mut kern = Some(gpu::MultiexpKernel::<E>::create(CHUNK_SIZE)?);
-    let bases_g1 = Arc::new((0..TEST_SIZE).map(|_| E::G1::rand(rng).into_affine()).collect::<Vec<_>>());
-    let bases_g2 = Arc::new((0..TEST_SIZE).map(|_| E::G2::rand(rng).into_affine()).collect::<Vec<_>>());
-    let exps = Arc::new((0..TEST_SIZE).map(|_| E::Fr::rand(rng).into_repr()).collect::<Vec<_>>());
-    let gpu_g1 = multiexp(&pool, (bases_g1.clone(), 0), FullDensity, exps.clone(), &mut kern).wait().unwrap();
-    let cpu_g1 = multiexp(&pool, (bases_g1.clone(), 0), FullDensity, exps.clone(), &mut None).wait().unwrap();
-    let gpu_g2 = multiexp(&pool, (bases_g2.clone(), 0), FullDensity, exps.clone(), &mut kern).wait().unwrap();
-    let cpu_g2 = multiexp(&pool, (bases_g2.clone(), 0), FullDensity, exps.clone(), &mut None).wait().unwrap();
-    if cpu_g1 == gpu_g1 && cpu_g2 == gpu_g2 { Ok(kern.unwrap()) }
+    let res = {
+        let mut supported = GPU_MULTIEXP_SUPPORTED.lock().unwrap();
+        if let Some(res) = *supported { res }
+        else {
+            let bases_g1 = Arc::new((0..TEST_SIZE).map(|_| E::G1::rand(rng).into_affine()).collect::<Vec<_>>());
+            let bases_g2 = Arc::new((0..TEST_SIZE).map(|_| E::G2::rand(rng).into_affine()).collect::<Vec<_>>());
+            let exps = Arc::new((0..TEST_SIZE).map(|_| E::Fr::rand(rng).into_repr()).collect::<Vec<_>>());
+            let gpu_g1 = multiexp(&pool, (bases_g1.clone(), 0), FullDensity, exps.clone(), &mut kern).wait().unwrap();
+            let cpu_g1 = multiexp(&pool, (bases_g1.clone(), 0), FullDensity, exps.clone(), &mut None).wait().unwrap();
+            let gpu_g2 = multiexp(&pool, (bases_g2.clone(), 0), FullDensity, exps.clone(), &mut kern).wait().unwrap();
+            let cpu_g2 = multiexp(&pool, (bases_g2.clone(), 0), FullDensity, exps.clone(), &mut None).wait().unwrap();
+            let res = cpu_g1 == gpu_g1 && cpu_g2 == gpu_g2;
+            *supported = Some(res);
+            res
+        }
+    };
+    if res { Ok(kern.unwrap()) }
     else { Err(gpu::GPUError {msg: "GPU Multiexp not supported!".to_string()} ) }
 }
 

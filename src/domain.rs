@@ -544,18 +544,36 @@ fn parallel_fft_consistency() {
     test_consistency::<Bls12, _>(rng);
 }
 
+use std::sync::Mutex;
+lazy_static! {
+    static ref GPU_FFT_SUPPORTED: Mutex<Option<bool>> = {
+        Mutex::new(None)
+    };
+}
+
 pub fn gpu_fft_supported<E>(log_d: u32) -> gpu::GPUResult<gpu::FFTKernel<E>> where E: Engine {
     let log_test_size : u32 = std::cmp::min(E::Fr::S - 1, 10);
     let test_size : u32 = 1 << log_test_size;
     use rand::Rand;
     let rng = &mut rand::thread_rng();
     let mut kern = gpu::FFTKernel::create(1 << log_d)?;
-    let elems = (0..test_size).map(|_| Scalar::<E>(E::Fr::rand(rng))).collect::<Vec<_>>();
-    let mut v1 = EvaluationDomain::from_coeffs(elems.clone()).unwrap();
-    let mut v2 = EvaluationDomain::from_coeffs(elems.clone()).unwrap();
-    gpu_fft(&mut kern, &mut v1.coeffs, &v1.omega, log_test_size)?;
-    serial_fft(&mut v2.coeffs, &v2.omega, log_test_size);
-    if v1.coeffs == v2.coeffs { Ok(kern) }
+
+    let res = {
+        let mut supported = GPU_FFT_SUPPORTED.lock().unwrap();
+        if let Some(res) = *supported { res }
+        else {
+            let elems = (0..test_size).map(|_| Scalar::<E>(E::Fr::rand(rng))).collect::<Vec<_>>();
+            let mut v1 = EvaluationDomain::from_coeffs(elems.clone()).unwrap();
+            let mut v2 = EvaluationDomain::from_coeffs(elems.clone()).unwrap();
+            gpu_fft(&mut kern, &mut v1.coeffs, &v1.omega, log_test_size)?;
+            serial_fft(&mut v2.coeffs, &v2.omega, log_test_size);
+            let res = v1.coeffs == v2.coeffs;
+            *supported = Some(res);
+            res
+        }
+    };
+
+    if res { Ok(kern) }
     else { Err(gpu::GPUError {msg: "GPU FFT not supported!".to_string()} ) }
 }
 
