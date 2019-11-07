@@ -1,10 +1,11 @@
-use super::error::{GPUError, GPUResult};
-use super::sources;
-use super::structs;
-use super::GPU_NVIDIA_DEVICES;
-use ff::{Field, Scalar};
+use crate::gpu::{
+    error::{GPUError, GPUResult},
+    sources, structs, GPU_NVIDIA_DEVICES,
+};
+use ff::Field;
 use log::info;
 use ocl::{Buffer, MemFlags, ProQue};
+use paired::Engine;
 use std::cmp;
 
 // NOTE: Please read `structs.rs` for an explanation for unsafe transmutes of this code!
@@ -15,7 +16,7 @@ const MAX_LOCAL_WORK_SIZE_DEGREE: u32 = 7; // 128
 
 pub struct FFTKernel<E>
 where
-    E: ScalarEngine,
+    E: Engine,
 {
     proque: ProQue,
     fft_src_buffer: Buffer<structs::PrimeFieldStruct<E::Fr>>,
@@ -26,7 +27,7 @@ where
 
 impl<E> FFTKernel<E>
 where
-    E: ScalarEngine,
+    E: Engine,
 {
     pub fn create(n: u32) -> GPUResult<FFTKernel<E>> {
         let src = sources::kernel::<E>();

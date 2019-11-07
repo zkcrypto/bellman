@@ -13,6 +13,7 @@
 
 use ff::{Field, PrimeField, ScalarEngine};
 use groupy::CurveProjective;
+use paired::Engine;
 
 use std::sync::Mutex;
 
@@ -42,7 +43,7 @@ impl<E: ScalarEngine, G: Group<E>> AsMut<[G]> for EvaluationDomain<E, G> {
     }
 }
 
-impl<E: ScalarEngine, G: Group<E>> EvaluationDomain<E, G> {
+impl<E: Engine, G: Group<E>> EvaluationDomain<E, G> {
     pub fn into_coeffs(self) -> Vec<G> {
         self.coeffs
     }
@@ -276,7 +277,7 @@ impl<E: ScalarEngine> Group<E> for Scalar<E> {
     }
 }
 
-fn best_fft<E: ScalarEngine, T: Group<E>>(
+fn best_fft<E: Engine, T: Group<E>>(
     kern: &mut Option<gpu::FFTKernel<E>>,
     a: &mut [T],
     worker: &Worker,
@@ -295,7 +296,7 @@ fn best_fft<E: ScalarEngine, T: Group<E>>(
     }
 }
 
-pub fn gpu_fft<E: ScalarEngine, T: Group<E>>(
+pub fn gpu_fft<E: Engine, T: Group<E>>(
     kern: &mut gpu::FFTKernel<E>,
     a: &mut [T],
     omega: &E::Fr,
@@ -313,7 +314,7 @@ pub fn gpu_fft<E: ScalarEngine, T: Group<E>>(
     Ok(())
 }
 
-pub fn gpu_mul_by_field<E: ScalarEngine, T: Group<E>>(
+pub fn gpu_mul_by_field<E: Engine, T: Group<E>>(
     kern: &mut gpu::FFTKernel<E>,
     a: &mut [T],
     minv: &E::Fr,
@@ -559,7 +560,7 @@ lazy_static::lazy_static! {
 
 pub fn gpu_fft_supported<E>(log_d: u32) -> gpu::GPUResult<gpu::FFTKernel<E>>
 where
-    E: ScalarEngine,
+    E: Engine,
 {
     let log_test_size: u32 = std::cmp::min(E::Fr::S - 1, 10);
     let test_size: u32 = 1 << log_test_size;

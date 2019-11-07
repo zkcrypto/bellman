@@ -53,7 +53,7 @@ where
         _: Arc<Vec<<<G::Engine as ScalarEngine>::Fr as PrimeField>::Repr>>,
         _: usize,
         _: usize,
-    ) -> GPUResult<(<G as CurveAffine>::Projective)>
+    ) -> GPUResult<<G as CurveAffine>::Projective>
     where
         G: CurveAffine,
     {

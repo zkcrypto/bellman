@@ -5,10 +5,10 @@ use super::utils;
 use super::GPU_NVIDIA_DEVICES;
 use crossbeam::thread;
 use ff::{PrimeField, ScalarEngine};
+use groupy::{CurveAffine, CurveProjective};
 use log::info;
 use ocl::{Buffer, Device, MemFlags, ProQue};
 use paired::Engine;
-use paired::{CurveAffine, CurveProjective};
 use std::sync::Arc;
 
 // NOTE: Please read `structs.rs` for an explanation for unsafe transmutes of this code!
@@ -137,7 +137,7 @@ where
         bases: &[G],
         exps: &[<<G::Engine as ScalarEngine>::Fr as PrimeField>::Repr],
         n: usize,
-    ) -> GPUResult<(<G as CurveAffine>::Projective)>
+    ) -> GPUResult<<G as CurveAffine>::Projective>
     where
         G: CurveAffine,
     {
@@ -286,7 +286,7 @@ where
         exps: Arc<Vec<<<G::Engine as ScalarEngine>::Fr as PrimeField>::Repr>>,
         skip: usize,
         n: usize,
-    ) -> GPUResult<(<G as CurveAffine>::Projective)>
+    ) -> GPUResult<<G as CurveAffine>::Projective>
     where
         G: CurveAffine,
     {

@@ -268,6 +268,7 @@ where
     for<'a> &'a Q: QueryDensity,
     D: Send + Sync + 'static + Clone + AsRef<Q>,
     G: CurveAffine,
+    G::Engine: paired::Engine,
     S: SourceBuilder<G>,
 {
     if let Some(ref mut k) = kern {

@@ -1,9 +1,11 @@
-use super::error::{GPUError, GPUResult};
+use crate::gpu::error::{GPUError, GPUResult};
 use ocl::{Device, Platform};
+
+use std::collections::HashMap;
 use std::env;
 
 pub const GPU_NVIDIA_PLATFORM_NAME: &str = "NVIDIA CUDA";
-pub const CPU_INTEL_PLATFORM_NAME: &str = "Intel(R) CPU Runtime for OpenCL(TM) Applications";
+// pub const CPU_INTEL_PLATFORM_NAME: &str = "Intel(R) CPU Runtime for OpenCL(TM) Applications";
 
 pub fn get_devices(platform_name: &str) -> GPUResult<Vec<Device>> {
     if env::var("BELLMAN_NO_GPU").is_ok() {
@@ -24,8 +26,7 @@ pub fn get_devices(platform_name: &str) -> GPUResult<Vec<Device>> {
     }
 }
 
-use std::collections::HashMap;
-lazy_static! {
+lazy_static::lazy_static! {
     static ref CORE_COUNTS: HashMap<&'static str, usize> = vec![
         ("GeForce RTX 2080 Ti", 4352),
         ("GeForce RTX 2080 SUPER", 3072),
