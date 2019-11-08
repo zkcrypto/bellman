@@ -598,7 +598,6 @@ where
 #[test]
 pub fn gpu_fft_consistency() {
     use paired::bls12_381::{Bls12, Fr};
-    use rand::Rand;
     use std::time::Instant;
     let rng = &mut rand::thread_rng();
 
@@ -610,7 +609,7 @@ pub fn gpu_fft_consistency() {
         let d = 1 << log_d;
 
         let elems = (0..d)
-            .map(|_| Scalar::<Bls12>(Fr::rand(rng)))
+            .map(|_| Scalar::<Bls12>(Fr::random(rng)))
             .collect::<Vec<_>>();
         let mut v1 = EvaluationDomain::from_coeffs(elems.clone()).unwrap();
         let mut v2 = EvaluationDomain::from_coeffs(elems.clone()).unwrap();

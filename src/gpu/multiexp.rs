@@ -160,7 +160,8 @@ where
         let sz = std::mem::size_of::<G>(); // Trick, used for dispatching between G1 and G2!
         if sz == std::mem::size_of::<E::G1Affine>() {
             let tbases = unsafe {
-                std::mem::transmute::<&[G], &[structs::CurveAffineStruct<E::G1Affine>]>(bases)
+                &*(bases as *const [G]
+                    as *const [structs::CurveAffineStruct<<E as Engine>::G1Affine>])
             };
             self.g1_base_buffer.write(tbases).enq()?;
             let kernel = self
@@ -180,15 +181,14 @@ where
                 kernel.enq()?;
             }
             let tres = unsafe {
-                std::mem::transmute::<
-                    &mut [<G as CurveAffine>::Projective],
-                    &mut [structs::CurveProjectiveStruct<E::G1>],
-                >(&mut res)
+                &mut *(&mut res as *mut Vec<<G as CurveAffine>::Projective>
+                    as *mut Vec<structs::CurveProjectiveStruct<<E as Engine>::G1>>)
             };
             self.g1_result_buffer.read(tres).enq()?;
         } else if sz == std::mem::size_of::<E::G2Affine>() {
             let tbases = unsafe {
-                std::mem::transmute::<&[G], &[structs::CurveAffineStruct<E::G2Affine>]>(bases)
+                &*(bases as *const [G]
+                    as *const [structs::CurveAffineStruct<<E as Engine>::G2Affine>])
             };
             self.g2_base_buffer.write(tbases).enq()?;
             let kernel = self
@@ -208,10 +208,8 @@ where
                 kernel.enq()?;
             }
             let tres = unsafe {
-                std::mem::transmute::<
-                    &mut [<G as CurveAffine>::Projective],
-                    &mut [structs::CurveProjectiveStruct<E::G2>],
-                >(&mut res)
+                &mut *(&mut res as *mut Vec<<G as CurveAffine>::Projective>
+                    as *mut Vec<structs::CurveProjectiveStruct<<E as Engine>::G2>>)
             };
             self.g2_result_buffer.read(tres).enq()?;
         } else {

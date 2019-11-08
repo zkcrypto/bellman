@@ -281,9 +281,9 @@ where
             }
         }
 
-        let (bss, skip) = bases.clone().get();
+        let (bss, skip) = bases.get();
         let result = k
-            .multiexp(bss.clone(), Arc::new(exps.clone()), skip, n)
+            .multiexp(bss, Arc::new(exps), skip, n)
             .expect("GPU Multiexp failed!");
 
         return Box::new(pool.compute(move || Ok(result)));
@@ -392,15 +392,9 @@ where
             )
             .wait()
             .unwrap();
-            let cpu_g1 = multiexp(
-                &pool,
-                (bases_g1.clone(), 0),
-                FullDensity,
-                exps.clone(),
-                &mut None,
-            )
-            .wait()
-            .unwrap();
+            let cpu_g1 = multiexp(&pool, (bases_g1, 0), FullDensity, exps.clone(), &mut None)
+                .wait()
+                .unwrap();
             let gpu_g2 = multiexp(
                 &pool,
                 (bases_g2.clone(), 0),
@@ -410,15 +404,9 @@ where
             )
             .wait()
             .unwrap();
-            let cpu_g2 = multiexp(
-                &pool,
-                (bases_g2.clone(), 0),
-                FullDensity,
-                exps.clone(),
-                &mut None,
-            )
-            .wait()
-            .unwrap();
+            let cpu_g2 = multiexp(&pool, (bases_g2, 0), FullDensity, exps, &mut None)
+                .wait()
+                .unwrap();
             let res = cpu_g1 == gpu_g1 && cpu_g2 == gpu_g2;
             *supported = Some(res);
             res
@@ -437,7 +425,6 @@ where
 #[test]
 pub fn gpu_multiexp_consistency() {
     use paired::bls12_381::Bls12;
-    use rand::{self, Rand};
     use std::time::Instant;
 
     const CHUNK_SIZE: usize = 1048576;
@@ -452,7 +439,7 @@ pub fn gpu_multiexp_consistency() {
     let rng = &mut rand::thread_rng();
 
     let mut bases = (0..(1 << 10))
-        .map(|_| <Bls12 as Engine>::G1::rand(rng).into_affine())
+        .map(|_| <Bls12 as paired::Engine>::G1::random(rng).into_affine())
         .collect::<Vec<_>>();
     for _ in 10..START_LOG_D {
         bases = [bases.clone(), bases.clone()].concat();
@@ -466,7 +453,7 @@ pub fn gpu_multiexp_consistency() {
 
         let v = Arc::new(
             (0..samples)
-                .map(|_| <Bls12 as ScalarEngine>::Fr::rand(rng).into_repr())
+                .map(|_| <Bls12 as ScalarEngine>::Fr::random(rng).into_repr())
                 .collect::<Vec<_>>(),
         );
 
