@@ -201,7 +201,7 @@ impl<E> MultiexpKernel<E> where E: Engine {
         let device_chunk_size = self.chunk_size;
         // Bases are skipped by `self.1` elements, when converted from (Arc<Vec<G>>, usize) to Source
         // https://github.com/zkcrypto/bellman/blob/10c5010fd9c2ca69442dc9775ea271e286e776d8/src/multiexp.rs#L38
-        let bases = &bases[skip..];
+        let bases = &bases[skip..(skip + n)];
 
         let exps = &exps[..n];
 
