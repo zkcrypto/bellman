@@ -6,9 +6,8 @@ use self::dummy_engine::*;
 
 use std::marker::PhantomData;
 
-use {Circuit, ConstraintSystem, SynthesisError};
-
 use super::{create_proof, generate_parameters, prepare_verifying_key, verify_proof};
+use crate::{Circuit, ConstraintSystem, SynthesisError};
 
 struct XORDemo<E: Engine> {
     a: Option<bool>,

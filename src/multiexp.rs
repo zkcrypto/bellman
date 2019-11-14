@@ -1,15 +1,14 @@
-use super::multicore::Worker;
 use bit_vec::{self, BitVec};
 use ff::{Field, PrimeField, PrimeFieldRepr, ScalarEngine};
 use futures::Future;
-use paired::{CurveAffine, CurveProjective};
+use groupy::{CurveAffine, CurveProjective};
 use std::io;
 use std::iter;
-use std::sync::Arc;
-use gpu;
-use paired::Engine;
+use std::sync::{Arc, Mutex};
 
+use super::multicore::Worker;
 use super::SynthesisError;
+use crate::gpu;
 
 /// An object that builds a source of bases.
 pub trait SourceBuilder<G: CurveAffine>: Send + Sync + 'static + Clone {
@@ -38,7 +37,9 @@ impl<G: CurveAffine> SourceBuilder<G> for (Arc<Vec<G>>, usize) {
         (self.0.clone(), self.1)
     }
 
-    fn get(self) -> (Arc<Vec<G>>, usize) { (self.0.clone(), self.1) }
+    fn get(self) -> (Arc<Vec<G>>, usize) {
+        (self.0.clone(), self.1)
+    }
 }
 
 impl<G: CurveAffine> Source<G> for (Arc<Vec<G>>, usize) {
@@ -158,7 +159,7 @@ fn multiexp_inner<Q, D, G, S>(
     mut skip: u32,
     c: u32,
     handle_trivial: bool,
-) -> Box<Future<Item = <G as CurveAffine>::Projective, Error = SynthesisError>>
+) -> Box<dyn Future<Item = <G as CurveAffine>::Projective, Error = SynthesisError>>
 where
     for<'a> &'a Q: QueryDensity,
     D: Send + Sync + 'static + Clone + AsRef<Q>,
@@ -261,17 +262,16 @@ pub fn multiexp<Q, D, G, S>(
     bases: S,
     density_map: D,
     exponents: Arc<Vec<<<G::Engine as ScalarEngine>::Fr as PrimeField>::Repr>>,
-    kern: &mut Option<gpu::MultiexpKernel<G::Engine>>
-) -> Box<Future<Item = <G as CurveAffine>::Projective, Error = SynthesisError>>
+    kern: &mut Option<gpu::MultiexpKernel<G::Engine>>,
+) -> Box<dyn Future<Item = <G as CurveAffine>::Projective, Error = SynthesisError>>
 where
     for<'a> &'a Q: QueryDensity,
     D: Send + Sync + 'static + Clone + AsRef<Q>,
     G: CurveAffine,
-    S: SourceBuilder<G>
+    G::Engine: paired::Engine,
+    S: SourceBuilder<G>,
 {
-
     if let Some(ref mut k) = kern {
-
         let mut exps = vec![exponents[0]; exponents.len()];
         let mut n = 0;
         for (&e, d) in exponents.iter().zip(density_map.as_ref().iter()) {
@@ -281,10 +281,12 @@ where
             }
         }
 
-        let (bss, skip) = bases.clone().get();
-        let result = k.multiexp(bss.clone(), Arc::new(exps.clone()), skip, n).expect("GPU Multiexp failed!");
+        let (bss, skip) = bases.get();
+        let result = k
+            .multiexp(bss, Arc::new(exps), skip, n)
+            .expect("GPU Multiexp failed!");
 
-        return Box::new(pool.compute(move || { Ok(result) }))
+        return Box::new(pool.compute(move || Ok(result)));
     }
 
     let c = if exponents.len() < 32 {
@@ -303,6 +305,7 @@ where
     multiexp_inner(pool, bases, density_map, exponents, 0, c, true)
 }
 
+#[cfg(feature = "pairing")]
 #[test]
 fn test_with_bls12() {
     fn naive_multiexp<G: CurveAffine>(
@@ -320,20 +323,20 @@ fn test_with_bls12() {
         acc
     }
 
-    use paired::bls12_381::Bls12;
-    use rand::{self, Rand};
+    use paired::{bls12_381::Bls12, Engine};
+    use rand;
 
     const SAMPLES: usize = 1 << 14;
 
     let rng = &mut rand::thread_rng();
     let v = Arc::new(
         (0..SAMPLES)
-            .map(|_| <Bls12 as ScalarEngine>::Fr::rand(rng).into_repr())
+            .map(|_| <Bls12 as ScalarEngine>::Fr::random(rng).into_repr())
             .collect::<Vec<_>>(),
     );
     let g = Arc::new(
         (0..SAMPLES)
-            .map(|_| <Bls12 as Engine>::G1::rand(rng).into_affine())
+            .map(|_| <Bls12 as Engine>::G1::random(rng).into_affine())
             .collect::<Vec<_>>(),
     );
 
@@ -341,68 +344,106 @@ fn test_with_bls12() {
 
     let pool = Worker::new();
 
-    let fast = multiexp(&pool, (g, 0), FullDensity, v, &mut None).wait().unwrap();
+    let fast = multiexp(&pool, (g, 0), FullDensity, v).wait().unwrap();
 
     assert_eq!(naive, fast);
 }
 
-
-use std::sync::Mutex;
-lazy_static! {
-    static ref GPU_MULTIEXP_SUPPORTED: Mutex<Option<bool>> = {
-        Mutex::new(None)
-    };
+lazy_static::lazy_static! {
+    static ref GPU_MULTIEXP_SUPPORTED: Mutex<Option<bool>> = { Mutex::new(None) };
 }
 
-pub fn gpu_multiexp_supported<E>(n: usize) -> gpu::GPUResult<gpu::MultiexpKernel<E>> where E: Engine {
-    const TEST_SIZE : u32 = 1024;
-    const MAX_CHUNK_SIZE : usize = 8388608;
+pub fn gpu_multiexp_supported<E>(n: usize) -> gpu::GPUResult<gpu::MultiexpKernel<E>>
+where
+    E: paired::Engine,
+{
+    const TEST_SIZE: u32 = 1024;
+    const MAX_CHUNK_SIZE: usize = 8388608;
     let chunk_size = std::cmp::min(MAX_CHUNK_SIZE, n);
-    use rand::Rand;
     let pool = Worker::new();
     let rng = &mut rand::thread_rng();
     let mut kern = Some(gpu::MultiexpKernel::<E>::create(chunk_size)?);
     let res = {
         let mut supported = GPU_MULTIEXP_SUPPORTED.lock().unwrap();
-        if let Some(res) = *supported { res }
-        else {
-            let bases_g1 = Arc::new((0..TEST_SIZE).map(|_| E::G1::rand(rng).into_affine()).collect::<Vec<_>>());
-            let bases_g2 = Arc::new((0..TEST_SIZE).map(|_| E::G2::rand(rng).into_affine()).collect::<Vec<_>>());
-            let exps = Arc::new((0..TEST_SIZE).map(|_| E::Fr::rand(rng).into_repr()).collect::<Vec<_>>());
-            let gpu_g1 = multiexp(&pool, (bases_g1.clone(), 0), FullDensity, exps.clone(), &mut kern).wait().unwrap();
-            let cpu_g1 = multiexp(&pool, (bases_g1.clone(), 0), FullDensity, exps.clone(), &mut None).wait().unwrap();
-            let gpu_g2 = multiexp(&pool, (bases_g2.clone(), 0), FullDensity, exps.clone(), &mut kern).wait().unwrap();
-            let cpu_g2 = multiexp(&pool, (bases_g2.clone(), 0), FullDensity, exps.clone(), &mut None).wait().unwrap();
+        if let Some(res) = *supported {
+            res
+        } else {
+            let bases_g1 = Arc::new(
+                (0..TEST_SIZE)
+                    .map(|_| E::G1::random(rng).into_affine())
+                    .collect::<Vec<_>>(),
+            );
+            let bases_g2 = Arc::new(
+                (0..TEST_SIZE)
+                    .map(|_| E::G2::random(rng).into_affine())
+                    .collect::<Vec<_>>(),
+            );
+            let exps = Arc::new(
+                (0..TEST_SIZE)
+                    .map(|_| E::Fr::random(rng).into_repr())
+                    .collect::<Vec<_>>(),
+            );
+            let gpu_g1 = multiexp(
+                &pool,
+                (bases_g1.clone(), 0),
+                FullDensity,
+                exps.clone(),
+                &mut kern,
+            )
+            .wait()
+            .unwrap();
+            let cpu_g1 = multiexp(&pool, (bases_g1, 0), FullDensity, exps.clone(), &mut None)
+                .wait()
+                .unwrap();
+            let gpu_g2 = multiexp(
+                &pool,
+                (bases_g2.clone(), 0),
+                FullDensity,
+                exps.clone(),
+                &mut kern,
+            )
+            .wait()
+            .unwrap();
+            let cpu_g2 = multiexp(&pool, (bases_g2, 0), FullDensity, exps, &mut None)
+                .wait()
+                .unwrap();
             let res = cpu_g1 == gpu_g1 && cpu_g2 == gpu_g2;
             *supported = Some(res);
             res
         }
     };
-    if res { Ok(kern.unwrap()) }
-    else { Err(gpu::GPUError {msg: "GPU Multiexp not supported!".to_string()} ) }
+    if res {
+        Ok(kern.unwrap())
+    } else {
+        Err(gpu::GPUError {
+            msg: "GPU Multiexp not supported!".to_string(),
+        })
+    }
 }
 
 #[cfg(feature = "gpu-test")]
 #[test]
 pub fn gpu_multiexp_consistency() {
-    use std::time::Instant;
     use paired::bls12_381::Bls12;
-    use rand::{self, Rand};
+    use std::time::Instant;
 
     const CHUNK_SIZE: usize = 1048576;
     const MAX_LOG_D: usize = 20;
     const START_LOG_D: usize = 10;
     let mut kern = gpu::MultiexpKernel::<Bls12>::create(CHUNK_SIZE).ok();
-    if kern.is_none() { panic!("Cannot initialize kernel!"); }
+    if kern.is_none() {
+        panic!("Cannot initialize kernel!");
+    }
     let pool = Worker::new();
 
     let rng = &mut rand::thread_rng();
 
-    let mut bases =
-        (0..(1 << 10))
-            .map(|_| <Bls12 as Engine>::G1::rand(rng).into_affine())
-            .collect::<Vec<_>>();
-    for _ in 10..START_LOG_D { bases = [bases.clone(), bases.clone()].concat(); }
+    let mut bases = (0..(1 << 10))
+        .map(|_| <Bls12 as paired::Engine>::G1::random(rng).into_affine())
+        .collect::<Vec<_>>();
+    for _ in 10..START_LOG_D {
+        bases = [bases.clone(), bases.clone()].concat();
+    }
 
     for log_d in START_LOG_D..(MAX_LOG_D + 1) {
         let g = Arc::new(bases.clone());
@@ -412,17 +453,21 @@ pub fn gpu_multiexp_consistency() {
 
         let v = Arc::new(
             (0..samples)
-                .map(|_| <Bls12 as ScalarEngine>::Fr::rand(rng).into_repr())
+                .map(|_| <Bls12 as ScalarEngine>::Fr::random(rng).into_repr())
                 .collect::<Vec<_>>(),
         );
 
         let mut now = Instant::now();
-        let gpu = multiexp(&pool, (g.clone(), 0), FullDensity, v.clone(), &mut kern).wait().unwrap();
+        let gpu = multiexp(&pool, (g.clone(), 0), FullDensity, v.clone(), &mut kern)
+            .wait()
+            .unwrap();
         let gpu_dur = now.elapsed().as_secs() * 1000 as u64 + now.elapsed().subsec_millis() as u64;
         println!("GPU took {}ms.", gpu_dur);
 
         now = Instant::now();
-        let cpu = multiexp(&pool, (g.clone(), 0), FullDensity, v.clone(), &mut None).wait().unwrap();
+        let cpu = multiexp(&pool, (g.clone(), 0), FullDensity, v.clone(), &mut None)
+            .wait()
+            .unwrap();
         let cpu_dur = now.elapsed().as_secs() * 1000 as u64 + now.elapsed().subsec_millis() as u64;
         println!("CPU took {}ms.", cpu_dur);
 

@@ -3,7 +3,7 @@ use std::fmt;
 
 #[derive(Debug, Clone)]
 pub struct GPUError {
-    pub msg: String
+    pub msg: String,
 }
 
 pub type GPUResult<T> = std::result::Result<T, GPUError>;
@@ -19,7 +19,7 @@ impl error::Error for GPUError {
         self.msg.as_str()
     }
 
-    fn cause(&self) -> Option<&error::Error> {
+    fn cause(&self) -> Option<&dyn error::Error> {
         None
     }
 }
@@ -30,7 +30,9 @@ use ocl;
 #[cfg(feature = "gpu")]
 impl From<ocl::Error> for GPUError {
     fn from(error: ocl::Error) -> Self {
-        GPUError {msg: error.to_string() }
+        GPUError {
+            msg: error.to_string(),
+        }
     }
 }
 
@@ -39,7 +41,9 @@ impl From<std::boxed::Box<dyn std::any::Any + std::marker::Send>> for GPUError {
     fn from(e: std::boxed::Box<dyn std::any::Any + std::marker::Send>) -> Self {
         match &e.downcast_ref::<Self>() {
             &Some(err) => err.clone(),
-            &None => GPUError {msg: "An unknown GPU error happened!".to_string()}
+            &None => GPUError {
+                msg: "An unknown GPU error happened!".to_string(),
+            },
         }
     }
 }

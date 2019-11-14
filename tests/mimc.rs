@@ -1,18 +1,12 @@
-extern crate bellperson;
-extern crate ff;
-extern crate paired;
-extern crate rand;
-
 // For randomness (during paramgen and proof generation)
-use rand::{thread_rng, Rng};
+use rand::thread_rng;
 
 // For benchmarking
 use std::time::{Duration, Instant};
 
 // Bring in some tools for using pairing-friendly curves
+use ff::{Field, ScalarEngine};
 use paired::Engine;
-
-use ff::Field;
 
 // We're going to use the BLS12-381 pairing-friendly elliptic curve.
 use paired::bls12_381::Bls12;
@@ -91,12 +85,12 @@ impl<'a, E: Engine> Circuit<E> for MiMCDemo<'a, E> {
             let cs = &mut cs.namespace(|| format!("round {}", i));
 
             // tmp = (xL + Ci)^2
-            let mut tmp_value = xl_value.map(|mut e| {
+            let tmp_value = xl_value.map(|mut e| {
                 e.add_assign(&self.constants[i]);
                 e.square();
                 e
             });
-            let mut tmp = cs.alloc(
+            let tmp = cs.alloc(
                 || "tmp",
                 || tmp_value.ok_or(SynthesisError::AssignmentMissing),
             )?;
@@ -111,14 +105,14 @@ impl<'a, E: Engine> Circuit<E> for MiMCDemo<'a, E> {
             // new_xL = xR + (xL + Ci)^3
             // new_xL = xR + tmp * (xL + Ci)
             // new_xL - xR = tmp * (xL + Ci)
-            let mut new_xl_value = xl_value.map(|mut e| {
+            let new_xl_value = xl_value.map(|mut e| {
                 e.add_assign(&self.constants[i]);
                 e.mul_assign(&tmp_value.unwrap());
                 e.add_assign(&xr_value.unwrap());
                 e
             });
 
-            let mut new_xl = if i == (MIMC_ROUNDS - 1) {
+            let new_xl = if i == (MIMC_ROUNDS - 1) {
                 // This is the last round, xL is our image and so
                 // we allocate a public input.
                 cs.alloc_input(
@@ -159,7 +153,9 @@ fn test_mimc() {
     let rng = &mut thread_rng();
 
     // Generate the MiMC round constants
-    let constants = (0..MIMC_ROUNDS).map(|_| rng.gen()).collect::<Vec<_>>();
+    let constants = (0..MIMC_ROUNDS)
+        .map(|_| <Bls12 as ScalarEngine>::Fr::random(rng))
+        .collect::<Vec<_>>();
 
     println!("Creating parameters...");
 
@@ -190,8 +186,8 @@ fn test_mimc() {
 
     for _ in 0..SAMPLES {
         // Generate a random preimage and compute the image
-        let xl = rng.gen();
-        let xr = rng.gen();
+        let xl = <Bls12 as ScalarEngine>::Fr::random(rng);
+        let xr = <Bls12 as ScalarEngine>::Fr::random(rng);
         let image = mimc::<Bls12>(xl, xr, &constants);
 
         proof_vec.truncate(0);
