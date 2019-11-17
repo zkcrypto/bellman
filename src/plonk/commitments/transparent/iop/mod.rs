@@ -73,7 +73,9 @@ pub trait IopQuery<F: PrimeField>: 'static + PartialEq + Eq + Clone + std::fmt::
 
     fn tree_index(&self) -> usize;
     fn natural_index(&self) -> usize;
+    fn natural_indexes(&self) -> Vec<usize>;
     fn value(&self) -> F;
+    fn values(&self) -> &[F];
     fn path(&self) ->  &[<Self::TreeHasher as IopTreeHasher<F>>::HashOutput];
 }
 

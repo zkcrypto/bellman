@@ -1248,16 +1248,12 @@ impl<F: PrimeField> Polynomial<F, Values> {
     ) -> Result<Polynomial<F, Values>, SynthesisError> {
         assert!(subset_factor.is_power_of_two());
         
-        if factor == 1 {
-            return self.clone();
+        if subset_factor == 1 {
+            return Ok(self.clone());
         }
 
-        let num_cpus = worker.cpus;
-
-        assert!(factor.is_power_of_two());
         let current_size = self.coeffs.len();
         let new_size = current_size / subset_factor;
-        let domain = Domain::<F>::new_for_size(new_size as u64)?;
 
         let mut result = Vec::with_capacity(new_size);
         unsafe { result.set_len(new_size)};
@@ -1269,7 +1265,7 @@ impl<F: PrimeField> Polynomial<F, Values> {
 
         let start = 0;
         let end = new_size;
-        let copy_to_start_pointer: *mut F = r[..].as_mut_ptr();
+        let copy_to_start_pointer: *mut F = result[..].as_mut_ptr();
         let copy_from_start_pointer: *const F = self.coeffs[start..end].as_ptr();
                         
         unsafe { std::ptr::copy_nonoverlapping(copy_from_start_pointer, copy_to_start_pointer, new_size) };

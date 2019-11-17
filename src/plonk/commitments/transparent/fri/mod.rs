@@ -7,6 +7,7 @@ use crate::plonk::commitments::transparent::utils::log2_floor;
 use crate::plonk::commitments::transcript::Prng;
 
 pub mod naive_fri;
+pub mod coset_combining_fri;
 
 pub trait FriProofPrototype<F: PrimeField, I: IOP<F>> {
     fn get_roots(&self) -> Vec< < <I::Tree as IopTree<F> >::TreeHasher as IopTreeHasher<F>>::HashOutput>;
@@ -30,8 +31,7 @@ pub trait FriIop<F: PrimeField> {
     type IopType: IOP<F>;
     type ProofPrototype: FriProofPrototype<F, Self::IopType>;
     type Proof: FriProof<F, Self::IopType>;
-    // type Prng: Prng<F, Input = < < <Self::IopType as IOP<F>>::Tree as IopTree<F> >::TreeHasher as IopTreeHasher<F>>::HashOutput >;
-    // type Precomputations: FriPrecomputations<F>;
+    type Params: Clone + std::fmt::Debug;
 
     fn proof_from_lde<P: Prng<F, Input = < < <Self::IopType as IOP<F>>::Tree as IopTree<F> >::TreeHasher as IopTreeHasher<F>>::HashOutput >,
     C: FriPrecomputations<F>
@@ -41,13 +41,15 @@ pub trait FriIop<F: PrimeField> {
         output_coeffs_at_degree_plus_one: usize,
         precomputations: &C,
         worker: &Worker,
-        prng: &mut P
+        prng: &mut P,
+        params: &Self::Params
     ) -> Result<Self::ProofPrototype, SynthesisError>;
 
     fn prototype_into_proof(
         prototype: Self::ProofPrototype,
         iop_values: &Polynomial<F, Values>,
         natural_first_element_indexes: Vec<usize>,
+        params: &Self::Params
     ) -> Result<Self::Proof, SynthesisError>;
 
     // // will write roots to prng values
@@ -60,45 +62,15 @@ pub trait FriIop<F: PrimeField> {
 
     fn get_fri_challenges<P: Prng<F, Input = < < <Self::IopType as IOP<F>>::Tree as IopTree<F> >::TreeHasher as IopTreeHasher<F>>::HashOutput > >(
         proof: &Self::Proof,
-        prng: &mut P
+        prng: &mut P,
+        params: &Self::Params
     ) -> Vec<F>;
 
     fn verify_proof_with_challenges(
         proof: &Self::Proof,
         natural_element_indexes: Vec<usize>,
         expected_value: &[F],
-        fri_challenges: &[F]
+        fri_challenges: &[F],
+        params: &Self::Params
     ) -> Result<bool, SynthesisError>;
 }
-
-
-// pub trait FriIop<F: PrimeField> {
-//     const DEGREE: usize;
-
-//     type IopType: IOP<F>;
-//     type ProofPrototype: FriProofPrototype<F, Self::IopType>;
-//     type Proof: FriProof<F, Self::IopType>;
-//     type Precomputations: FriPrecomputations<F>;
-
-//     fn proof_from_lde(
-//         lde_values: &Polynomial<F, Values>, 
-//         lde_factor: usize,
-//         output_coeffs_at_degree_plus_one: usize,
-//         precomputations: &Self::Precomputations,
-//         worker: &Worker,
-//         prng: &mut dyn Prng<F, Input = < < <Self::IopType as IOP<F>>::Tree as IopTree<F> >::TreeHasher as IopTreeHasher<F>>::HashOutput >
-//     ) -> Result<Self::ProofPrototype, SynthesisError>;
-
-//     fn prototype_into_proof(
-//         prototype: Self::ProofPrototype,
-//         iop_values: &Polynomial<F, Values>,
-//         natural_first_element_index: usize,
-//     ) -> Result<Self::Proof, SynthesisError>;
-
-//     fn verify_proof(
-//         proof: &Self::Proof,
-//         natural_element_index: usize,
-//         expected_value: F,
-//         prng: &mut dyn Prng<F, Input = < < <Self::IopType as IOP<F>>::Tree as IopTree<F> >::TreeHasher as IopTreeHasher<F>>::HashOutput >
-//     ) -> Result<bool, SynthesisError>;
-// }

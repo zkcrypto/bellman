@@ -31,6 +31,7 @@ pub struct StatelessTransparentCommitter<
     worker: Worker,
     precomputed_inverse_omegas: PrecomputedInvOmegas<F>,
     precomputed_bitreversed_omegas: BitReversedOmegas<F>,
+    fri_params: <FRI as FriIop<F>>::Params,
     _marker_fri: std::marker::PhantomData<FRI>,
     _marker_t: std::marker::PhantomData<T>
 }
@@ -45,11 +46,23 @@ impl<
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct TransparentCommitterParameters {
+#[derive(Debug)]
+pub struct TransparentCommitterParameters<F: PrimeField, FRI: FriIop<F>>{
     pub lde_factor: usize,
     pub num_queries: usize,
     pub output_coeffs_at_degree_plus_one: usize,
+    pub fri_params: <FRI as FriIop<F>>::Params,
+}
+
+impl<F: PrimeField, FRI: FriIop<F>> Clone for TransparentCommitterParameters<F, FRI> {
+    fn clone(&self) -> Self {
+        TransparentCommitterParameters::<F, FRI>{
+            lde_factor: self.lde_factor,
+            num_queries: self.num_queries,
+            output_coeffs_at_degree_plus_one: self.output_coeffs_at_degree_plus_one,
+            fri_params: self.fri_params.clone(),
+        }
+    }
 }
 
 use std::time::Instant;
@@ -62,7 +75,7 @@ impl<
     type Commitment = < < < <FRI as FriIop<F> >::IopType as IOP<F> >::Tree as IopTree<F> >::TreeHasher as IopTreeHasher<F>>::HashOutput;
     type OpeningProof = (FRI::Proof, Vec<Vec< (F, < < FRI as FriIop<F> >::IopType as IOP<F> >::Query) > >);
     type IntermediateData = (Polynomial<F, Values>, < FRI as FriIop<F> >::IopType);
-    type Meta = TransparentCommitterParameters;
+    type Meta = TransparentCommitterParameters<F, FRI>;
     type Prng = T;
 
     const REQUIRES_PRECOMPUTATION: bool = true;
@@ -87,6 +100,7 @@ impl<
             worker: worker,
             precomputed_inverse_omegas: omegas_inv_precomp,
             precomputed_bitreversed_omegas: omegas_bitrev_precomp,
+            fri_params: meta.fri_params,
             _marker_fri: std::marker::PhantomData,
             _marker_t: std::marker::PhantomData
         }
@@ -150,7 +164,8 @@ impl<
             self.output_coeffs_at_degree_plus_one, 
             &self.precomputed_inverse_omegas, 
             &self.worker, 
-            prng
+            prng,
+            &self.fri_params
         ).expect("FRI must succeed");
 
         for c in fri_proto.get_final_coefficients().iter() {
@@ -179,7 +194,7 @@ impl<
             }
         }
 
-        let q_poly_fri_proof = FRI::prototype_into_proof(fri_proto, &q_poly_lde, domain_indexes.clone()).expect("must generate a proper proof");
+        let q_poly_fri_proof = FRI::prototype_into_proof(fri_proto, &q_poly_lde, domain_indexes.clone(), &self.fri_params).expect("must generate a proper proof");
 
         let mut original_poly_queries = vec![];
 
@@ -278,7 +293,8 @@ impl<
             self.output_coeffs_at_degree_plus_one, 
             &self.precomputed_inverse_omegas, 
             &self.worker, 
-            prng
+            prng,
+            &self.fri_params
         ).expect("FRI must succeed");
 
         for c in fri_proto.get_final_coefficients().iter() {
@@ -307,7 +323,12 @@ impl<
             }
         }
 
-        let q_poly_fri_proof = FRI::prototype_into_proof(fri_proto, &q_poly_lde, domain_indexes.clone()).expect("must generate a proper proof");
+        let q_poly_fri_proof = FRI::prototype_into_proof(
+            fri_proto, 
+            &q_poly_lde, 
+            domain_indexes.clone(), 
+            &self.fri_params
+        ).expect("must generate a proper proof");
 
         let precomputations = if data.is_some() {
             None
@@ -370,7 +391,7 @@ impl<
 
         // first get FRI challenges
 
-        let fri_challenges = FRI::get_fri_challenges(q_poly_fri_proof, prng);
+        let fri_challenges = FRI::get_fri_challenges(q_poly_fri_proof, prng, &self.fri_params);
 
         for c in q_poly_fri_proof.get_final_coefficients().iter() {
             prng.commit_field_element(&c);
@@ -429,7 +450,13 @@ impl<
             simulated_q_poly_values.push(value_at_x);
         }
 
-        let valid = FRI::verify_proof_with_challenges(q_poly_fri_proof, domain_indexes, &simulated_q_poly_values, &fri_challenges).expect("fri verification should work");
+        let valid = FRI::verify_proof_with_challenges(
+            q_poly_fri_proof, 
+            domain_indexes, 
+            &simulated_q_poly_values, 
+            &fri_challenges,
+            &self.fri_params
+        ).expect("fri verification should work");
 
         valid
     }
@@ -450,7 +477,7 @@ impl<
 
         // first get FRI challenges
 
-        let fri_challenges = FRI::get_fri_challenges(q_poly_fri_proof, prng);
+        let fri_challenges = FRI::get_fri_challenges(q_poly_fri_proof, prng, &self.fri_params);
 
         for c in q_poly_fri_proof.get_final_coefficients().iter() {
             prng.commit_field_element(&c);
@@ -539,7 +566,13 @@ impl<
 
         // println!("Will open poly at indexes {:?} for simulated values {:?}", domain_indexes, simulated_q_poly_values);
 
-        let valid = FRI::verify_proof_with_challenges(q_poly_fri_proof, domain_indexes, &simulated_q_poly_values, &fri_challenges).expect("fri verification should work");
+        let valid = FRI::verify_proof_with_challenges(
+            q_poly_fri_proof, 
+            domain_indexes, 
+            &simulated_q_poly_values, 
+            &fri_challenges,
+            &self.fri_params
+        ).expect("fri verification should work");
 
         valid
     }

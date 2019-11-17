@@ -307,7 +307,7 @@ impl<F: PrimeField> IOP<F> for TrivialKeccakIOP<F> {
 
         TrivialKeccakIopQuery::<F> {
             index: natural_index,
-            value: value,
+            value: vec![value],
             path: path
         }
     }
@@ -324,7 +324,7 @@ impl<F: PrimeField> Eq for TrivialKeccakIOP<F> {}
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TrivialKeccakIopQuery<F: PrimeField> {
     index: usize,
-    value: F,
+    value: Vec<F>,
     path: Vec<[u8; 32]>,
 }
 
@@ -335,12 +335,20 @@ impl<F: PrimeField> IopQuery<F> for TrivialKeccakIopQuery<F> {
         self.index
     }
 
+    fn natural_indexes(&self) -> Vec<usize> {
+        vec![self.index]
+    }
+
     fn tree_index(&self) -> usize {
         self.index
     }
 
     fn value(&self) -> F {
-        self.value
+        self.value[0]
+    }
+
+    fn values(&self) -> &[F] {
+        &self.value
     }
 
     fn path(&self) ->  &[<Self::TreeHasher as IopTreeHasher<F>>::HashOutput] {
