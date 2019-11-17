@@ -4,6 +4,35 @@ use crate::plonk::domains::*;
 use crate::plonk::transparent_engine::PartialTwoBitReductionField;
 
 use super::CTPrecomputations;
+use super::log2_floor;
+
+pub(crate) fn best_ct_ntt_partial_reduction<F: PartialTwoBitReductionField, P: CTPrecomputations<F>>(
+    a: &mut [F], 
+    worker: &Worker, 
+    log_n: u32, 
+    use_cpus_hint: Option<usize>, 
+    precomputed_omegas: &P
+)
+{
+    let log_cpus = if let Some(hint) = use_cpus_hint {
+        assert!(hint <= worker.cpus);
+        let hint = if hint > 0 {
+            log2_floor(hint)
+        } else {
+            0
+        };
+
+        hint
+    } else {
+        worker.log_num_cpus()
+    };
+
+    if log_cpus == 0 || log_n <= log_cpus {
+        serial_ct_ntt_partial_reduction(a, log_n, precomputed_omegas);
+    } else {
+        parallel_ct_ntt_partial_reduction(a, worker, log_n, log_cpus, precomputed_omegas);
+    }
+}
 
 pub(crate) fn serial_ct_ntt_partial_reduction<F: PartialTwoBitReductionField, P: CTPrecomputations<F>>(
     a: &mut [F],

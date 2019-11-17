@@ -63,6 +63,22 @@ pub fn distribute_powers<F: PrimeField>(coeffs: &mut [F], worker: &Worker, g: F)
     });
 }
 
+pub fn distribute_powers_with_num_cpus<F: PrimeField>(coeffs: &mut [F], worker: &Worker, g: F, cpus: usize)
+{
+    let chunk = Worker::chunk_size_for_num_spawned_threads(coeffs.len(), cpus);
+    worker.scope(0, |scope, _| {
+        for (i, v) in coeffs.chunks_mut(chunk).enumerate() {
+            scope.spawn(move |_| {
+                let mut u = g.pow(&[(i * chunk) as u64]);
+                for v in v.iter_mut() {
+                    v.mul_assign(&u);
+                    u.mul_assign(&g);
+                }
+            });
+        }
+    });
+}
+
 pub fn distribute_powers_serial<F: PrimeField>(coeffs: &mut [F], g: F)
 {
     let mut u = F::one();

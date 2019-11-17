@@ -20,7 +20,8 @@ pub struct StatelessBlake2sPrng<F: PrimeField> {
 
 impl<F: PrimeField> StatelessBlake2sPrng<F> {
     const SHAVE_BITS: u32 = 256 - F::CAPACITY;
-    const REPR_SIZE: usize = std::mem::size_of::<F::Repr>();
+    // const REPR_SIZE: usize = std::mem::size_of::<F::Repr>();
+    const REPR_SIZE: usize = (((F::NUM_BITS as usize)/ 64) + 1) * 8;
 }
 
 impl<F: PrimeField> Prng<F> for StatelessBlake2sPrng<F> {

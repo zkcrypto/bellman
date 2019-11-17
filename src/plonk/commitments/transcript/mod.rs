@@ -34,7 +34,8 @@ pub struct Blake2sTranscript<F: PrimeField> {
 
 impl<F: PrimeField> Blake2sTranscript<F> {
     const SHAVE_BITS: u32 = 256 - F::CAPACITY;
-    const REPR_SIZE: usize = std::mem::size_of::<F::Repr>();
+    // const REPR_SIZE: usize = std::mem::size_of::<F::Repr>();
+    const REPR_SIZE: usize = (((F::NUM_BITS as usize)/ 64) + 1) * 8;
 }
 
 

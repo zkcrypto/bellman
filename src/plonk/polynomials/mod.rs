@@ -8,6 +8,9 @@ use crate::plonk::fft::with_precomputation::FftPrecomputations;
 
 use crate::plonk::fft::cooley_tukey_ntt;
 use crate::plonk::fft::cooley_tukey_ntt::CTPrecomputations;
+use crate::plonk::fft::cooley_tukey_ntt::partial_reduction;
+
+use crate::plonk::transparent_engine::PartialTwoBitReductionField;
 
 pub trait PolynomialForm: Sized + Copy + Clone {}
 
@@ -19,6 +22,8 @@ pub enum Values { }
 
 impl PolynomialForm for Coefficients {}
 impl PolynomialForm for Values{}
+
+// TODO: Enforce bitreversed values as a separate form
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Polynomial<F: PrimeField, P: PolynomialForm> {
@@ -404,7 +409,6 @@ impl<F: PrimeField> Polynomial<F, Coefficients> {
         // self.filtering_coset_lde(worker, factor)
     }
 
-
     pub fn filtering_lde(self, worker: &Worker, factor: usize) -> Result<Polynomial<F, Values>, SynthesisError> {
         debug_assert!(self.coeffs.len().is_power_of_two());
         
@@ -736,219 +740,186 @@ impl<F: PrimeField> Polynomial<F, Coefficients> {
     }
 
 
-    pub fn lde_using_bitreversed_ntt_no_allocations_lowest_bits_reversed<P: CTPrecomputations<F>>(
-        self, 
-        worker: &Worker, 
-        factor: usize,
-        precomputed_omegas: &P
-    ) -> Result<Polynomial<F, Values>, SynthesisError> {
-        debug_assert!(self.coeffs.len().is_power_of_two());
-        debug_assert_eq!(self.size(), precomputed_omegas.domain_size());
+    // pub fn lde_using_bitreversed_ntt_no_allocations_lowest_bits_reversed<P: CTPrecomputations<F>>(
+    //     self, 
+    //     worker: &Worker, 
+    //     factor: usize,
+    //     precomputed_omegas: &P
+    // ) -> Result<Polynomial<F, Values>, SynthesisError> {
+    //     debug_assert!(self.coeffs.len().is_power_of_two());
+    //     debug_assert_eq!(self.size(), precomputed_omegas.domain_size());
         
-        if factor == 1 {
-            return Ok(self.fft(&worker));
-        }
+    //     if factor == 1 {
+    //         return Ok(self.fft(&worker));
+    //     }
 
-        let num_cpus = worker.cpus;
-        let num_cpus_hint = if num_cpus <= factor {
-            Some(1)
-        } else {
-            let threads_per_coset = factor / num_cpus;
-            // let mut threads_per_coset = factor / num_cpus;
-            // if factor % num_cpus != 0 {
-            //     if (threads_per_coset + 1).is_power_of_two() {
-            //         threads_per_coset += 1;
-            //     }
-            // }
-            Some(threads_per_coset)
-        };
+    //     let num_cpus = worker.cpus;
+    //     let num_cpus_hint = if num_cpus <= factor {
+    //         Some(1)
+    //     } else {
+    //         let threads_per_coset = factor / num_cpus;
+    //         // let mut threads_per_coset = factor / num_cpus;
+    //         // if factor % num_cpus != 0 {
+    //         //     if (threads_per_coset + 1).is_power_of_two() {
+    //         //         threads_per_coset += 1;
+    //         //     }
+    //         // }
+    //         Some(threads_per_coset)
+    //     };
 
-        assert!(factor.is_power_of_two());
-        let current_size = self.coeffs.len();
-        let new_size = self.coeffs.len() * factor;
-        let domain = Domain::<F>::new_for_size(new_size as u64)?;
+    //     assert!(factor.is_power_of_two());
+    //     let current_size = self.coeffs.len();
+    //     let new_size = self.coeffs.len() * factor;
+    //     let domain = Domain::<F>::new_for_size(new_size as u64)?;
 
-        // let mut results = vec![self.coeffs.clone(); factor];
+    //     // let mut results = vec![self.coeffs.clone(); factor];
 
-        let mut result = Vec::with_capacity(new_size);
-        unsafe { result.set_len(new_size)};
+    //     let mut result = Vec::with_capacity(new_size);
+    //     unsafe { result.set_len(new_size)};
 
-        let r = &mut result[..] as *mut [F];
+    //     let r = &mut result[..] as *mut [F];
 
-        let coset_omega = domain.generator;
+    //     let coset_omega = domain.generator;
 
-        let log_n = self.exp;
+    //     let log_n = self.exp;
 
-        let range: Vec<usize> = (0..factor).collect();
+    //     let range: Vec<usize> = (0..factor).collect();
 
-        let self_coeffs_ref = &self.coeffs;
+    //     let self_coeffs_ref = &self.coeffs;
 
-        // copy
+    //     // copy
 
-        worker.scope(range.len(), |scope, chunk| {
-            for coset_idx in range.chunks(chunk) {
-                let r = unsafe {&mut *r};
-                scope.spawn(move |_| {
-                    for coset_idx in coset_idx.iter() {
-                        let start = current_size * coset_idx;
-                        let end = start + current_size;
-                        let copy_start_pointer: *mut F = r[start..end].as_mut_ptr();
+    //     worker.scope(range.len(), |scope, chunk| {
+    //         for coset_idx in range.chunks(chunk) {
+    //             let r = unsafe {&mut *r};
+    //             scope.spawn(move |_| {
+    //                 for coset_idx in coset_idx.iter() {
+    //                     let start = current_size * coset_idx;
+    //                     let end = start + current_size;
+    //                     let copy_start_pointer: *mut F = r[start..end].as_mut_ptr();
                         
-                        unsafe { std::ptr::copy_nonoverlapping(self_coeffs_ref.as_ptr(), copy_start_pointer, current_size) };
-                    }
-                });
-            }
-        });
+    //                     unsafe { std::ptr::copy_nonoverlapping(self_coeffs_ref.as_ptr(), copy_start_pointer, current_size) };
+    //                 }
+    //             });
+    //         }
+    //     });
 
-        // let mut coset_generator = F::one();
-        // for _ in 0..factor {
-        //     result.extend_from_slice(&self.coeffs);
-        //     // if coset_idx != 0 {
-        //     //     let start = coset_idx * current_size;
-        //     //     let end = start + current_size;
-        //     //     distribute_powers(&mut result[start..end], &worker, coset_generator);
-        //     //     // cooley_tukey_ntt::best_ct_ntt(&mut result[start..end], &worker, log_n, Some(log_num_cpus as usize), precomputed_omegas);
-        //     // }
-        //     // coset_generator.mul_assign(&coset_omega);
-        // }
-        // println!("Copying taken {:?}", start.elapsed());
-
-
-
-        // for coset_idx in 0..factor {
-        //     result.extend_from_slice(&self.coeffs);
-        //     if coset_idx != 0 {
-        //         let start = coset_idx * current_size;
-        //         let end = start + current_size;
-        //         distribute_powers(&mut result[start..end], &worker, coset_generator);
-        //     }
-        //     coset_generator.mul_assign(&coset_omega);
-        // }
-
-        // for r in results.iter_mut().skip(1) {
-        //     let mut coset_generator = coset_omega;
-        //     distribute_powers(&mut r[..], &worker, coset_generator);
-        //     coset_generator.mul_assign(&coset_omega);
-        // }
-
-        // let start = Instant::now();
-
-        let to_spawn = worker.cpus;
-
-        let chunk = Worker::chunk_size_for_num_spawned_threads(factor, to_spawn);
-
-        worker.scope(0, |scope, _| {
-            for thread_id in 0..to_spawn {
-                let r = unsafe {&mut *r};
-                scope.spawn(move |_| {
-                    let start = thread_id * chunk;
-                    let end = if start + chunk <= factor {
-                        start + chunk
-                    } else {
-                        factor
-                    };
-                    let mut gen_power = start;
-                    let mut coset_generator = coset_omega.pow(&[start as u64]);
-                    for i in start..end {
-                        let from = current_size * i;
-                        let to = from + current_size;
-                        if gen_power != 0 {
-                            distribute_powers_serial(&mut r[from..to], coset_generator);
-                        }
-                        cooley_tukey_ntt::best_ct_ntt(&mut r[from..to], &worker, log_n, num_cpus_hint, precomputed_omegas);
-                        coset_generator.mul_assign(&coset_omega);
-                        gen_power += 1;
-                    }
-                });
-            }
-        });
-
-        // println!("NTT taken {:?}", start.elapsed());
-
-        // let start = Instant::now();
-
-        // let mut final_values = vec![F::zero(); new_size];
-
-        // println!("Allocation of result taken {:?}", start.elapsed());
-
-        // let results_ref = &results;
-
-        // copy here is more complicated: to have the value in a natural order
-        // one has to use coset_idx to address the result element
-        // and use bit-reversed lookup for an element index
-
-        // let log_n = log_n as usize;
-
-        // let start = Instant::now();
-
-        // let total_len = result.len();
-
-        // let chunk = Worker::chunk_size_for_num_spawned_threads(total_len, to_spawn);
-
-        // let lower_bits_mask = (1 << log_n) - 1;
-
-        // let higher_bits_mask = !lower_bits_mask;
+    //     // let mut coset_generator = F::one();
+    //     // for _ in 0..factor {
+    //     //     result.extend_from_slice(&self.coeffs);
+    //     //     // if coset_idx != 0 {
+    //     //     //     let start = coset_idx * current_size;
+    //     //     //     let end = start + current_size;
+    //     //     //     distribute_powers(&mut result[start..end], &worker, coset_generator);
+    //     //     //     // cooley_tukey_ntt::best_ct_ntt(&mut result[start..end], &worker, log_n, Some(log_num_cpus as usize), precomputed_omegas);
+    //     //     // }
+    //     //     // coset_generator.mul_assign(&coset_omega);
+    //     // }
+    //     // println!("Copying taken {:?}", start.elapsed());
 
 
-        // worker.scope(0, |scope, _| {
-        //     for thread_id in 0..to_spawn {
-        //         let r = unsafe {&mut *r};
-        //         scope.spawn(move |_| {
-        //             let start = thread_id * chunk;
-        //             let end = if start + chunk <= total_len {
-        //                 start + chunk
-        //             } else {
-        //                 total_len
-        //             };
-        //             for j in start..end {
-        //                 let element_idx = j & lower_bits_mask;
-        //                 let coset_mask = j & higher_bits_mask;
-        //                 let rj = cooley_tukey_ntt::bitreverse(element_idx, log_n) | coset_mask;
-        //                 if j < rj {
-        //                     r.swap(j, rj);
-        //                 }  
-        //             }
-        //         });
-        //     }
-        // });
 
-        // println!("Final copying taken {:?}", start.elapsed());
+    //     // for coset_idx in 0..factor {
+    //     //     result.extend_from_slice(&self.coeffs);
+    //     //     if coset_idx != 0 {
+    //     //         let start = coset_idx * current_size;
+    //     //         let end = start + current_size;
+    //     //         distribute_powers(&mut result[start..end], &worker, coset_generator);
+    //     //     }
+    //     //     coset_generator.mul_assign(&coset_omega);
+    //     // }
 
-        Polynomial::from_values(result)
-    }
+    //     // for r in results.iter_mut().skip(1) {
+    //     //     let mut coset_generator = coset_omega;
+    //     //     distribute_powers(&mut r[..], &worker, coset_generator);
+    //     //     coset_generator.mul_assign(&coset_omega);
+    //     // }
 
-    pub fn bitreverse_enumeration(&mut self, worker: &Worker) {
-        let total_len = self.coeffs.len();
-        let log_n = self.exp as usize;
+    //     // let start = Instant::now();
 
-        let r = &mut self.coeffs[..] as *mut [F];
+    //     let to_spawn = worker.cpus;
 
-        let to_spawn = worker.cpus;
+    //     let chunk = Worker::chunk_size_for_num_spawned_threads(factor, to_spawn);
 
-        let chunk = Worker::chunk_size_for_num_spawned_threads(total_len, to_spawn);
+    //     worker.scope(0, |scope, _| {
+    //         for thread_id in 0..to_spawn {
+    //             let r = unsafe {&mut *r};
+    //             scope.spawn(move |_| {
+    //                 let start = thread_id * chunk;
+    //                 let end = if start + chunk <= factor {
+    //                     start + chunk
+    //                 } else {
+    //                     factor
+    //                 };
+    //                 let mut gen_power = start;
+    //                 let mut coset_generator = coset_omega.pow(&[start as u64]);
+    //                 for i in start..end {
+    //                     let from = current_size * i;
+    //                     let to = from + current_size;
+    //                     if gen_power != 0 {
+    //                         distribute_powers_serial(&mut r[from..to], coset_generator);
+    //                     }
+    //                     cooley_tukey_ntt::best_ct_ntt(&mut r[from..to], &worker, log_n, num_cpus_hint, precomputed_omegas);
+    //                     coset_generator.mul_assign(&coset_omega);
+    //                     gen_power += 1;
+    //                 }
+    //             });
+    //         }
+    //     });
 
-        // while it's unsafe we don't care cause swapping is always one to one
+    //     // println!("NTT taken {:?}", start.elapsed());
 
-        worker.scope(0, |scope, _| {
-            for thread_id in 0..to_spawn {
-                let r = unsafe {&mut *r};
-                scope.spawn(move |_| {
-                    let start = thread_id * chunk;
-                    let end = if start + chunk <= total_len {
-                        start + chunk
-                    } else {
-                        total_len
-                    };
-                    for j in start..end {
-                        let rj = cooley_tukey_ntt::bitreverse(j, log_n);
-                        if j < rj {
-                            r.swap(j, rj);
-                        }  
-                    }
-                });
-            }
-        });
-    }
+    //     // let start = Instant::now();
+
+    //     // let mut final_values = vec![F::zero(); new_size];
+
+    //     // println!("Allocation of result taken {:?}", start.elapsed());
+
+    //     // let results_ref = &results;
+
+    //     // copy here is more complicated: to have the value in a natural order
+    //     // one has to use coset_idx to address the result element
+    //     // and use bit-reversed lookup for an element index
+
+    //     // let log_n = log_n as usize;
+
+    //     // let start = Instant::now();
+
+    //     // let total_len = result.len();
+
+    //     // let chunk = Worker::chunk_size_for_num_spawned_threads(total_len, to_spawn);
+
+    //     // let lower_bits_mask = (1 << log_n) - 1;
+
+    //     // let higher_bits_mask = !lower_bits_mask;
+
+
+    //     // worker.scope(0, |scope, _| {
+    //     //     for thread_id in 0..to_spawn {
+    //     //         let r = unsafe {&mut *r};
+    //     //         scope.spawn(move |_| {
+    //     //             let start = thread_id * chunk;
+    //     //             let end = if start + chunk <= total_len {
+    //     //                 start + chunk
+    //     //             } else {
+    //     //                 total_len
+    //     //             };
+    //     //             for j in start..end {
+    //     //                 let element_idx = j & lower_bits_mask;
+    //     //                 let coset_mask = j & higher_bits_mask;
+    //     //                 let rj = cooley_tukey_ntt::bitreverse(element_idx, log_n) | coset_mask;
+    //     //                 if j < rj {
+    //     //                     r.swap(j, rj);
+    //     //                 }  
+    //     //             }
+    //     //         });
+    //     //     }
+    //     // });
+
+    //     // println!("Final copying taken {:?}", start.elapsed());
+
+    //     Polynomial::from_values(result)
+    // }
 
     pub fn coset_filtering_lde(mut self, worker: &Worker, factor: usize) -> Result<Polynomial<F, Values>, SynthesisError> {
         debug_assert!(self.coeffs.len().is_power_of_two());
@@ -1235,6 +1206,75 @@ impl<F: PrimeField> Polynomial<F, Values> {
             minv: F::from_str(&format!("{}", m)).unwrap().inverse().unwrap(),
             _marker: std::marker::PhantomData
         })
+    }
+
+    pub fn bitreverse_enumeration(&mut self, worker: &Worker) {
+        let total_len = self.coeffs.len();
+        let log_n = self.exp as usize;
+
+        let r = &mut self.coeffs[..] as *mut [F];
+
+        let to_spawn = worker.cpus;
+
+        let chunk = Worker::chunk_size_for_num_spawned_threads(total_len, to_spawn);
+
+        // while it's unsafe we don't care cause swapping is always one to one
+
+        worker.scope(0, |scope, _| {
+            for thread_id in 0..to_spawn {
+                let r = unsafe {&mut *r};
+                scope.spawn(move |_| {
+                    let start = thread_id * chunk;
+                    let end = if start + chunk <= total_len {
+                        start + chunk
+                    } else {
+                        total_len
+                    };
+                    for j in start..end {
+                        let rj = cooley_tukey_ntt::bitreverse(j, log_n);
+                        if j < rj {
+                            r.swap(j, rj);
+                        }  
+                    }
+                });
+            }
+        });
+    }
+
+    // this function should only be used on the values that are bitreverse enumerated
+    pub fn clone_subset_assuming_bitreversed<P: CTPrecomputations<F>>(
+        &self, 
+        subset_factor: usize,
+    ) -> Result<Polynomial<F, Values>, SynthesisError> {
+        assert!(subset_factor.is_power_of_two());
+        
+        if factor == 1 {
+            return self.clone();
+        }
+
+        let num_cpus = worker.cpus;
+
+        assert!(factor.is_power_of_two());
+        let current_size = self.coeffs.len();
+        let new_size = current_size / subset_factor;
+        let domain = Domain::<F>::new_for_size(new_size as u64)?;
+
+        let mut result = Vec::with_capacity(new_size);
+        unsafe { result.set_len(new_size)};
+
+        // copy elements. If factor is 2 then non-reversed we would output only elements that are == 0 mod 2
+        // If factor is 2 and we are bit-reversed - we need to only output first half of the coefficients
+        // If factor is 4 then we need to output only the first 4th part
+        // if factor is 8 - only the first 8th part
+
+        let start = 0;
+        let end = new_size;
+        let copy_to_start_pointer: *mut F = r[..].as_mut_ptr();
+        let copy_from_start_pointer: *const F = self.coeffs[start..end].as_ptr();
+                        
+        unsafe { std::ptr::copy_nonoverlapping(copy_from_start_pointer, copy_to_start_pointer, new_size) };
+
+        Polynomial::from_values(result)
     }
 
     pub fn pow(&mut self, worker: &Worker, exp: u64)
@@ -1558,5 +1598,110 @@ impl<F: PrimeField> Polynomial<F, Values> {
         });
 
         Ok(())
+    }
+}
+
+
+impl<F: PartialTwoBitReductionField> Polynomial<F, Coefficients> {
+    pub fn bitreversed_lde_using_bitreversed_ntt<P: CTPrecomputations<F>>(
+        self, 
+        worker: &Worker, 
+        factor: usize,
+        precomputed_omegas: &P,
+        coset_factor: &F
+    ) -> Result<Polynomial<F, Values>, SynthesisError> {
+        debug_assert!(self.coeffs.len().is_power_of_two());
+        debug_assert_eq!(self.size(), precomputed_omegas.domain_size());
+        
+        if factor == 1 {
+            return Ok(self.fft(&worker));
+        }
+
+        let num_cpus = worker.cpus;
+        let num_cpus_hint = if num_cpus <= factor {
+            Some(1)
+        } else {
+            let threads_per_coset = factor / num_cpus;
+            // let mut threads_per_coset = factor / num_cpus;
+            // if factor % num_cpus != 0 {
+            //     if (threads_per_coset + 1).is_power_of_two() {
+            //         threads_per_coset += 1;
+            //     }
+            // }
+            Some(threads_per_coset)
+        };
+
+        assert!(factor.is_power_of_two());
+        let current_size = self.coeffs.len();
+        let new_size = self.coeffs.len() * factor;
+        let domain = Domain::<F>::new_for_size(new_size as u64)?;
+
+        // let mut results = vec![self.coeffs.clone(); factor];
+
+        let mut result = Vec::with_capacity(new_size);
+        unsafe { result.set_len(new_size)};
+
+        let r = &mut result[..] as *mut [F];
+
+        let coset_omega = domain.generator;
+
+        let log_n = self.exp;
+
+        let range: Vec<usize> = (0..factor).collect();
+
+        let self_coeffs_ref = &self.coeffs;
+
+        // copy
+
+        worker.scope(range.len(), |scope, chunk| {
+            for coset_idx in range.chunks(chunk) {
+                let r = unsafe {&mut *r};
+                scope.spawn(move |_| {
+                    for coset_idx in coset_idx.iter() {
+                        let start = current_size * coset_idx;
+                        let end = start + current_size;
+                        let copy_start_pointer: *mut F = r[start..end].as_mut_ptr();
+                        
+                        unsafe { std::ptr::copy_nonoverlapping(self_coeffs_ref.as_ptr(), copy_start_pointer, current_size) };
+                    }
+                });
+            }
+        });
+
+        let to_spawn = factor;
+        let coset_size = current_size;
+
+        use crate::plonk::commitments::transparent::utils::log2_floor;
+
+        let factor_log = log2_floor(factor) as usize;
+
+        let chunk = Worker::chunk_size_for_num_spawned_threads(factor, to_spawn);
+
+        // Each coset will produce values at specific indexes only, e.g
+        // coset factor of omega^0 = 1 will produce elements that are only at places == 0 mod 16
+        // coset factor of omega^1 will produce elements that are only at places == 1 mod 16
+        // etc. We expect the output to be bitreversed, so 
+        // elements for coset factor of omega^0 = 1 will need to be placed first (00 top bits, bitreversed 00)
+        // elements for coset factor of omega^1 will need to be placed after the first half (10 top bits, bitreversed 01)
+
+        worker.scope(0, |scope, _| {
+            for coset_idx in 0..to_spawn {
+                let r = unsafe {&mut *r};
+                scope.spawn(move |_| {
+                    let from = coset_size * coset_idx;
+                    let to = from + coset_size;
+                    let one = F::one();
+                    let bitreversed_power = cooley_tukey_ntt::bitreverse(coset_idx, factor_log); 
+                    let mut coset_generator = coset_omega.pow(&[bitreversed_power as u64]);
+                    coset_generator.mul_assign(&coset_factor);
+                    if coset_generator != one {
+                        distribute_powers_with_num_cpus(&mut r[from..to], &worker, coset_generator, num_cpus_hint.expect("is some"));
+                    }
+                    partial_reduction::best_ct_ntt_partial_reduction(&mut r[from..to], &worker, log_n, num_cpus_hint, precomputed_omegas);
+                });
+            }
+        });
+
+        Polynomial::from_values(result)
     }
 }
