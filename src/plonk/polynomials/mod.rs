@@ -917,6 +917,39 @@ impl<F: PrimeField> Polynomial<F, Coefficients> {
         Polynomial::from_values(result)
     }
 
+    pub fn bitreverse_enumeration(&mut self, worker: &Worker) {
+        let total_len = self.coeffs.len();
+        let log_n = self.exp as usize;
+
+        let r = &mut self.coeffs[..] as *mut [F];
+
+        let to_spawn = worker.cpus;
+
+        let chunk = Worker::chunk_size_for_num_spawned_threads(total_len, to_spawn);
+
+        // while it's unsafe we don't care cause swapping is always one to one
+
+        worker.scope(0, |scope, _| {
+            for thread_id in 0..to_spawn {
+                let r = unsafe {&mut *r};
+                scope.spawn(move |_| {
+                    let start = thread_id * chunk;
+                    let end = if start + chunk <= total_len {
+                        start + chunk
+                    } else {
+                        total_len
+                    };
+                    for j in start..end {
+                        let rj = cooley_tukey_ntt::bitreverse(j, log_n);
+                        if j < rj {
+                            r.swap(j, rj);
+                        }  
+                    }
+                });
+            }
+        });
+    }
+
     pub fn coset_filtering_lde(mut self, worker: &Worker, factor: usize) -> Result<Polynomial<F, Values>, SynthesisError> {
         debug_assert!(self.coeffs.len().is_power_of_two());
         

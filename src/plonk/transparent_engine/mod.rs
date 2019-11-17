@@ -10,6 +10,36 @@ mod impl_macro;
 #[PrimeFieldGenerator = "3"]
 pub struct Fr(FrRepr);
 
+pub trait PartialReductionField: PrimeField {
+    /// Adds another element by this element without reduction.
+    fn add_assign_unreduced(&mut self, other: &Self);
+
+    /// Subtracts another element by this element without reduction.
+    fn sub_assign_unreduced(&mut self, other: &Self);
+
+    /// Multiplies another element by this element without reduction.
+    fn mul_assign_unreduced(&mut self, other: &Self);
+
+    /// Reduces this element.
+    fn reduce_once(&mut self);
+
+    /// Reduces this element by max of three moduluses.
+    fn reduce_completely(&mut self);
+
+    fn overflow_factor(&self) -> usize;
+}
+
+pub trait PartialTwoBitReductionField: PartialReductionField {
+    /// Subtracts another element by this element without reduction.
+    fn sub_assign_twice_unreduced(&mut self, other: &Self);
+
+    /// Reduces this element by two moduluses.
+    fn reduce_twice(&mut self);
+
+    /// Reduces this element by max of three moduluses.
+    fn reduce_completely(&mut self);
+}
+
 pub mod engine {
     use super::Fr;
 

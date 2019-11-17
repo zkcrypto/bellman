@@ -2,6 +2,8 @@ use crate::pairing::ff::PrimeField;
 use crate::multicore::*;
 use crate::plonk::domains::*;
 
+pub(crate) mod partial_reduction;
+
 pub trait CTPrecomputations<F: PrimeField>: Send + Sync {
     fn new_for_domain_size(size: usize) -> Self;
     fn bit_reversed_omegas(&self) -> &[F];

@@ -1,11 +1,15 @@
 use crate::ff::*;
+use super::{PartialReductionField, PartialTwoBitReductionField};
 
 #[derive(Copy, Clone, PartialEq, Eq, Default)]
 pub struct FrRepr(pub [u64; 4usize]);
 
 pub struct Fr(FrRepr);
 
-const MODULUS: FrRepr = FrRepr([1u64, 0u64, 0u64, 576460752303423505u64]);
+// const MODULUS: FrRepr = FrRepr([1u64, 0u64, 0u64, 576460752303423505u64]);
+
+const MODULUS: FrRepr = FrRepr([1u64, 0u64, 0u64, 0x0800_0000_0000_0011]);
+const MODULUS_TWICE: FrRepr = FrRepr([2u64, 0u64, 0u64, 0x1000_0000_0000_0022]);
 
 const MODULUS_BITS: u32 = 252u32;
 
@@ -276,7 +280,7 @@ impl crate::ff::PrimeFieldRepr for FrRepr {
 impl FrRepr {
     #[inline(always)]
     fn add_modulus_nocarry(&mut self) {
-        let mut carry = 1;
+        let mut carry = MODULUS.0[0usize];
         self.0[0] = add_carry(self.0[0], &mut carry);
         self.0[1] = add_carry(self.0[1], &mut carry);
         self.0[2] = add_carry(self.0[2], &mut carry);
@@ -286,7 +290,7 @@ impl FrRepr {
 
     #[inline(always)]
     fn sub_modulus_noborrow(&mut self) {
-        let mut borrow = 1;
+        let mut borrow = MODULUS.0[0usize];
         // sub one, so just sub borrow
         self.0[0] = sub_borrow(self.0[0], &mut borrow);
         // sub borrow
@@ -295,6 +299,29 @@ impl FrRepr {
         self.0[2] = sub_borrow(self.0[2], &mut borrow);
 
         self.0[3] = crate::ff::sbb(self.0[3], MODULUS.0[3usize], &mut borrow);
+    }
+
+    #[inline(always)]
+    fn add_modulus_twice_nocarry(&mut self) {
+        let mut carry = MODULUS_TWICE.0[0];
+        self.0[0] = add_carry(self.0[0], &mut carry);
+        self.0[1] = add_carry(self.0[1], &mut carry);
+        self.0[2] = add_carry(self.0[2], &mut carry);
+
+        self.0[3] = crate::ff::adc(self.0[3], MODULUS_TWICE.0[3usize], &mut carry);
+    }
+
+    #[inline(always)]
+    fn sub_modulus_twice_noborrow(&mut self) {
+        let mut borrow = MODULUS_TWICE.0[0];
+        // sub one, so just sub borrow
+        self.0[0] = sub_borrow(self.0[0], &mut borrow);
+        // sub borrow
+        self.0[1] = sub_borrow(self.0[1], &mut borrow);
+        // sub borrow
+        self.0[2] = sub_borrow(self.0[2], &mut borrow);
+
+        self.0[3] = crate::ff::sbb(self.0[3], MODULUS_TWICE.0[3usize], &mut borrow);
     }
 }
 
@@ -613,6 +640,11 @@ impl Fr {
     }
 
     #[inline(always)]
+    fn is_below_modulus_twice(&self) -> bool {
+        self.0 < MODULUS_TWICE
+    }
+
+    #[inline(always)]
     fn reduce(&mut self) {
         if !self.is_valid() {
             self.0.sub_modulus_noborrow();
@@ -621,7 +653,7 @@ impl Fr {
     }
 
     #[inline(always)]
-    fn mont_reduce(
+    fn mont_reduce_unreduced(
         &mut self,
         r0: u64,
         mut r1: u64,
@@ -671,6 +703,20 @@ impl Fr {
         (self.0).0[1usize] = r5;
         (self.0).0[2usize] = r6;
         (self.0).0[3usize] = r7;
+    }
+
+    #[inline(always)]
+    fn mont_reduce(&mut self,
+        r0: u64,
+        r1: u64,
+        r2: u64,
+        r3: u64,
+        r4: u64,
+        r5: u64,
+        r6: u64,
+        r7: u64,
+    ) {
+        self.mont_reduce_unreduced(r0, r1, r2, r3, r4, r5, r6, r7);
         self.reduce();
     }
 
@@ -736,5 +782,106 @@ impl crate::ff::SqrtField for Fr {
                 Some(r)
             }
         }
+    }
+}
+
+
+impl PartialReductionField for Fr {
+    #[inline(always)]
+    fn add_assign_unreduced(&mut self, other: &Fr) {
+        self.0.add_nocarry(&other.0);
+    }
+
+    #[inline(always)]
+    fn sub_assign_unreduced(&mut self, other: &Self) {
+        self.0.add_modulus_nocarry();
+        self.0.sub_noborrow(&other.0);
+    }
+
+    #[inline]
+    fn mul_assign_unreduced(&mut self, other: &Fr) {
+        let mut carry = 0;
+        let r0 =
+            crate::ff::mac_with_carry(0, (self.0).0[0usize], (other.0).0[0usize], &mut carry);
+        let r1 =
+            crate::ff::mac_with_carry(0, (self.0).0[0usize], (other.0).0[1usize], &mut carry);
+        let r2 =
+            crate::ff::mac_with_carry(0, (self.0).0[0usize], (other.0).0[2usize], &mut carry);
+        let r3 =
+            crate::ff::mac_with_carry(0, (self.0).0[0usize], (other.0).0[3usize], &mut carry);
+        let r4 = carry;
+        let mut carry = 0;
+        let r1 =
+            crate::ff::mac_with_carry(r1, (self.0).0[1usize], (other.0).0[0usize], &mut carry);
+        let r2 =
+            crate::ff::mac_with_carry(r2, (self.0).0[1usize], (other.0).0[1usize], &mut carry);
+        let r3 =
+            crate::ff::mac_with_carry(r3, (self.0).0[1usize], (other.0).0[2usize], &mut carry);
+        let r4 =
+            crate::ff::mac_with_carry(r4, (self.0).0[1usize], (other.0).0[3usize], &mut carry);
+        let r5 = carry;
+        let mut carry = 0;
+        let r2 =
+            crate::ff::mac_with_carry(r2, (self.0).0[2usize], (other.0).0[0usize], &mut carry);
+        let r3 =
+            crate::ff::mac_with_carry(r3, (self.0).0[2usize], (other.0).0[1usize], &mut carry);
+        let r4 =
+            crate::ff::mac_with_carry(r4, (self.0).0[2usize], (other.0).0[2usize], &mut carry);
+        let r5 =
+            crate::ff::mac_with_carry(r5, (self.0).0[2usize], (other.0).0[3usize], &mut carry);
+        let r6 = carry;
+        let mut carry = 0;
+        let r3 =
+            crate::ff::mac_with_carry(r3, (self.0).0[3usize], (other.0).0[0usize], &mut carry);
+        let r4 =
+            crate::ff::mac_with_carry(r4, (self.0).0[3usize], (other.0).0[1usize], &mut carry);
+        let r5 =
+            crate::ff::mac_with_carry(r5, (self.0).0[3usize], (other.0).0[2usize], &mut carry);
+        let r6 =
+            crate::ff::mac_with_carry(r6, (self.0).0[3usize], (other.0).0[3usize], &mut carry);
+        let r7 = carry;
+        self.mont_reduce_unreduced(r0, r1, r2, r3, r4, r5, r6, r7);
+    }
+
+    #[inline(always)]
+    fn reduce_once(&mut self) {
+        self.reduce();
+    }
+
+    #[inline(always)]
+    fn reduce_completely(&mut self) {
+        self.reduce_once();
+    }
+
+    fn overflow_factor(&self) -> usize {
+        let mut factor = 0usize;
+        let mut this = *self;
+        while !this.is_valid() {
+            this.0.sub_modulus_noborrow();
+            factor += 1;
+        }
+
+        factor
+    }
+}
+
+impl PartialTwoBitReductionField for Fr {
+    #[inline(always)]
+    fn sub_assign_twice_unreduced(&mut self, other: &Self) {
+        self.0.add_modulus_twice_nocarry();
+        self.0.sub_noborrow(&other.0);
+    }
+
+    #[inline(always)]
+    fn reduce_twice(&mut self) {
+        if !self.is_below_modulus_twice() {
+            self.0.sub_modulus_twice_noborrow();
+        }
+    }
+
+    #[inline(always)]
+    fn reduce_completely(&mut self) {
+        self.reduce_twice();
+        self.reduce_once();
     }
 }
