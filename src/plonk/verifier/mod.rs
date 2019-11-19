@@ -826,12 +826,14 @@ mod test {
             lde_factor: 16,
             num_queries: 2,
             output_coeffs_at_degree_plus_one: 1,
+            fri_params: ()
         };
 
         let meta_large = TransparentCommitterParameters {
             lde_factor: 16,
             num_queries: 2,
             output_coeffs_at_degree_plus_one: 1,
+            fri_params: ()
         };
 
         let circuit = TestCircuit::<Bn256> {
@@ -844,6 +846,7 @@ mod test {
             lde_factor: 16,
             num_queries: 2,
             output_coeffs_at_degree_plus_one: 1,
+            fri_params: ()
         };
 
         println!("Proving");
@@ -878,12 +881,14 @@ mod test {
             lde_factor: 16,
             num_queries: 2,
             output_coeffs_at_degree_plus_one: 1,
+            fri_params: ()
         };
 
         let meta_large = TransparentCommitterParameters {
             lde_factor: 16,
             num_queries: 2,
             output_coeffs_at_degree_plus_one: 1,
+            fri_params: ()
         };
 
         let circuit = InvalidTestCircuit::<Bn256> {
@@ -986,12 +991,14 @@ mod test {
             lde_factor: 16,
             num_queries: 10,
             output_coeffs_at_degree_plus_one: 16,
+            fri_params: ()
         };
 
         let meta_large = TransparentCommitterParameters {
             lde_factor: 16,
             num_queries: 10,
             output_coeffs_at_degree_plus_one: 16,
+            fri_params: ()
         };
 
         let circuit = BenchmarkCircuit::<Bn256> {
@@ -1022,6 +1029,7 @@ mod test {
             lde_factor: 16,
             num_queries: 10,
             output_coeffs_at_degree_plus_one: 16,
+            fri_params: ()
         };
 
         println!("Start proving");
@@ -1174,12 +1182,14 @@ mod test {
             lde_factor: 16,
             num_queries: 10,
             output_coeffs_at_degree_plus_one: 16,
+            fri_params: ()
         };
 
         let meta_large = TransparentCommitterParameters {
             lde_factor: 16,
             num_queries: 10,
             output_coeffs_at_degree_plus_one: 16,
+            fri_params: ()
         };
 
         let circuit = BenchmarkCircuit::<Transparent252> {
@@ -1210,6 +1220,7 @@ mod test {
             lde_factor: 16,
             num_queries: 10,
             output_coeffs_at_degree_plus_one: 16,
+            fri_params: ()
         };
 
         println!("Start proving");
@@ -1252,6 +1263,7 @@ mod test {
             lde_factor: 16,
             num_queries: 10,
             output_coeffs_at_degree_plus_one: 16,
+            fri_params: ()
         };
 
         let circuit = BenchmarkCircuit::<Transparent252> {

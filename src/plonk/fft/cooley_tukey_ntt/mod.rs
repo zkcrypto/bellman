@@ -96,7 +96,7 @@ impl<F: PrimeField> CTPrecomputations<F> for BitReversedOmegas<F>{
 }
 
 
-fn log2_floor(num: usize) -> u32 {
+pub(crate) fn log2_floor(num: usize) -> u32 {
     assert!(num > 0);
 
     let mut pow = 0;

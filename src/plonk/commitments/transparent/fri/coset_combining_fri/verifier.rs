@@ -9,9 +9,9 @@ use crate::plonk::commitments::transparent::utils::log2_floor;
 use super::fri::*;
 use super::super::*;
 
-impl<F: PrimeField, I: IOP<F>> CosetCombiningFriIop<F, I> {
+impl<F: PrimeField> CosetCombiningFriIop<F> {
     pub fn verify_prototype(
-        proof: & FRIProofPrototype<F, I>,
+        proof: & FRIProofPrototype<F, <Self as FriIop<F>>>,
         leaf_values: & Polynomial<F, Values>, 
         natural_element_index: usize
     ) -> Result<bool, SynthesisError> {

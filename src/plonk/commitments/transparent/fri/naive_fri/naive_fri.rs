@@ -47,7 +47,7 @@ impl<F: PrimeField, I: IOP<F> > FriIop<F> for NaiveFriIop<F, I> {
         prototype: Self::ProofPrototype,
         iop_values: &Polynomial<F, Values>,
         natural_first_element_indexes: Vec<usize>,
-        params: &Self::Params
+        _params: &Self::Params
     ) -> Result<Self::Proof, SynthesisError> {
         prototype.produce_proof(iop_values, natural_first_element_indexes)
     }
@@ -55,7 +55,7 @@ impl<F: PrimeField, I: IOP<F> > FriIop<F> for NaiveFriIop<F, I> {
     fn get_fri_challenges<P: Prng<F, Input = < < I::Tree as IopTree<F> >::TreeHasher as IopTreeHasher<F> >::HashOutput> >(
         proof: &Self::Proof,
         prng: &mut P,
-        params: &Self::Params
+        _params: &Self::Params
     ) -> Vec<F> {
         let mut fri_challenges = vec![];
 
@@ -76,7 +76,7 @@ impl<F: PrimeField, I: IOP<F> > FriIop<F> for NaiveFriIop<F, I> {
         natural_element_indexes: Vec<usize>,
         expected_value: &[F],
         fri_challenges: &[F],
-        params: &Self::Params
+        _params: &Self::Params
     ) -> Result<bool, SynthesisError> {
         Self::verify_proof_queries(proof, natural_element_indexes, Self::DEGREE, expected_value, fri_challenges)
     }

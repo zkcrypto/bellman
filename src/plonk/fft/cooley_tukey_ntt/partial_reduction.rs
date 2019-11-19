@@ -122,7 +122,7 @@ pub(crate) fn serial_ct_ntt_partial_reduction<F: PartialTwoBitReductionField, P:
 
     // here we should reduce completely
 
-    {
+    if num_groups < n {
         debug_assert!(num_groups > 1);
         for k in 0..num_groups {
             let idx_1 = k * pairs_per_group * 2;
@@ -366,7 +366,7 @@ pub(crate) fn parallel_ct_ntt_partial_reduction<F: PartialTwoBitReductionField, 
 
                 // if pairs per group << num cpus we use splitting in k,
                 // otherwise use splitting in indexes
-                {
+                if num_groups < n {
                     if num_groups >= to_spawn {
                         // for each k we start at k*pairs*2 and end on k*pairs*2 + pairs
                         // for k+1 we start at (k+1)*pairs*2 = k*pairs*2 + pairs*2

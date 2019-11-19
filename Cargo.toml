@@ -36,6 +36,8 @@ blake2-rfc = {version = "0.2.18", optional = true}
 blake2s_simd = {version = "0.5", optional = true}
 lazy_static = {version = "1", optional = true}
 
+blake2s_const = {version = "0.6", optional = true, path = "../blake2_simd/blake2s/"}
+
 [features]
 # default = ["multicore"]
 default = ["multicore", "plonk"]
@@ -44,6 +46,6 @@ default = ["multicore", "plonk"]
 multicore = ["futures-cpupool", "num_cpus", "crossbeam"]
 sonic = ["tiny-keccak", "blake2-rfc"]
 gm17 = []
-plonk = ["blake2s_simd", "lazy_static", "tiny-keccak"]
+plonk = ["blake2s_simd", "lazy_static", "tiny-keccak", "blake2s_const"]
 wasm = ["web-sys"]
 nightly = ["prefetch"]

@@ -7,6 +7,7 @@ use super::CommitmentScheme;
 pub mod precomputations;
 pub mod iop;
 pub mod fri;
+pub mod iop_compiler;
 
 pub mod utils;
 
@@ -663,6 +664,7 @@ mod test {
             lde_factor: 16,
             num_queries: 2,
             output_coeffs_at_degree_plus_one: 1,
+            fri_params: ()
         };
 
         let committer = <Committer as CommitmentScheme<Fr>>::new_for_size(SIZE, meta);
@@ -706,6 +708,7 @@ mod test {
             lde_factor: 16,
             num_queries: 6, // ~100 bits of security
             output_coeffs_at_degree_plus_one: 16,
+            fri_params: ()
         };
 
         let committer = <Committer as CommitmentScheme<Fr>>::new_for_size(SIZE, meta);

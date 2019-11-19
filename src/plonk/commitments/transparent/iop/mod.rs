@@ -35,15 +35,6 @@ pub trait FiatShamirHasher<F: PrimeField> {
     fn transform(value: &Self::Input) -> F;
 }
 
-// // potentially one can use a stateful transcript
-// pub trait TranscriptTransformer<F: PrimeField> {
-//     type Input;
-
-//     fn accumulate(&mut self, value: &Self::Input);
-
-//     fn get_challenge_scalar(&mut self) -> F;
-// }
-
 pub trait IopTreeHasher<F: PrimeField> {
     type HashOutput: HashFunctionOutput;
     type LeafEncoder: LeafEncoder<F>;

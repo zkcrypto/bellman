@@ -59,6 +59,44 @@ impl<F: PrimeField, P: PolynomialForm> Polynomial<F, P> {
         distribute_powers(&mut self.coeffs, &worker, g);
     }
 
+    pub fn reuse_allocation<PP: PolynomialForm> (&mut self, other: &Polynomial<F, PP>) {
+        assert!(self.coeffs.len() == other.coeffs.len());
+        self.coeffs.copy_from_slice(&other.coeffs);
+    }
+
+    pub fn bitreverse_enumeration(&mut self, worker: &Worker) {
+        let total_len = self.coeffs.len();
+        let log_n = self.exp as usize;
+
+        let r = &mut self.coeffs[..] as *mut [F];
+
+        let to_spawn = worker.cpus;
+
+        let chunk = Worker::chunk_size_for_num_spawned_threads(total_len, to_spawn);
+
+        // while it's unsafe we don't care cause swapping is always one to one
+
+        worker.scope(0, |scope, _| {
+            for thread_id in 0..to_spawn {
+                let r = unsafe {&mut *r};
+                scope.spawn(move |_| {
+                    let start = thread_id * chunk;
+                    let end = if start + chunk <= total_len {
+                        start + chunk
+                    } else {
+                        total_len
+                    };
+                    for j in start..end {
+                        let rj = cooley_tukey_ntt::bitreverse(j, log_n);
+                        if j < rj {
+                            r.swap(j, rj);
+                        }  
+                    }
+                });
+            }
+        });
+    }
+
     pub fn scale(&mut self, worker: &Worker, g: F)
     {
         worker.scope(self.coeffs.len(), |scope, chunk| {
@@ -1208,41 +1246,8 @@ impl<F: PrimeField> Polynomial<F, Values> {
         })
     }
 
-    pub fn bitreverse_enumeration(&mut self, worker: &Worker) {
-        let total_len = self.coeffs.len();
-        let log_n = self.exp as usize;
-
-        let r = &mut self.coeffs[..] as *mut [F];
-
-        let to_spawn = worker.cpus;
-
-        let chunk = Worker::chunk_size_for_num_spawned_threads(total_len, to_spawn);
-
-        // while it's unsafe we don't care cause swapping is always one to one
-
-        worker.scope(0, |scope, _| {
-            for thread_id in 0..to_spawn {
-                let r = unsafe {&mut *r};
-                scope.spawn(move |_| {
-                    let start = thread_id * chunk;
-                    let end = if start + chunk <= total_len {
-                        start + chunk
-                    } else {
-                        total_len
-                    };
-                    for j in start..end {
-                        let rj = cooley_tukey_ntt::bitreverse(j, log_n);
-                        if j < rj {
-                            r.swap(j, rj);
-                        }  
-                    }
-                });
-            }
-        });
-    }
-
     // this function should only be used on the values that are bitreverse enumerated
-    pub fn clone_subset_assuming_bitreversed<P: CTPrecomputations<F>>(
+    pub fn clone_subset_assuming_bitreversed(
         &self, 
         subset_factor: usize,
     ) -> Result<Polynomial<F, Values>, SynthesisError> {
@@ -1265,10 +1270,14 @@ impl<F: PrimeField> Polynomial<F, Values> {
 
         let start = 0;
         let end = new_size;
-        let copy_to_start_pointer: *mut F = result[..].as_mut_ptr();
-        let copy_from_start_pointer: *const F = self.coeffs[start..end].as_ptr();
+
+        result.copy_from_slice(&self.coeffs[start..end]);
+        
+        // unsafe { result.set_len(new_size)};
+        // let copy_to_start_pointer: *mut F = result[..].as_mut_ptr();
+        // let copy_from_start_pointer: *const F = self.coeffs[start..end].as_ptr();
                         
-        unsafe { std::ptr::copy_nonoverlapping(copy_from_start_pointer, copy_to_start_pointer, new_size) };
+        // unsafe { std::ptr::copy_nonoverlapping(copy_from_start_pointer, copy_to_start_pointer, new_size) };
 
         Polynomial::from_values(result)
     }
@@ -1340,14 +1349,16 @@ impl<F: PrimeField> Polynomial<F, Values> {
         res
     }
 
-    pub fn icoset_fft_for_generator(self, worker: &Worker, geninv: F) -> Polynomial<F, Coefficients>
+    pub fn icoset_fft_for_generator(self, worker: &Worker, coset_generator: &F) -> Polynomial<F, Coefficients>
     {
         debug_assert!(self.coeffs.len().is_power_of_two());
+        let geninv = coset_generator.inverse().expect("must exist");
         let mut res = self.ifft(worker);
         res.distribute_powers(worker, geninv);
 
         res
     }
+
 
     pub fn add_assign(&mut self, worker: &Worker, other: &Polynomial<F, Values>) {
         assert_eq!(self.coeffs.len(), other.coeffs.len());
@@ -1597,7 +1608,6 @@ impl<F: PrimeField> Polynomial<F, Values> {
     }
 }
 
-
 impl<F: PartialTwoBitReductionField> Polynomial<F, Coefficients> {
     pub fn bitreversed_lde_using_bitreversed_ntt<P: CTPrecomputations<F>>(
         self, 
@@ -1617,7 +1627,12 @@ impl<F: PartialTwoBitReductionField> Polynomial<F, Coefficients> {
         let num_cpus_hint = if num_cpus <= factor {
             Some(1)
         } else {
-            let threads_per_coset = factor / num_cpus;
+            let mut threads_per_coset = num_cpus / factor;
+            if threads_per_coset == 0 {
+                threads_per_coset = 1;
+            } else if num_cpus % factor != 0 {
+                threads_per_coset += 1;
+            }
             // let mut threads_per_coset = factor / num_cpus;
             // if factor % num_cpus != 0 {
             //     if (threads_per_coset + 1).is_power_of_two() {
@@ -1671,7 +1686,7 @@ impl<F: PartialTwoBitReductionField> Polynomial<F, Coefficients> {
 
         let factor_log = log2_floor(factor) as usize;
 
-        let chunk = Worker::chunk_size_for_num_spawned_threads(factor, to_spawn);
+        // let chunk = Worker::chunk_size_for_num_spawned_threads(factor, to_spawn);
 
         // Each coset will produce values at specific indexes only, e.g
         // coset factor of omega^0 = 1 will produce elements that are only at places == 0 mod 16
@@ -1699,5 +1714,42 @@ impl<F: PartialTwoBitReductionField> Polynomial<F, Coefficients> {
         });
 
         Polynomial::from_values(result)
+    }
+}
+
+impl<F: PartialTwoBitReductionField> Polynomial<F, Values> {
+    pub fn ifft_using_bitreversed_ntt<P: CTPrecomputations<F>>(
+        self, 
+        worker: &Worker, 
+        precomputed_omegas: &P,
+        coset_generator: &F
+    ) -> Result<Polynomial<F, Coefficients>, SynthesisError> {
+        let mut coeffs: Vec<_> = self.coeffs;
+        let exp = self.exp;
+        cooley_tukey_ntt::best_ct_ntt(&mut coeffs, worker, exp, Some(worker.cpus), precomputed_omegas);
+
+        let mut this = Polynomial::from_coeffs(coeffs)?;
+        
+        this.bitreverse_enumeration(&worker);
+
+        let geninv = coset_generator.inverse().expect("must exist");
+
+        worker.scope(this.coeffs.len(), |scope, chunk| {
+            let minv = this.minv;
+
+            for v in this.coeffs.chunks_mut(chunk) {
+                scope.spawn(move |_| {
+                    for v in v {
+                        v.mul_assign(&minv);
+                    }
+                });
+            }
+        });
+
+        if geninv != F::one() {
+            this.distribute_powers(&worker, geninv);
+        }
+
+        Ok(this)
     }
 }

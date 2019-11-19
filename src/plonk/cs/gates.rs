@@ -1,4 +1,4 @@
-use crate::pairing::ff::{Field};
+use crate::pairing::ff::{Field, PrimeField};
 use crate::pairing::{Engine};
 use std::ops::{Add, Sub, Neg};
 
@@ -45,14 +45,14 @@ pub enum Index {
     Aux(usize)
 }
 
-pub enum Coeff<E: Engine> {
+pub enum Coeff<F: PrimeField> {
     Zero,
     One,
     NegativeOne,
-    Full(E::Fr),
+    Full(F),
 }
 
-impl<E: Engine> std::fmt::Debug for Coeff<E> {
+impl<F: PrimeField> std::fmt::Debug for Coeff<F> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Coeff::Zero => {
@@ -71,11 +71,11 @@ impl<E: Engine> std::fmt::Debug for Coeff<E> {
     }
 }
 
-impl<E: Engine> Coeff<E> {
-    pub fn multiply(&self, with: &mut E::Fr) {
+impl<F: PrimeField> Coeff<F> {
+    pub fn multiply(&self, with: &mut F) {
         match self {
             Coeff::Zero => {
-                *with = E::Fr::zero();
+                *with = F::zero();
             },
             Coeff::One => {},
             Coeff::NegativeOne => {
@@ -87,31 +87,31 @@ impl<E: Engine> Coeff<E> {
         }
     }
 
-    pub fn new(coeff: E::Fr) -> Self {  
-        let mut negative_one = E::Fr::one();
+    pub fn new(coeff: F) -> Self {  
+        let mut negative_one = F::one();
         negative_one.negate();
 
         if coeff.is_zero() {
-            Coeff::<E>::Zero
-        } else if coeff == E::Fr::one() {
-            Coeff::<E>::One
+            Coeff::<F>::Zero
+        } else if coeff == F::one() {
+            Coeff::<F>::One
         } else if coeff == negative_one {
-            Coeff::<E>::NegativeOne
+            Coeff::<F>::NegativeOne
         } else {
-            Coeff::<E>::Full(coeff)
+            Coeff::<F>::Full(coeff)
         }
     }
 }
 
-impl<E: Engine> Copy for Coeff<E> {}
-impl<E: Engine> Clone for Coeff<E> {
+impl<F: PrimeField> Copy for Coeff<F> {}
+impl<F: PrimeField> Clone for Coeff<F> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<E: Engine> Neg for Coeff<E> {
-    type Output = Coeff<E>;
+impl<F: PrimeField> Neg for Coeff<F> {
+    type Output = Coeff<F>;
 
     fn neg(self) -> Self {
         match self {
@@ -127,18 +127,18 @@ impl<E: Engine> Neg for Coeff<E> {
 }
 
 #[derive(Copy, Clone)]
-pub struct Gate<E: Engine> {
+pub struct Gate<F: PrimeField> {
     a_wire: Variable,
     b_wire: Variable,
     c_wire: Variable,
-    pub(crate) q_l: Coeff<E>,
-    pub(crate) q_r: Coeff<E>,
-    pub(crate) q_o: Coeff<E>,
-    pub(crate) q_m: Coeff<E>,
-    pub(crate) q_c: Coeff<E>,
+    pub(crate) q_l: Coeff<F>,
+    pub(crate) q_r: Coeff<F>,
+    pub(crate) q_o: Coeff<F>,
+    pub(crate) q_m: Coeff<F>,
+    pub(crate) q_c: Coeff<F>,
 } 
 
-impl<E: Engine> std::fmt::Debug for Gate<E> {
+impl<F: PrimeField> std::fmt::Debug for Gate<F> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Gate A = {:?}, B = {:?}, C = {:?}, q_l = {:?}, q_r = {:?}, q_o = {:?}, q_m = {:?}, q_c = {:?}", 
         self.a_wire, self.b_wire, self.c_wire, self.q_l, self.q_r, self.q_o, self.q_m, self.q_c)
@@ -146,17 +146,17 @@ impl<E: Engine> std::fmt::Debug for Gate<E> {
     }
 }
 
-impl<E:Engine> Gate<E> {
+impl<F: PrimeField> Gate<F> {
     pub(crate) fn empty() -> Self {
         Self {
             a_wire: Variable(Index::Aux(0)),
             b_wire: Variable(Index::Aux(0)),
             c_wire: Variable(Index::Aux(0)),
-            q_l: Coeff::<E>::Zero,
-            q_r: Coeff::<E>::Zero,
-            q_o: Coeff::<E>::Zero,
-            q_m: Coeff::<E>::Zero,
-            q_c: Coeff::<E>::Zero,
+            q_l: Coeff::<F>::Zero,
+            q_r: Coeff::<F>::Zero,
+            q_o: Coeff::<F>::Zero,
+            q_m: Coeff::<F>::Zero,
+            q_c: Coeff::<F>::Zero,
         }
     }
 
@@ -178,11 +178,11 @@ impl<E:Engine> Gate<E> {
             a_wire: variables.0,
             b_wire: variables.1,
             c_wire: variables.2,
-            q_l: Coeff::<E>::Zero,
-            q_r: Coeff::<E>::Zero,
-            q_o: Coeff::<E>::NegativeOne,
-            q_m: Coeff::<E>::One,
-            q_c: Coeff::<E>::Zero,
+            q_l: Coeff::<F>::Zero,
+            q_r: Coeff::<F>::Zero,
+            q_o: Coeff::<F>::NegativeOne,
+            q_m: Coeff::<F>::One,
+            q_c: Coeff::<F>::Zero,
         }
     }
 
@@ -191,41 +191,41 @@ impl<E:Engine> Gate<E> {
             a_wire: variables.0,
             b_wire: variables.1,
             c_wire: variables.2,
-            q_l: Coeff::<E>::One,
-            q_r: Coeff::<E>::One,
-            q_o: Coeff::<E>::NegativeOne,
-            q_m: Coeff::<E>::Zero,
-            q_c: Coeff::<E>::Zero,
+            q_l: Coeff::<F>::One,
+            q_r: Coeff::<F>::One,
+            q_o: Coeff::<F>::NegativeOne,
+            q_m: Coeff::<F>::Zero,
+            q_c: Coeff::<F>::Zero,
         }
     }
 
-    pub(crate) fn new_lc_gate(variables: (Variable, Variable, Variable), coeffs: (E::Fr, E::Fr, E::Fr), constant: E::Fr) -> Self {
+    pub(crate) fn new_lc_gate(variables: (Variable, Variable, Variable), coeffs: (F, F, F), constant: F) -> Self {
         let (a_coeff, b_coeff, c_coeff) = coeffs;
         
         Self {
             a_wire: variables.0,
             b_wire: variables.1,
             c_wire: variables.2,
-            q_l: Coeff::<E>::Full(a_coeff),
-            q_r: Coeff::<E>::Full(b_coeff),
-            q_o: Coeff::<E>::Full(c_coeff),
-            q_m: Coeff::<E>::Zero,
-            q_c: Coeff::<E>::new(constant),
+            q_l: Coeff::<F>::Full(a_coeff),
+            q_r: Coeff::<F>::Full(b_coeff),
+            q_o: Coeff::<F>::Full(c_coeff),
+            q_m: Coeff::<F>::Zero,
+            q_c: Coeff::<F>::new(constant),
         }
     }
 
-    pub(crate) fn new_enforce_zero_gate(variables: (Variable, Variable, Variable), coeffs: (E::Fr, E::Fr, E::Fr)) -> Self {
+    pub(crate) fn new_enforce_zero_gate(variables: (Variable, Variable, Variable), coeffs: (F, F, F)) -> Self {
         let (a_coeff, b_coeff, c_coeff) = coeffs;
         
         Self {
             a_wire: variables.0,
             b_wire: variables.1,
             c_wire: variables.2,
-            q_l: Coeff::<E>::Full(a_coeff),
-            q_r: Coeff::<E>::Full(b_coeff),
-            q_o: Coeff::<E>::Full(c_coeff),
-            q_m: Coeff::<E>::Zero,
-            q_c: Coeff::<E>::Zero,
+            q_l: Coeff::<F>::Full(a_coeff),
+            q_r: Coeff::<F>::Full(b_coeff),
+            q_o: Coeff::<F>::Full(c_coeff),
+            q_m: Coeff::<F>::Zero,
+            q_c: Coeff::<F>::Zero,
         }
     }
 
@@ -235,11 +235,11 @@ impl<E:Engine> Gate<E> {
             a_wire: variable,
             b_wire: variable,
             c_wire: dummy_variable,
-            q_l: Coeff::<E>::NegativeOne,
-            q_r: Coeff::<E>::Zero,
-            q_o: Coeff::<E>::Zero,
-            q_m: Coeff::<E>::One,
-            q_c: Coeff::<E>::Zero,
+            q_l: Coeff::<F>::NegativeOne,
+            q_r: Coeff::<F>::Zero,
+            q_o: Coeff::<F>::Zero,
+            q_m: Coeff::<F>::One,
+            q_c: Coeff::<F>::Zero,
         }
     }
 
@@ -249,50 +249,50 @@ impl<E:Engine> Gate<E> {
             a_wire: dummy_variable,
             b_wire: dummy_variable,
             c_wire: dummy_variable,
-            q_l: Coeff::<E>::Zero,
-            q_r: Coeff::<E>::Zero,
-            q_o: Coeff::<E>::Zero,
-            q_m: Coeff::<E>::Zero,
-            q_c: Coeff::<E>::Zero,
+            q_l: Coeff::<F>::Zero,
+            q_r: Coeff::<F>::Zero,
+            q_o: Coeff::<F>::Zero,
+            q_m: Coeff::<F>::Zero,
+            q_c: Coeff::<F>::Zero,
         }
     }
 
-    pub(crate) fn new_enforce_constant_gate(variable: Variable, constant: Option<E::Fr>, dummy_variable: Variable) -> Self {
-        let mut negative_one = E::Fr::one();
+    pub(crate) fn new_enforce_constant_gate(variable: Variable, constant: Option<F>, dummy_variable: Variable) -> Self {
+        let mut negative_one = F::one();
         negative_one.negate();
 
         let q_c = if let Some(constant) = constant {
             let mut const_negated = constant;
             const_negated.negate();
             let coeff = if const_negated.is_zero() {
-                Coeff::<E>::Zero
-            } else if const_negated == E::Fr::one() {
-                Coeff::<E>::One
+                Coeff::<F>::Zero
+            } else if const_negated == F::one() {
+                Coeff::<F>::One
             } else if const_negated == negative_one {
-                Coeff::<E>::NegativeOne
+                Coeff::<F>::NegativeOne
             } else {
-                Coeff::<E>::Full(const_negated)
+                Coeff::<F>::Full(const_negated)
             };
 
             coeff
         } else {
-            Coeff::<E>::Zero
+            Coeff::<F>::Zero
         };
 
         Self {
             a_wire: variable,
             b_wire: dummy_variable,
             c_wire: dummy_variable,
-            q_l: Coeff::<E>::One,
-            q_r: Coeff::<E>::Zero,
-            q_o: Coeff::<E>::Zero,
-            q_m: Coeff::<E>::Zero,
+            q_l: Coeff::<F>::One,
+            q_r: Coeff::<F>::Zero,
+            q_o: Coeff::<F>::Zero,
+            q_m: Coeff::<F>::Zero,
             q_c: q_c,
         }
     }
 
     pub(crate) fn new_gate(variables: (Variable, Variable, Variable), 
-        coeffs: (E::Fr, E::Fr, E::Fr, E::Fr, E::Fr)) -> Self {
+        coeffs: (F, F, F, F, F)) -> Self {
         let (q_l, q_r, q_o, q_m, q_c) = coeffs;
 
         Self {
