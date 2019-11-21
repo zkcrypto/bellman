@@ -442,8 +442,10 @@ impl<E: Engine> GeneratorAssembly<E> {
         if self.is_finalized {
             return;
         }
+
         let n = self.input_gates.len() + self.aux_gates.len();
         if (n+1).is_power_of_two() {
+            self.is_finalized = true;
             return;
         }
 
@@ -452,6 +454,9 @@ impl<E: Engine> GeneratorAssembly<E> {
         let new_aux_len = (n+1).next_power_of_two() - 1 - self.input_gates.len();
 
         self.aux_gates.resize(new_aux_len, empty_gate);
+
+        let n = self.input_gates.len() + self.aux_gates.len();
+        assert!((n+1).is_power_of_two());
 
         self.is_finalized = true;
     }
@@ -469,7 +474,7 @@ use crate::plonk::commitments::transcript::*;
 
 pub fn setup_with_precomputations<E: Engine, C: Circuit<E>, CP: CTPrecomputations<E::Fr>, T: Transcript<E::Fr, Input = <FriSpecificBlake2sTree<E::Fr> as IopInstance<E::Fr>> :: Commitment> >(
     circuit: &C,
-    params: &RedshiftParameters,
+    params: &RedshiftParameters<E::Fr>,
     omegas_bitreversed: &CP,
     ) -> Result<(RedshiftSetup<E::Fr, FriSpecificBlake2sTree<E::Fr>>, RedshiftSetupPrecomputation<E::Fr, FriSpecificBlake2sTree<E::Fr>>), SynthesisError> 
         where E::Fr : PartialTwoBitReductionField 

@@ -500,6 +500,7 @@ impl<E: Engine> ProvingAssembly<E> {
         }
         let n = self.input_gates.len() + self.aux_gates.len();
         if (n+1).is_power_of_two() {
+            self.is_finalized = true;
             return;
         }
 
@@ -671,11 +672,11 @@ pub struct RedshiftSetupPrecomputation<F: PrimeField, I: IopInstance<F>>{
 }
 
 #[derive(Debug, Clone)]
-pub struct RedshiftParameters{
+pub struct RedshiftParameters<F: PrimeField>{
     pub lde_factor: usize,
     pub num_queries: usize,
     pub output_coeffs_at_degree_plus_one: usize,
-    pub coset_params: CosetParams,
+    pub coset_params: CosetParams<F>,
 }
 
 struct WitnessOpeningRequest<'a, F: PrimeField> {
@@ -696,7 +697,7 @@ impl<E: Engine> ProvingAssembly<E> where E::Fr : PartialTwoBitReductionField {
     pub(crate) fn commit_single_poly<CP: CTPrecomputations<E::Fr>>(
         poly: &Polynomial<E::Fr, Coefficients>, 
         omegas_bitreversed: &CP,
-        params: &RedshiftParameters,
+        params: &RedshiftParameters<E::Fr>,
         worker: &Worker
     ) -> Result<SinglePolyCommitmentData<E::Fr, FriSpecificBlake2sTree<E::Fr>>, SynthesisError> {
         let lde = poly.clone().bitreversed_lde_using_bitreversed_ntt(
@@ -754,7 +755,7 @@ impl<E: Engine> ProvingAssembly<E> where E::Fr : PartialTwoBitReductionField {
             witness_opening_requests: Vec<WitnessOpeningRequest<E::Fr>>,
             setup_opening_requests: Vec<SetupOpeningRequest<E::Fr>>,
             omegas_inv_bitreversed: &P,
-            params: &RedshiftParameters,
+            params: &RedshiftParameters<E::Fr>,
             worker: &Worker,
             transcript: &mut T
         ) -> Result<(), SynthesisError> {
@@ -899,7 +900,7 @@ impl<E: Engine> ProvingAssembly<E> where E::Fr : PartialTwoBitReductionField {
     fn prove_with_setup_precomputed<CP: CTPrecomputations<E::Fr>, CPI: CTPrecomputations<E::Fr>, FP: FriPrecomputations<E::Fr>, T: Transcript<E::Fr, Input = <FriSpecificBlake2sTree<E::Fr> as IopInstance<E::Fr>> :: Commitment> >(
         self,
         setup_precomp: &RedshiftSetupPrecomputation<E::Fr, FriSpecificBlake2sTree<E::Fr>>,
-        params: &RedshiftParameters,
+        params: &RedshiftParameters<E::Fr>,
         worker: &Worker,
         omegas_bitreversed: &CP,
         omegas_inv_bitreversed: &CPI,
@@ -921,6 +922,7 @@ impl<E: Engine> ProvingAssembly<E> where E::Fr : PartialTwoBitReductionField {
 
         let (w_l, w_r, w_o) = self.make_wire_assingments();
 
+        // these are 2^k - 1 size and explicitly unpadded
         let w_l = Polynomial::<E::Fr, Values>::from_values_unpadded(w_l)?;
         let w_r = Polynomial::<E::Fr, Values>::from_values_unpadded(w_r)?;
         let w_o = Polynomial::<E::Fr, Values>::from_values_unpadded(w_o)?;
@@ -955,7 +957,9 @@ impl<E: Engine> ProvingAssembly<E> where E::Fr : PartialTwoBitReductionField {
         let mut w_o_plus_gamma = w_o.clone();
         w_o_plus_gamma.add_constant(&worker, &gamma);
 
-        let mut z_1 = {
+        // we take A, B, C values and form (A + beta*i + gamma), etc and calculate their grand product
+
+        let z_1 = {
             let n = self.input_gates.len() + self.aux_gates.len();
             let s_id_1: Vec<_> = (1..=n).collect();
             let s_id_1 = convert_to_field_elements(&s_id_1, &worker);
@@ -995,7 +999,7 @@ impl<E: Engine> ProvingAssembly<E> where E::Fr : PartialTwoBitReductionField {
             Polynomial::<E::Fr, Values>::from_values(prepadded)?
         };
 
-        let mut z_2 = {
+        let z_2 = {
             let (sigma_1, sigma_2, sigma_3) = self.calculate_permutations_as_in_a_paper();
 
             let sigma_1 = convert_to_field_elements(&sigma_1, &worker);
@@ -1035,9 +1039,9 @@ impl<E: Engine> ProvingAssembly<E> where E::Fr : PartialTwoBitReductionField {
             z_2
         };
 
-        z_1.bitreverse_enumeration(&worker);
-        z_2.bitreverse_enumeration(&worker);
+        assert!(z_2.as_ref().last().expect("must exist") == z_1.as_ref().last().expect("must exist"));
 
+        // interpolate on the main domain
         let z_1 = z_1.ifft_using_bitreversed_ntt(&worker, omegas_inv_bitreversed, &E::Fr::one())?;
         let z_2 = z_2.ifft_using_bitreversed_ntt(&worker, omegas_inv_bitreversed, &E::Fr::one())?;
 
@@ -1058,6 +1062,9 @@ impl<E: Engine> ProvingAssembly<E> where E::Fr : PartialTwoBitReductionField {
         z_2_shifted.distribute_powers(&worker, z_2.omega);
 
         let partition_factor = params.lde_factor / 4;
+
+        assert!(partition_factor > 0);
+        assert!(partition_factor.is_power_of_two());
 
         let a_coset_lde_bitreversed = a_commitment_data.poly.clone_subset_assuming_bitreversed(partition_factor)?;
         let b_coset_lde_bitreversed = b_commitment_data.poly.clone_subset_assuming_bitreversed(partition_factor)?;
@@ -1122,7 +1129,24 @@ impl<E: Engine> ProvingAssembly<E> where E::Fr : PartialTwoBitReductionField {
 
         println!("1");
 
+        fn get_degree<F: PrimeField>(poly: &Polynomial<F, Coefficients>) -> usize {
+            let mut degree = poly.as_ref().len() - 1;
+            for c in poly.as_ref().iter().rev() {
+                if c.is_zero() {
+                    degree -= 1;
+                } else {
+                    break;
+                }
+            }
+    
+            println!("Degree = {}", degree);
+    
+            degree
+        }
+
         let z_1_coset_lde_bitreversed = z_1_commitment_data.poly.clone_subset_assuming_bitreversed(partition_factor)?;
+
+        assert!(z_1_coset_lde_bitreversed.size() == required_domain_size*4);
 
         let z_1_shifted_coset_lde_bitreversed = z_1_shifted.clone().bitreversed_lde_using_bitreversed_ntt(
             &worker, 
@@ -1131,7 +1155,11 @@ impl<E: Engine> ProvingAssembly<E> where E::Fr : PartialTwoBitReductionField {
             &E::Fr::multiplicative_generator()
         )?;
 
-        let z_2_coset_lde_bitreversed = z_1_commitment_data.poly.clone_subset_assuming_bitreversed(partition_factor)?;
+        assert!(z_1_shifted_coset_lde_bitreversed.size() == required_domain_size*4);
+
+        let z_2_coset_lde_bitreversed = z_2_commitment_data.poly.clone_subset_assuming_bitreversed(partition_factor)?;
+
+        assert!(z_2_coset_lde_bitreversed.size() == required_domain_size*4);
 
         let z_2_shifted_coset_lde_bitreversed = z_2_shifted.clone().bitreversed_lde_using_bitreversed_ntt(
             &worker, 
@@ -1140,6 +1168,9 @@ impl<E: Engine> ProvingAssembly<E> where E::Fr : PartialTwoBitReductionField {
             &E::Fr::multiplicative_generator()
         )?;
 
+        assert!(z_2_shifted_coset_lde_bitreversed.size() == required_domain_size*4);
+
+        // (A + beta*i + gamma)(B + beta(n+i) + gamma)(C + beta(2n+i) + gamma)*Z(k) = Z(k+1)
         {
             // TODO: May be optimize number of additions
             let mut contrib_z_1 = z_1_coset_lde_bitreversed.clone();
@@ -1281,6 +1312,8 @@ impl<E: Engine> ProvingAssembly<E> where E::Fr : PartialTwoBitReductionField {
 
         let t_poly = t_1.icoset_fft_for_generator(&worker, &E::Fr::multiplicative_generator());
 
+        debug_assert!(get_degree::<E::Fr>(&t_poly) <= 3*n);
+
         println!("End work with polynomials");
 
         let mut t_poly_parts = t_poly.break_into_multiples(required_domain_size)?;
@@ -1362,134 +1395,134 @@ impl<E: Engine> ProvingAssembly<E> where E::Fr : PartialTwoBitReductionField {
         let z_in_pow_of_domain_size = z.pow([required_domain_size as u64]);
 
         // this is a sanity check
-        // {
-        //     let mut t_1 = {
-        //         let mut res = q_c_at_z;
+        {
+            let mut t_1 = {
+                let mut res = q_c_at_z;
 
-        //         let mut tmp = q_l_at_z;
-        //         tmp.mul_assign(&a_at_z);
-        //         res.add_assign(&tmp);
+                let mut tmp = q_l_at_z;
+                tmp.mul_assign(&a_at_z);
+                res.add_assign(&tmp);
 
-        //         let mut tmp = q_r_at_z;
-        //         tmp.mul_assign(&b_at_z);
-        //         res.add_assign(&tmp);
+                let mut tmp = q_r_at_z;
+                tmp.mul_assign(&b_at_z);
+                res.add_assign(&tmp);
 
-        //         let mut tmp = q_o_at_z;
-        //         tmp.mul_assign(&c_at_z);
-        //         res.add_assign(&tmp);
+                let mut tmp = q_o_at_z;
+                tmp.mul_assign(&c_at_z);
+                res.add_assign(&tmp);
 
-        //         let mut tmp = q_m_at_z;
-        //         tmp.mul_assign(&a_at_z);
-        //         tmp.mul_assign(&b_at_z);
-        //         res.add_assign(&tmp);
+                let mut tmp = q_m_at_z;
+                tmp.mul_assign(&a_at_z);
+                tmp.mul_assign(&b_at_z);
+                res.add_assign(&tmp);
 
-        //         inverse_vanishing_at_z.mul_assign(&alpha);
+                inverse_vanishing_at_z.mul_assign(&alpha);
 
-        //         res.mul_assign(&inverse_vanishing_at_z);
+                res.mul_assign(&inverse_vanishing_at_z);
 
-        //         res
-        //     };
+                res
+            };
 
-        //     {
-        //         let mut res = z_1_at_z;
+            {
+                let mut res = z_1_at_z;
 
-        //         let mut tmp = s_id_at_z;
-        //         tmp.mul_assign(&beta);
-        //         tmp.add_assign(&a_at_z);
-        //         tmp.add_assign(&gamma);
-        //         res.mul_assign(&tmp);
+                let mut tmp = s_id_at_z;
+                tmp.mul_assign(&beta);
+                tmp.add_assign(&a_at_z);
+                tmp.add_assign(&gamma);
+                res.mul_assign(&tmp);
 
-        //         let mut tmp = s_id_at_z;
-        //         tmp.add_assign(&n_fe);
-        //         tmp.mul_assign(&beta);
-        //         tmp.add_assign(&b_at_z);
-        //         tmp.add_assign(&gamma);
-        //         res.mul_assign(&tmp);
+                let mut tmp = s_id_at_z;
+                tmp.add_assign(&n_fe);
+                tmp.mul_assign(&beta);
+                tmp.add_assign(&b_at_z);
+                tmp.add_assign(&gamma);
+                res.mul_assign(&tmp);
 
-        //         let mut tmp = s_id_at_z;
-        //         tmp.add_assign(&two_n_fe);
-        //         tmp.mul_assign(&beta);
-        //         tmp.add_assign(&c_at_z);
-        //         tmp.add_assign(&gamma);
-        //         res.mul_assign(&tmp);
+                let mut tmp = s_id_at_z;
+                tmp.add_assign(&two_n_fe);
+                tmp.mul_assign(&beta);
+                tmp.add_assign(&c_at_z);
+                tmp.add_assign(&gamma);
+                res.mul_assign(&tmp);
 
-        //         res.sub_assign(&z_1_shifted_at_z);
+                res.sub_assign(&z_1_shifted_at_z);
 
-        //         inverse_vanishing_at_z.mul_assign(&alpha);
+                inverse_vanishing_at_z.mul_assign(&alpha);
 
-        //         res.mul_assign(&inverse_vanishing_at_z);
+                res.mul_assign(&inverse_vanishing_at_z);
 
-        //         t_1.add_assign(&res);
-        //     }
+                t_1.add_assign(&res);
+            }
 
-        //     {
-        //         let mut res = z_2_at_z;
+            {
+                let mut res = z_2_at_z;
 
-        //         let mut tmp = sigma_1_at_z;
-        //         tmp.mul_assign(&beta);
-        //         tmp.add_assign(&a_at_z);
-        //         tmp.add_assign(&gamma);
-        //         res.mul_assign(&tmp);
+                let mut tmp = sigma_1_at_z;
+                tmp.mul_assign(&beta);
+                tmp.add_assign(&a_at_z);
+                tmp.add_assign(&gamma);
+                res.mul_assign(&tmp);
 
-        //         let mut tmp = sigma_2_at_z;
-        //         tmp.mul_assign(&beta);
-        //         tmp.add_assign(&b_at_z);
-        //         tmp.add_assign(&gamma);
-        //         res.mul_assign(&tmp);
+                let mut tmp = sigma_2_at_z;
+                tmp.mul_assign(&beta);
+                tmp.add_assign(&b_at_z);
+                tmp.add_assign(&gamma);
+                res.mul_assign(&tmp);
 
-        //         let mut tmp = sigma_3_at_z;
-        //         tmp.mul_assign(&beta);
-        //         tmp.add_assign(&c_at_z);
-        //         tmp.add_assign(&gamma);
-        //         res.mul_assign(&tmp);
+                let mut tmp = sigma_3_at_z;
+                tmp.mul_assign(&beta);
+                tmp.add_assign(&c_at_z);
+                tmp.add_assign(&gamma);
+                res.mul_assign(&tmp);
 
-        //         res.sub_assign(&z_2_shifted_at_z);
+                res.sub_assign(&z_2_shifted_at_z);
 
-        //         inverse_vanishing_at_z.mul_assign(&alpha);
+                inverse_vanishing_at_z.mul_assign(&alpha);
 
-        //         res.mul_assign(&inverse_vanishing_at_z);
+                res.mul_assign(&inverse_vanishing_at_z);
 
-        //         t_1.add_assign(&res);
-        //     }
+                t_1.add_assign(&res);
+            }
 
-        //     {
-        //         let mut res = z_1_shifted_at_z;
-        //         res.sub_assign(&z_2_shifted_at_z);
-        //         res.mul_assign(&l_n_minus_one_at_z);
+            {
+                let mut res = z_1_shifted_at_z;
+                res.sub_assign(&z_2_shifted_at_z);
+                res.mul_assign(&l_n_minus_one_at_z);
 
-        //         inverse_vanishing_at_z.mul_assign(&alpha);
+                inverse_vanishing_at_z.mul_assign(&alpha);
 
-        //         res.mul_assign(&inverse_vanishing_at_z);
+                res.mul_assign(&inverse_vanishing_at_z);
 
-        //         t_1.add_assign(&res);
-        //     }
+                t_1.add_assign(&res);
+            }
 
-        //     {
-        //         let mut res = z_1_at_z;
-        //         res.sub_assign(&z_2_at_z);
-        //         res.mul_assign(&l_0_at_z);
+            {
+                let mut res = z_1_at_z;
+                res.sub_assign(&z_2_at_z);
+                res.mul_assign(&l_0_at_z);
 
-        //         inverse_vanishing_at_z.mul_assign(&alpha);
+                inverse_vanishing_at_z.mul_assign(&alpha);
 
-        //         res.mul_assign(&inverse_vanishing_at_z);
+                res.mul_assign(&inverse_vanishing_at_z);
 
-        //         t_1.add_assign(&res);
-        //     }
+                t_1.add_assign(&res);
+            }
 
-        //     let mut t_at_z = E::Fr::zero();
-        //     t_at_z.add_assign(&t_low_at_z);
+            let mut t_at_z = E::Fr::zero();
+            t_at_z.add_assign(&t_low_at_z);
 
-        //     let mut tmp = z_in_pow_of_domain_size;
-        //     tmp.mul_assign(&t_mid_at_z);
-        //     t_at_z.add_assign(&tmp);
+            let mut tmp = z_in_pow_of_domain_size;
+            tmp.mul_assign(&t_mid_at_z);
+            t_at_z.add_assign(&tmp);
 
-        //     let mut tmp = z_in_pow_of_domain_size;
-        //     tmp.mul_assign(&z_in_pow_of_domain_size);
-        //     tmp.mul_assign(&t_high_at_z);
-        //     t_at_z.add_assign(&tmp);
+            let mut tmp = z_in_pow_of_domain_size;
+            tmp.mul_assign(&z_in_pow_of_domain_size);
+            tmp.mul_assign(&t_high_at_z);
+            t_at_z.add_assign(&tmp);
 
-        //     assert_eq!(t_at_z, t_1, "sanity check failed");
-        // }
+            assert_eq!(t_at_z, t_1, "sanity check failed");
+        }
 
         // we do NOT compute linearization polynomial for non-homomorphic case
 
@@ -1706,19 +1739,24 @@ mod test {
 
         use std::time::Instant;
 
+        const SIZE: usize = 10;
+
         let coset_params = CosetParams {
-            cosets_schedule: vec![3, 3, 3, 3, 3, 3, 2]
+            // cosets_schedule: vec![3, 3, 3, 3, 3, 3, 2],
+            cosets_schedule: vec![2, 2],
+            coset_factor: Fr::multiplicative_generator()
         };
 
         let params = RedshiftParameters {
             lde_factor: 16,
-            num_queries: 10,
+            num_queries: 4,
             output_coeffs_at_degree_plus_one: 1,
             coset_params: coset_params
         };
 
         let circuit = BenchmarkCircuit::<Transparent252> {
-            num_steps: 1_000_000,
+            // num_steps: 1_000_000,
+            num_steps: SIZE,
             _marker: std::marker::PhantomData
         };
 
@@ -1729,9 +1767,9 @@ mod test {
         use crate::plonk::commitments::transparent::iop_compiler::*;
         use crate::plonk::commitments::transparent::iop_compiler::coset_combining_blake2s_tree::*;
 
-        let omegas_bitreversed = BitReversedOmegas::<Fr>::new_for_domain_size((1_000_000 as usize).next_power_of_two());
-        let omegas_inv_bitreversed = <OmegasInvBitreversed::<Fr> as CTPrecomputations::<Fr>>::new_for_domain_size((1_000_000 as usize).next_power_of_two());
-        let omegas_inv_bitreversed_for_fri = <CosetOmegasInvBitreversed::<Fr> as FriPrecomputations::<Fr>>::new_for_domain_size((1_000_000 as usize).next_power_of_two() * 16);
+        let omegas_bitreversed = BitReversedOmegas::<Fr>::new_for_domain_size(SIZE.next_power_of_two());
+        let omegas_inv_bitreversed = <OmegasInvBitreversed::<Fr> as CTPrecomputations::<Fr>>::new_for_domain_size(SIZE.next_power_of_two());
+        let omegas_inv_bitreversed_for_fri = <CosetOmegasInvBitreversed::<Fr> as FriPrecomputations::<Fr>>::new_for_domain_size(SIZE.next_power_of_two() * 16);
 
         let (_, setup_precomp) = setup_with_precomputations::<Transparent252, _, _, Transcr>(
             &circuit,
@@ -1743,7 +1781,8 @@ mod test {
         circuit.synthesize(&mut prover).unwrap();
         prover.finalize();
 
-        let worker = Worker::new();
+        // let worker = Worker::new();
+        let worker = Worker::new_with_cpus(1);
 
         println!("Start proving");
 
@@ -1791,5 +1830,49 @@ mod test {
         // println!("Verification with unnecessary precomputation taken {:?}", start.elapsed());
 
         // assert!(valid);
+    }
+
+    #[test]
+    fn test_ifft_using_ntt() {
+        use rand::{XorShiftRng, SeedableRng, Rand, Rng};
+        use crate::plonk::fft::cooley_tukey_ntt::*;
+        use crate::plonk::commitments::transparent::fri::coset_combining_fri::*;
+        use crate::plonk::commitments::transparent::fri::coset_combining_fri::fri::*;
+        use crate::plonk::commitments::transparent::fri::coset_combining_fri::precomputation::*;
+        use crate::pairing::Engine;
+        use crate::ff::ScalarEngine;
+        use crate::plonk::transparent_engine::{TransparentEngine, PartialTwoBitReductionField};
+        use crate::plonk::transparent_engine::proth_engine::Transparent252;
+
+        use crate::multicore::*;
+        use crate::source::*;
+
+        type Fr = <Transparent252 as ScalarEngine>::Fr;
+
+        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+
+        let poly_sizes = vec![100, 1000, 10_000, 1_000_000];
+
+        let worker = Worker::new();
+
+        for poly_size in poly_sizes.clone().into_iter() {
+            let coeffs = (0..poly_size).map(|_| Fr::rand(rng)).collect::<Vec<_>>();
+            let poly = Polynomial::<Fr, _>::from_values(coeffs).unwrap();
+            let naive_result = poly.clone().icoset_fft_for_generator(&worker, &Fr::one());
+            let omegas_inv_bitreversed = <OmegasInvBitreversed::<Fr> as CTPrecomputations::<Fr>>::new_for_domain_size((poly_size as usize).next_power_of_two());
+            let ntt_result = poly.clone().ifft_using_bitreversed_ntt(&worker, &omegas_inv_bitreversed, &Fr::one()).unwrap();
+
+            assert!(naive_result == ntt_result);
+        }
+
+        for poly_size in poly_sizes.into_iter() {
+            let coeffs = (0..poly_size).map(|_| Fr::rand(rng)).collect::<Vec<_>>();
+            let poly = Polynomial::<Fr, _>::from_values(coeffs).unwrap();
+            let naive_result = poly.clone().icoset_fft_for_generator(&worker, &Fr::multiplicative_generator());
+            let omegas_inv_bitreversed = <OmegasInvBitreversed::<Fr> as CTPrecomputations::<Fr>>::new_for_domain_size((poly_size as usize).next_power_of_two());
+            let ntt_result = poly.clone().ifft_using_bitreversed_ntt(&worker, &omegas_inv_bitreversed, &Fr::multiplicative_generator()).unwrap();
+
+            assert!(naive_result == ntt_result);
+        }
     }
 }

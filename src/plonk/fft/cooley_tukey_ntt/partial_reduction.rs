@@ -190,7 +190,7 @@ pub(crate) fn parallel_ct_ntt_partial_reduction<F: PartialTwoBitReductionField, 
 
     let num_remaining_rounds = log_n as usize;
 
-    // TODO: later find a way to utilize all the cores in case of not power of twwo
+    // TODO: later find a way to utilize all the cores in case of not power of two
     let to_spawn = (1 << log_cpus) as usize;
 
     let mut barriers = Vec::with_capacity(num_remaining_rounds);

@@ -15,8 +15,9 @@ pub struct CosetCombiningFriIop<F: PrimeField> {
 }
 
 #[derive(Clone, Debug)]
-pub struct CosetParams {
-    pub cosets_schedule: Vec<usize>
+pub struct CosetParams<F: PrimeField> {
+    pub cosets_schedule: Vec<usize>,
+    pub coset_factor: F
 }
 
 impl<F: PrimeField> FriIop<F> for CosetCombiningFriIop<F> {
@@ -25,7 +26,7 @@ impl<F: PrimeField> FriIop<F> for CosetCombiningFriIop<F> {
     type IopType = FriSpecificBlake2sTree<F>;
     type ProofPrototype = FRIProofPrototype<F, Self::IopType>;
     type Proof = FRIProof<F, Self::IopType>;
-    type Params = CosetParams;
+    type Params = CosetParams<F>;
 
     fn proof_from_lde<P: Prng<F, Input = <Self::IopType as IopInstance<F>>::Commitment>,
         C: FriPrecomputations<F>
@@ -226,7 +227,6 @@ impl<F: PrimeField> CosetCombiningFriIop<F> {
         // step 1: fold totally by 4
         // etc...
 
-        let log_n = lde_values.exp as usize;
         let num_steps = params.cosets_schedule.len();
         
         for (fri_step, coset_factor) in params.cosets_schedule.iter().enumerate() {
@@ -356,7 +356,11 @@ impl<F: PrimeField> CosetCombiningFriIop<F> {
 
         let mut final_poly_values = Polynomial::from_values(values_slice.to_vec())?;
         final_poly_values.bitreverse_enumeration(&worker);
-        let final_poly_coeffs = final_poly_values.icoset_fft(&worker);
+        let final_poly_coeffs = if params.coset_factor == F::one() {
+            final_poly_values.icoset_fft(&worker)
+        } else {
+            final_poly_values.icoset_fft_for_generator(&worker, &params.coset_factor)
+        };
 
         let mut final_poly_coeffs = final_poly_coeffs.into_coeffs();
 
@@ -369,7 +373,7 @@ impl<F: PrimeField> CosetCombiningFriIop<F> {
             }
         }
 
-        // assert!(degree < output_coeffs_at_degree_plus_one, "polynomial degree is too large, coeffs = {:?}", final_poly_coeffs);
+        assert!(degree < output_coeffs_at_degree_plus_one, "polynomial degree is too large, coeffs = {:?}", final_poly_coeffs);
 
         final_poly_coeffs.truncate(output_coeffs_at_degree_plus_one);
 
@@ -421,13 +425,68 @@ mod test {
         let poly = Polynomial::<Fr, _>::from_coeffs(coeffs).unwrap();
         let precomp = BitReversedOmegas::<Fr>::new_for_domain_size(poly.size());
         let start = Instant::now();
-        let eval_result = poly.bitreversed_lde_using_bitreversed_ntt(&worker, 16, &precomp, &<Fr as Field>::one()).unwrap();
+        let coset_factor = Fr::multiplicative_generator();
+        let eval_result = poly.bitreversed_lde_using_bitreversed_ntt(&worker, 16, &precomp, &coset_factor).unwrap();
         println!("LDE with factor 16 for size {} bitreversed {:?}", SIZE, start.elapsed());
 
         let fri_precomp = <OmegasInvBitreversed::<Fr> as FriPrecomputations<Fr>>::new_for_domain_size(eval_result.size());
 
-        let params = CosetParams {
-            cosets_schedule: vec![3, 3, 3]
+        let params = CosetParams::<Fr> {
+            cosets_schedule: vec![3, 3, 3],
+            coset_factor: coset_factor
+        };
+
+        let fri_proto = CosetCombiningFriIop::<Fr>::proof_from_lde(
+            &eval_result, 
+            16, 
+            2, 
+            &fri_precomp, 
+            &worker, 
+            &mut transcript,
+            &params
+        ).expect("FRI must succeed");
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_invalid_eval_fri_with_coset_combining() {
+        use crate::ff::Field;
+        use crate::ff::PrimeField;
+        use rand::{XorShiftRng, SeedableRng, Rand, Rng};
+        use crate::plonk::transparent_engine::proth_engine::Fr;
+        use crate::plonk::transparent_engine::PartialTwoBitReductionField;
+        use crate::plonk::polynomials::*;
+        use std::time::Instant;
+        use crate::multicore::*;
+        use crate::plonk::commitments::transparent::utils::*;
+        use crate::plonk::fft::cooley_tukey_ntt::{CTPrecomputations, BitReversedOmegas};
+        use crate::plonk::commitments::transparent::fri::coset_combining_fri::FriPrecomputations;
+        use crate::plonk::commitments::transparent::fri::coset_combining_fri::fri::*;
+        use crate::plonk::commitments::transparent::fri::coset_combining_fri::precomputation::OmegasInvBitreversed;
+        use crate::plonk::commitments::transcript::*;
+
+        const SIZE: usize = 1024;
+
+        let mut transcript = Blake2sTranscript::<Fr>::new();
+
+        let worker = Worker::new_with_cpus(1);
+
+        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+        let coeffs = (0..SIZE).map(|_| Fr::rand(rng)).collect::<Vec<_>>();
+    
+        let poly = Polynomial::<Fr, _>::from_coeffs(coeffs).unwrap();
+        let precomp = BitReversedOmegas::<Fr>::new_for_domain_size(poly.size());
+        let start = Instant::now();
+        let coset_factor = Fr::multiplicative_generator();
+        let mut eval_result = poly.bitreversed_lde_using_bitreversed_ntt(&worker, 16, &precomp, &coset_factor).unwrap();
+        eval_result.as_mut()[1].sub_assign(&Fr::one());
+        println!("LDE with factor 16 for size {} bitreversed {:?}", SIZE, start.elapsed());
+
+        let fri_precomp = <OmegasInvBitreversed::<Fr> as FriPrecomputations<Fr>>::new_for_domain_size(eval_result.size());
+
+        let params = CosetParams::<Fr> {
+            cosets_schedule: vec![3, 3, 3],
+            coset_factor: coset_factor
         };
 
         let fri_proto = CosetCombiningFriIop::<Fr>::proof_from_lde(
