@@ -95,7 +95,7 @@ use std::time::Instant;
 
 #[derive(PartialEq, Eq, Clone)]
 pub struct FRIProofPrototype<F: PrimeField, I: IopInstance<F>> {
-    pub l0_commitment: I,
+    // pub l0_commitment: I,
     pub intermediate_commitments: Vec<I>,
     pub intermediate_values: Vec< Polynomial<F, Values> >,
     pub challenges: Vec<Vec<F>>,
@@ -109,7 +109,7 @@ pub struct FRIProofPrototype<F: PrimeField, I: IopInstance<F>> {
 impl<F: PrimeField, I: IopInstance<F>> FriProofPrototype<F, I> for FRIProofPrototype<F, I> {
     fn get_roots(&self) -> Vec<I::Commitment> {
         let mut roots = vec![];
-        roots.push(self.l0_commitment.get_commitment().clone());
+        // roots.push(self.l0_commitment.get_commitment().clone());
         for c in self.intermediate_commitments.iter() {
             roots.push(c.get_commitment().clone());
         }
@@ -177,9 +177,9 @@ impl<F: PrimeField> CosetCombiningFriIop<F> {
             values_per_leaf: (1 << coset_factor)
         };
 
-        let l0_commitment = FriSpecificBlake2sTree::create(lde_values.as_ref(), &tree_params);
-        let root = l0_commitment.get_commitment();
-        roots.push(root);
+        // let l0_commitment = FriSpecificBlake2sTree::create(lde_values.as_ref(), &tree_params);
+        // let root = l0_commitment.get_commitment();
+        // roots.push(root);
         let initial_domain_size = lde_values.size();
 
         assert_eq!(precomputations.domain_size(), initial_domain_size);
@@ -201,7 +201,7 @@ impl<F: PrimeField> CosetCombiningFriIop<F> {
         let mut challenges = vec![];
         let num_challenges = coset_factor;
         let mut next_domain_challenges = {
-            prng.commit_input(&l0_commitment.get_commitment());
+            // prng.commit_input(&l0_commitment.get_commitment());
             let mut challenges = vec![];
             for _ in 0..num_challenges {
                 challenges.push(prng.get_challenge());
@@ -328,7 +328,7 @@ impl<F: PrimeField> CosetCombiningFriIop<F> {
                 roots.push(root);
                 let num_challenges = coset_factor;
                 next_domain_challenges = {
-                    prng.commit_input(&l0_commitment.get_commitment());
+                    prng.commit_input(&intermediate_iop.get_commitment());
                     let mut challenges = vec![];
                     for _ in 0..num_challenges {
                         challenges.push(prng.get_challenge());
@@ -350,7 +350,7 @@ impl<F: PrimeField> CosetCombiningFriIop<F> {
         let final_root = roots.last().expect("will work").clone();
 
         assert_eq!(challenges.len(), num_steps);
-        assert_eq!(roots.len(), num_steps);
+        // assert_eq!(roots.len(), num_steps);
         assert_eq!(intermediate_commitments.len(), num_steps-1);
         assert_eq!(intermediate_values.len(), num_steps);
 
@@ -380,7 +380,7 @@ impl<F: PrimeField> CosetCombiningFriIop<F> {
         println!("Done FRI for degree {} in {:?}", lde_values.size()/lde_factor, start.elapsed());
 
         Ok(FRIProofPrototype {
-            l0_commitment,
+            // l0_commitment,
             intermediate_commitments,
             intermediate_values,
             challenges,
