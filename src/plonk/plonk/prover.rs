@@ -1671,7 +1671,7 @@ mod test {
         use crate::plonk::fft::cooley_tukey_ntt::*;
         use crate::plonk::commitments::transparent::fri::coset_combining_fri::precomputation::*;
 
-        let sizes: Vec<usize> = vec![(1 << 18) - 10, (1 << 19) - 10, (1 << 20) - 10, (1 << 21) - 10, (1 << 22) - 10, (1 << 23) - 10, (1 << 24) - 10];
+        let sizes: Vec<usize> = vec![(1 << 18) - 10, (1 << 19) - 10, (1 << 20) - 10, (1 << 21) - 10, (1 << 22) - 10, (1 << 23) - 10];
 
         let max_size = *sizes.last().unwrap();
 
@@ -1807,7 +1807,7 @@ mod test {
         use crate::plonk::fft::cooley_tukey_ntt::*;
         use crate::plonk::commitments::transparent::fri::coset_combining_fri::precomputation::*;
 
-        let sizes: Vec<usize> = vec![(1 << 18) - 10, (1 << 19) - 10, (1 << 20) - 10, (1 << 21) - 10, (1 << 22) - 10, (1 << 23) - 10, (1 << 24) - 10];
+        let sizes: Vec<usize> = vec![(1 << 18) - 10, (1 << 19) - 10, (1 << 20) - 10, (1 << 21) - 10, (1 << 22) - 10, (1 << 23) - 10];
 
         let max_size = *sizes.last().unwrap();
 
