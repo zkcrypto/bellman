@@ -1662,7 +1662,7 @@ mod test {
     }
 
     #[test]
-    fn test_bench_plonk_bls12_381() {
+    fn test_bench_plonk_bls12() {
         use crate::pairing::Engine;
         use crate::pairing::{CurveProjective, CurveAffine};
         use crate::pairing::bls12_381::{Bls12, Fr};
@@ -1675,27 +1675,20 @@ mod test {
 
         use std::time::Instant;
 
-        const SIZE: usize = 1_000_000;
-
-        let worker = Worker::new();
-
-        let circuit = BenchmarkCircuit::<Eng> {
-            // num_steps: 1_000_000,
-            num_steps: SIZE,
-            _marker: std::marker::PhantomData
-        };
-
         use crate::plonk::fft::cooley_tukey_ntt::*;
         use crate::plonk::commitments::transparent::fri::coset_combining_fri::precomputation::*;
 
-        let omegas_bitreversed = BitReversedOmegas::<Fr>::new_for_domain_size(SIZE.next_power_of_two());
-        let omegas_inv_bitreversed = <OmegasInvBitreversed::<Fr> as CTPrecomputations::<Fr>>::new_for_domain_size(SIZE.next_power_of_two());
+        let sizes: Vec<usize> = vec![(2 << 18) - 2, (2 << 19) - 2, (2 << 20) - 2, (2 << 21) - 2, (2 << 22) - 2, (2 << 23) - 2, (2 << 24) - 2];
+
+        let max_size = *sizes.last().unwrap();
+
+        let worker = Worker::new();
 
         println!("Making bases");
         let bases = {
             use crate::pairing::Wnaf;
             let tau = Fr::from_str("42").unwrap();
-            let powers_of_tau = vec![Fr::one(); SIZE.next_power_of_two()];
+            let powers_of_tau = vec![Fr::one(); max_size.next_power_of_two()];
             let mut powers_of_tau = Polynomial::<Fr, _>::from_coeffs(powers_of_tau).unwrap();
 
             powers_of_tau.distribute_powers(&worker, tau);
@@ -1705,9 +1698,9 @@ mod test {
             // Compute G1 window table
             let mut g1_wnaf = Wnaf::new();
             let g1 = <Eng as Engine>::G1::one();
-            let g1_wnaf = g1_wnaf.base(g1, SIZE.next_power_of_two());
+            let g1_wnaf = g1_wnaf.base(g1, max_size.next_power_of_two());
 
-            let mut bases = vec![g1; SIZE.next_power_of_two()];
+            let mut bases = vec![g1; max_size.next_power_of_two()];
 
             // Compute the H query with multiple threads
             worker.scope(bases.len(), |scope, chunk| {
@@ -1732,32 +1725,44 @@ mod test {
         };
         println!("Done making bases");
 
-        println!("Start setup and precomputations");
-        let (_, setup_precomp) = setup_with_precomputations::<Eng, _, _>(
-            &circuit,
-            &omegas_bitreversed,
-            &bases
-        ).unwrap();
+        for size in sizes.into_iter() {
 
-        let mut prover = ProvingAssembly::<Eng>::new();
-        circuit.synthesize(&mut prover).unwrap();
-        prover.finalize();
+            let circuit = BenchmarkCircuit::<Eng> {
+                // num_steps: 1_000_000,
+                num_steps: size,
+                _marker: std::marker::PhantomData
+            };
 
-        println!("End setup and precomputations");
+            let omegas_bitreversed = BitReversedOmegas::<Fr>::new_for_domain_size(size.next_power_of_two());
+            let omegas_inv_bitreversed = <OmegasInvBitreversed::<Fr> as CTPrecomputations::<Fr>>::new_for_domain_size(size.next_power_of_two());
 
-        println!("Start proving");
+            println!("Start setup and precomputations");
+            let (_, setup_precomp) = setup_with_precomputations::<Eng, _, _>(
+                &circuit,
+                &omegas_bitreversed,
+                &bases
+            ).unwrap();
 
-        let start = Instant::now();
+            let mut prover = ProvingAssembly::<Eng>::new();
+            circuit.synthesize(&mut prover).unwrap();
+            prover.finalize();
 
-        let _ = prover.prove_with_setup_precomputed::<_, _, Transcr>(
-            &setup_precomp, 
-            &worker, 
-            &omegas_bitreversed, 
-            &omegas_inv_bitreversed,
-            &bases
-        ).unwrap();
+            println!("End setup and precomputations");
 
-        println!("Proving taken {:?}", start.elapsed());
+            println!("Start proving");
+
+            let start = Instant::now();
+
+            let _ = prover.prove_with_setup_precomputed::<_, _, Transcr>(
+                &setup_precomp, 
+                &worker, 
+                &omegas_bitreversed, 
+                &omegas_inv_bitreversed,
+                &bases
+            ).unwrap();
+
+            println!("Proving taken {:?} for size {}", start.elapsed(), size);
+        }
 
 
         // {
@@ -1806,27 +1811,20 @@ mod test {
 
         use std::time::Instant;
 
-        const SIZE: usize = 1_000_000;
-
-        let worker = Worker::new();
-
-        let circuit = BenchmarkCircuit::<Eng> {
-            // num_steps: 1_000_000,
-            num_steps: SIZE,
-            _marker: std::marker::PhantomData
-        };
-
         use crate::plonk::fft::cooley_tukey_ntt::*;
         use crate::plonk::commitments::transparent::fri::coset_combining_fri::precomputation::*;
 
-        let omegas_bitreversed = BitReversedOmegas::<Fr>::new_for_domain_size(SIZE.next_power_of_two());
-        let omegas_inv_bitreversed = <OmegasInvBitreversed::<Fr> as CTPrecomputations::<Fr>>::new_for_domain_size(SIZE.next_power_of_two());
+        let sizes: Vec<usize> = vec![(2 << 18) - 2, (2 << 19) - 2, (2 << 20) - 2, (2 << 21) - 2, (2 << 22) - 2, (2 << 23) - 2, (2 << 24) - 2];
+
+        let max_size = *sizes.last().unwrap();
+
+        let worker = Worker::new();
 
         println!("Making bases");
         let bases = {
             use crate::pairing::Wnaf;
             let tau = Fr::from_str("42").unwrap();
-            let powers_of_tau = vec![Fr::one(); SIZE.next_power_of_two()];
+            let powers_of_tau = vec![Fr::one(); max_size.next_power_of_two()];
             let mut powers_of_tau = Polynomial::<Fr, _>::from_coeffs(powers_of_tau).unwrap();
 
             powers_of_tau.distribute_powers(&worker, tau);
@@ -1836,9 +1834,9 @@ mod test {
             // Compute G1 window table
             let mut g1_wnaf = Wnaf::new();
             let g1 = <Eng as Engine>::G1::one();
-            let g1_wnaf = g1_wnaf.base(g1, SIZE.next_power_of_two());
+            let g1_wnaf = g1_wnaf.base(g1, max_size.next_power_of_two());
 
-            let mut bases = vec![g1; SIZE.next_power_of_two()];
+            let mut bases = vec![g1; max_size.next_power_of_two()];
 
             // Compute the H query with multiple threads
             worker.scope(bases.len(), |scope, chunk| {
@@ -1863,32 +1861,44 @@ mod test {
         };
         println!("Done making bases");
 
-        println!("Start setup and precomputations");
-        let (_, setup_precomp) = setup_with_precomputations::<Eng, _, _>(
-            &circuit,
-            &omegas_bitreversed,
-            &bases
-        ).unwrap();
+        for size in sizes.into_iter() {
 
-        let mut prover = ProvingAssembly::<Eng>::new();
-        circuit.synthesize(&mut prover).unwrap();
-        prover.finalize();
+            let circuit = BenchmarkCircuit::<Eng> {
+                // num_steps: 1_000_000,
+                num_steps: size,
+                _marker: std::marker::PhantomData
+            };
 
-        println!("End setup and precomputations");
+            let omegas_bitreversed = BitReversedOmegas::<Fr>::new_for_domain_size(size.next_power_of_two());
+            let omegas_inv_bitreversed = <OmegasInvBitreversed::<Fr> as CTPrecomputations::<Fr>>::new_for_domain_size(size.next_power_of_two());
 
-        println!("Start proving");
+            println!("Start setup and precomputations");
+            let (_, setup_precomp) = setup_with_precomputations::<Eng, _, _>(
+                &circuit,
+                &omegas_bitreversed,
+                &bases
+            ).unwrap();
 
-        let start = Instant::now();
+            let mut prover = ProvingAssembly::<Eng>::new();
+            circuit.synthesize(&mut prover).unwrap();
+            prover.finalize();
 
-        let _ = prover.prove_with_setup_precomputed::<_, _, Transcr>(
-            &setup_precomp, 
-            &worker, 
-            &omegas_bitreversed, 
-            &omegas_inv_bitreversed,
-            &bases
-        ).unwrap();
+            println!("End setup and precomputations");
 
-        println!("Proving taken {:?}", start.elapsed());
+            println!("Start proving");
+
+            let start = Instant::now();
+
+            let _ = prover.prove_with_setup_precomputed::<_, _, Transcr>(
+                &setup_precomp, 
+                &worker, 
+                &omegas_bitreversed, 
+                &omegas_inv_bitreversed,
+                &bases
+            ).unwrap();
+
+            println!("Proving taken {:?} for size {}", start.elapsed(), size);
+        }
 
 
         // {

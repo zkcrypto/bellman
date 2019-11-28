@@ -908,8 +908,6 @@ impl<E: Engine> ProvingAssembly<E> where E::Fr : PartialTwoBitReductionField {
     ) -> Result<(), SynthesisError> {
         assert!(self.is_finalized);
 
-        let num_gates = self.num_gates();
-
         let mut transcript = T::new();
 
         let n = self.input_gates.len() + self.aux_gates.len();
@@ -917,8 +915,6 @@ impl<E: Engine> ProvingAssembly<E> where E::Fr : PartialTwoBitReductionField {
         // we need n+1 to be a power of two and can not have n to be power of two
         let required_domain_size = n + 1;
         assert!(required_domain_size.is_power_of_two());
-
-        println!("Start work with polynomials");
 
         let (w_l, w_r, w_o) = self.make_wire_assingments();
 
@@ -940,8 +936,6 @@ impl<E: Engine> ProvingAssembly<E> where E::Fr : PartialTwoBitReductionField {
         transcript.commit_input(&a_commitment_data.oracle.get_commitment());
         transcript.commit_input(&b_commitment_data.oracle.get_commitment());
         transcript.commit_input(&c_commitment_data.oracle.get_commitment());
-
-        println!("Committed A, B, C");
 
         // TODO: Add public inputs
 
@@ -1053,8 +1047,6 @@ impl<E: Engine> ProvingAssembly<E> where E::Fr : PartialTwoBitReductionField {
         transcript.commit_input(&z_1_commitment_data.oracle.get_commitment());
         transcript.commit_input(&z_2_commitment_data.oracle.get_commitment());
 
-        println!("Committed Z1, Z2");
-
         let mut z_1_shifted = z_1.clone();
         z_1_shifted.distribute_powers(&worker, z_1.omega);
         
@@ -1090,8 +1082,6 @@ impl<E: Engine> ProvingAssembly<E> where E::Fr : PartialTwoBitReductionField {
 
         let alpha = transcript.get_challenge();
 
-        println!("Start assembling T poly");
-
         // TODO: may be speedup this one too
         let mut vanishing_poly_inverse_bitreversed = self.calculate_inverse_vanishing_polynomial_in_a_coset(&worker, q_l_coset_lde_bitreversed.size(), required_domain_size.next_power_of_two())?;
         vanishing_poly_inverse_bitreversed.bitreverse_enumeration(&worker);
@@ -1126,8 +1116,6 @@ impl<E: Engine> ProvingAssembly<E> where E::Fr : PartialTwoBitReductionField {
 
             t_1
         };
-
-        println!("1");
 
         fn get_degree<F: PrimeField>(poly: &Polynomial<F, Coefficients>) -> usize {
             let mut degree = poly.as_ref().len() - 1;
@@ -1213,8 +1201,6 @@ impl<E: Engine> ProvingAssembly<E> where E::Fr : PartialTwoBitReductionField {
             t_1.add_assign(&worker, &contrib_z_1);
         }
 
-        println!("2");
-
         {
             // TODO: May be optimize number of additions
             let mut contrib_z_2 = z_2_coset_lde_bitreversed.clone();
@@ -1250,8 +1236,6 @@ impl<E: Engine> ProvingAssembly<E> where E::Fr : PartialTwoBitReductionField {
             t_1.add_assign(&worker, &contrib_z_2);
         }
 
-        println!("3");
-
         drop(a_coset_lde_bitreversed);
         drop(b_coset_lde_bitreversed);
         drop(c_coset_lde_bitreversed);
@@ -1279,8 +1263,6 @@ impl<E: Engine> ProvingAssembly<E> where E::Fr : PartialTwoBitReductionField {
 
             t_1.add_assign(&worker, &z_1_minus_z_2_shifted);
         }
-
-        println!("4");
 
         {
             let mut z_1_minus_z_2 = z_1_coset_lde_bitreversed.clone();
@@ -1313,8 +1295,6 @@ impl<E: Engine> ProvingAssembly<E> where E::Fr : PartialTwoBitReductionField {
         let t_poly = t_1.icoset_fft_for_generator(&worker, &E::Fr::multiplicative_generator());
 
         debug_assert!(get_degree::<E::Fr>(&t_poly) <= 3*n);
-
-        println!("End work with polynomials");
 
         let mut t_poly_parts = t_poly.break_into_multiples(required_domain_size)?;
 
@@ -1737,29 +1717,6 @@ mod test {
         type Fr = <Transparent252 as ScalarEngine>::Fr;
         type Transcr = Blake2sTranscript<Fr>;
 
-        use std::time::Instant;
-
-        // const SIZE: usize = 10;
-        const SIZE: usize = 1_000_000;
-
-        let coset_params = CosetParams {
-            cosets_schedule: vec![3, 3, 3, 3, 3, 3, 2],
-            // cosets_schedule: vec![2, 2],
-            coset_factor: Fr::multiplicative_generator()
-        };
-
-        let params = RedshiftParameters {
-            lde_factor: 16,
-            num_queries: 4,
-            output_coeffs_at_degree_plus_one: 1,
-            coset_params: coset_params
-        };
-
-        let circuit = BenchmarkCircuit::<Transparent252> {
-            num_steps: SIZE,
-            _marker: std::marker::PhantomData
-        };
-
         use crate::plonk::fft::cooley_tukey_ntt::*;
         use crate::plonk::commitments::transparent::fri::coset_combining_fri::*;
         use crate::plonk::commitments::transparent::fri::coset_combining_fri::fri::*;
@@ -1767,68 +1724,101 @@ mod test {
         use crate::plonk::commitments::transparent::iop_compiler::*;
         use crate::plonk::commitments::transparent::iop_compiler::coset_combining_blake2s_tree::*;
 
-        let omegas_bitreversed = BitReversedOmegas::<Fr>::new_for_domain_size(SIZE.next_power_of_two());
-        let omegas_inv_bitreversed = <OmegasInvBitreversed::<Fr> as CTPrecomputations::<Fr>>::new_for_domain_size(SIZE.next_power_of_two());
-        let omegas_inv_bitreversed_for_fri = <CosetOmegasInvBitreversed::<Fr> as FriPrecomputations::<Fr>>::new_for_domain_size(SIZE.next_power_of_two() * 16);
+        use std::time::Instant;
 
-        let (_, setup_precomp) = setup_with_precomputations::<Transparent252, _, _, Transcr>(
-            &circuit,
-            &params,
-            &omegas_bitreversed
-        ).unwrap();
-
-        let mut prover = ProvingAssembly::<Transparent252>::new();
-        circuit.synthesize(&mut prover).unwrap();
-        prover.finalize();
+        let sizes = vec![(2 << 18) - 2, (2 << 19) - 2, (2 << 20) - 2, (2 << 21) - 2, (2 << 22) - 2, (2 << 23) - 2, (2 << 24) - 2];
+        let coset_schedules = vec![
+            vec![3, 3, 3, 3, 3, 3],
+            vec![3, 3, 3, 3, 3, 2, 2],
+            vec![3, 3, 3, 3, 3, 3, 2],
+            vec![3, 3, 3, 3, 3, 3, 3],
+            vec![3, 3, 3, 3, 3, 3, 2, 2],
+            vec![3, 3, 3, 3, 3, 3, 3, 2],
+            vec![3, 3, 3, 3, 3, 3, 3, 3],
+        ];
 
         let worker = Worker::new();
 
-        println!("Start proving");
+        for (size, coset_schedule) in sizes.into_iter().zip(coset_schedules.into_iter()) {
 
-        let start = Instant::now();
+            let coset_params = CosetParams {
+                cosets_schedule: coset_schedule,
+                coset_factor: Fr::multiplicative_generator()
+            };
 
-        let _ = prover.prove_with_setup_precomputed::<_, _, _, Transcr>(
-            &setup_precomp, 
-            &params, 
-            &worker, 
-            &omegas_bitreversed, 
-            &omegas_inv_bitreversed,
-            &omegas_inv_bitreversed_for_fri
-        ).unwrap();
+            let params = RedshiftParameters {
+                lde_factor: 16,
+                num_queries: 4,
+                output_coeffs_at_degree_plus_one: 1,
+                coset_params: coset_params
+            };
 
-        println!("Proving taken {:?}", start.elapsed());
+            let circuit = BenchmarkCircuit::<Transparent252> {
+                num_steps: size,
+                _marker: std::marker::PhantomData
+            };
+
+            let omegas_bitreversed = BitReversedOmegas::<Fr>::new_for_domain_size(size.next_power_of_two());
+            let omegas_inv_bitreversed = <OmegasInvBitreversed::<Fr> as CTPrecomputations::<Fr>>::new_for_domain_size(size.next_power_of_two());
+            let omegas_inv_bitreversed_for_fri = <CosetOmegasInvBitreversed::<Fr> as FriPrecomputations::<Fr>>::new_for_domain_size(size.next_power_of_two() * 16);
+
+            let (_, setup_precomp) = setup_with_precomputations::<Transparent252, _, _, Transcr>(
+                &circuit,
+                &params,
+                &omegas_bitreversed
+            ).unwrap();
+
+            let mut prover = ProvingAssembly::<Transparent252>::new();
+            circuit.synthesize(&mut prover).unwrap();
+            prover.finalize();
+
+            println!("Start proving");
+
+            let start = Instant::now();
+
+            let _ = prover.prove_with_setup_precomputed::<_, _, _, Transcr>(
+                &setup_precomp, 
+                &params, 
+                &worker, 
+                &omegas_bitreversed, 
+                &omegas_inv_bitreversed,
+                &omegas_inv_bitreversed_for_fri
+            ).unwrap();
+
+            println!("Proving taken {:?} for size {}", start.elapsed(), size);
 
 
-        // {
-        //     let mut tester = TestingAssembly::<Transparent252>::new();
+            // {
+            //     let mut tester = TestingAssembly::<Transparent252>::new();
 
-        //     circuit.synthesize(&mut tester).expect("must synthesize");
+            //     circuit.synthesize(&mut tester).expect("must synthesize");
 
-        //     let satisfied = tester.is_satisfied();
+            //     let satisfied = tester.is_satisfied();
 
-        //     assert!(satisfied);
+            //     assert!(satisfied);
 
-        //     println!("Circuit is satisfied");
-        // }
+            //     println!("Circuit is satisfied");
+            // }
 
-        // println!("Start setup");
-        // let start = Instant::now();
-        // let (setup, aux) = setup::<Transparent252, Committer, _>(&circuit, meta.clone()).unwrap();
-        // println!("Setup taken {:?}", start.elapsed());
+            // println!("Start setup");
+            // let start = Instant::now();
+            // let (setup, aux) = setup::<Transparent252, Committer, _>(&circuit, meta.clone()).unwrap();
+            // println!("Setup taken {:?}", start.elapsed());
 
-        // println!("Using circuit with N = {}", setup.n);
+            // println!("Using circuit with N = {}", setup.n);
 
-        // println!("Start proving");
-        // let start = Instant::now();
-        // let proof = prove_nonhomomorphic_chunked::<Transparent252, Committer, Blake2sTranscript::<Fr>, _>(&circuit, &aux, meta.clone()).unwrap();
-        // println!("Proof taken {:?}", start.elapsed());
+            // println!("Start proving");
+            // let start = Instant::now();
+            // let proof = prove_nonhomomorphic_chunked::<Transparent252, Committer, Blake2sTranscript::<Fr>, _>(&circuit, &aux, meta.clone()).unwrap();
+            // println!("Proof taken {:?}", start.elapsed());
 
-        // println!("Start verifying");
-        // let start = Instant::now();
-        // let valid = verify_nonhomomorphic_chunked::<Transparent252, Committer, Blake2sTranscript::<Fr>>(&setup, &proof, meta).unwrap();
-        // println!("Verification with unnecessary precomputation taken {:?}", start.elapsed());
+            // println!("Start verifying");
+            // let start = Instant::now();
+            // let valid = verify_nonhomomorphic_chunked::<Transparent252, Committer, Blake2sTranscript::<Fr>>(&setup, &proof, meta).unwrap();
+            // println!("Verification with unnecessary precomputation taken {:?}", start.elapsed());
 
-        // assert!(valid);
+            // assert!(valid);
+        }
     }
 
     #[test]
@@ -1872,6 +1862,49 @@ mod test {
             let ntt_result = poly.clone().ifft_using_bitreversed_ntt(&worker, &omegas_inv_bitreversed, &Fr::multiplicative_generator()).unwrap();
 
             assert!(naive_result == ntt_result);
+        }
+    }
+
+    #[test]
+    fn test_fft_test_vectors() {
+        use rand::{XorShiftRng, SeedableRng, Rand, Rng};
+        use crate::plonk::fft::*;
+        use crate::pairing::Engine;
+        use crate::ff::ScalarEngine;
+        use crate::plonk::transparent_engine::{TransparentEngine};
+        use crate::plonk::transparent_engine::proth_engine::Transparent252;
+
+        use crate::multicore::*;
+        use crate::source::*;
+
+        type Fr = <Transparent252 as ScalarEngine>::Fr;
+
+        let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+
+        let poly_sizes = vec![4, 8, 16];
+
+        let worker = Worker::new();
+
+        for poly_size in poly_sizes.clone().into_iter() {
+            println!("Poly size {}", poly_size);
+            let coeffs = (0..poly_size).map(|_| Fr::rand(rng)).collect::<Vec<_>>();
+            println!("Coefficients");
+            for c in coeffs.iter() {
+                println!("{}", c.into_raw_repr());
+            }
+            println!("Generators");
+            let poly = Polynomial::<Fr, _>::from_coeffs(coeffs).unwrap();
+            let omega = poly.omega;
+            for i in 0..poly_size {
+                let gen = omega.pow([i as u64]);
+                println!("Omega^{} = {}", i, gen.into_raw_repr());
+            }
+            println!("Result");
+            let naive_result = poly.fft(&worker);
+            let coeffs = naive_result.into_coeffs();
+            for c in coeffs.iter() {
+                println!("{}", c.into_raw_repr());
+            }
         }
     }
 }

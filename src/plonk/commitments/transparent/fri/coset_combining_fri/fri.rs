@@ -158,9 +158,6 @@ impl<F: PrimeField> CosetCombiningFriIop<F> {
         prng: &mut P,
         params: &<Self as FriIop<F>>::Params
     ) -> Result<FRIProofPrototype<F, <Self as FriIop<F>>::IopType>, SynthesisError> {
-        println!("Starting FRI");
-        let start = Instant::now();
-
         // first we create the largest tree that
 
         let mut coset_schedule_index = 0;
@@ -173,9 +170,9 @@ impl<F: PrimeField> CosetCombiningFriIop<F> {
         }
 
         let mut roots = vec![];
-        let tree_params = FriSpecificBlake2sTreeParams {
-            values_per_leaf: (1 << coset_factor)
-        };
+        // let tree_params = FriSpecificBlake2sTreeParams {
+        //     values_per_leaf: (1 << coset_factor)
+        // };
 
         // let l0_commitment = FriSpecificBlake2sTree::create(lde_values.as_ref(), &tree_params);
         // let root = l0_commitment.get_commitment();
@@ -193,8 +190,6 @@ impl<F: PrimeField> CosetCombiningFriIop<F> {
 
         let initial_degree_plus_one = initial_domain_size / lde_factor;
         assert!(initial_degree_plus_one / total_wrap_factor == output_coeffs_at_degree_plus_one);
-
-        let num_steps = params.cosets_schedule.len();
 
         let mut intermediate_commitments = vec![];
         let mut intermediate_values = vec![];
@@ -230,7 +225,6 @@ impl<F: PrimeField> CosetCombiningFriIop<F> {
         let num_steps = params.cosets_schedule.len();
         
         for (fri_step, coset_factor) in params.cosets_schedule.iter().enumerate() {
-            println!("FRI step {}", fri_step);
             let coset_factor = *coset_factor;
             let wrapping_factor = 1 << coset_factor;
             let next_domain_size = this_domain_size / wrapping_factor;
@@ -376,8 +370,6 @@ impl<F: PrimeField> CosetCombiningFriIop<F> {
         assert!(degree < output_coeffs_at_degree_plus_one, "polynomial degree is too large, coeffs = {:?}", final_poly_coeffs);
 
         final_poly_coeffs.truncate(output_coeffs_at_degree_plus_one);
-
-        println!("Done FRI for degree {} in {:?}", lde_values.size()/lde_factor, start.elapsed());
 
         Ok(FRIProofPrototype {
             // l0_commitment,
