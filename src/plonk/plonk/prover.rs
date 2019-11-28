@@ -1733,7 +1733,7 @@ mod test {
             let (_, setup_precomp) = setup_with_precomputations::<Eng, _, _>(
                 &circuit,
                 &omegas_bitreversed,
-                &bases
+                &bases[0..size.next_power_of_two()]
             ).unwrap();
 
             let mut prover = ProvingAssembly::<Eng>::new();
@@ -1751,7 +1751,7 @@ mod test {
                 &worker, 
                 &omegas_bitreversed, 
                 &omegas_inv_bitreversed,
-                &bases
+                &bases[0..size.next_power_of_two()]
             ).unwrap();
 
             println!("Proving taken {:?} for size {}", start.elapsed(), size);
@@ -1870,7 +1870,7 @@ mod test {
             let (_, setup_precomp) = setup_with_precomputations::<Eng, _, _>(
                 &circuit,
                 &omegas_bitreversed,
-                &bases
+                &bases[0..size.next_power_of_two()]
             ).unwrap();
 
             let mut prover = ProvingAssembly::<Eng>::new();
@@ -1888,7 +1888,7 @@ mod test {
                 &worker, 
                 &omegas_bitreversed, 
                 &omegas_inv_bitreversed,
-                &bases
+                &bases[0..size.next_power_of_two()]
             ).unwrap();
 
             println!("Proving taken {:?} for size {}", start.elapsed(), size);
