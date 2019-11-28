@@ -769,8 +769,6 @@ impl<E: Engine> ProvingAssembly<E> {
     ) -> Result<(), SynthesisError> {
         assert!(self.is_finalized);
 
-        let num_gates = self.num_gates();
-
         let mut transcript = T::new();
 
         let n = self.input_gates.len() + self.aux_gates.len();
@@ -778,8 +776,6 @@ impl<E: Engine> ProvingAssembly<E> {
         // we need n+1 to be a power of two and can not have n to be power of two
         let required_domain_size = n + 1;
         assert!(required_domain_size.is_power_of_two());
-
-        println!("Start work with polynomials");
 
         let (w_l, w_r, w_o) = self.make_wire_assingments();
 
@@ -801,8 +797,6 @@ impl<E: Engine> ProvingAssembly<E> {
         transcript.commit_bytes(a_commitment_data.into_compressed().as_ref());
         transcript.commit_bytes(b_commitment_data.into_compressed().as_ref());
         transcript.commit_bytes(c_commitment_data.into_compressed().as_ref());
-
-        println!("Committed A, B, C");
 
         // TODO: Add public inputs
 
@@ -914,8 +908,6 @@ impl<E: Engine> ProvingAssembly<E> {
         transcript.commit_bytes(z_1_commitment_data.into_compressed().as_ref());
         transcript.commit_bytes(z_2_commitment_data.into_compressed().as_ref());
 
-        println!("Committed Z1, Z2");
-
         let mut z_1_shifted = z_1.clone();
         z_1_shifted.distribute_powers(&worker, z_1.omega);
         
@@ -964,8 +956,6 @@ impl<E: Engine> ProvingAssembly<E> {
 
         let alpha = transcript.get_challenge();
 
-        println!("Start assembling T poly");
-
         // TODO: may be speedup this one too
         let mut vanishing_poly_inverse_bitreversed = self.calculate_inverse_vanishing_polynomial_in_a_coset(&worker, q_l_coset_lde_bitreversed.size(), required_domain_size.next_power_of_two())?;
         vanishing_poly_inverse_bitreversed.bitreverse_enumeration(&worker);
@@ -1000,8 +990,6 @@ impl<E: Engine> ProvingAssembly<E> {
 
             t_1
         };
-
-        println!("1");
 
         fn get_degree<F: PrimeField>(poly: &Polynomial<F, Coefficients>) -> usize {
             let mut degree = poly.as_ref().len() - 1;
@@ -1097,8 +1085,6 @@ impl<E: Engine> ProvingAssembly<E> {
             t_1.add_assign(&worker, &contrib_z_1);
         }
 
-        println!("2");
-
         {
             // TODO: May be optimize number of additions
             let mut contrib_z_2 = z_2_coset_lde_bitreversed.clone();
@@ -1134,8 +1120,6 @@ impl<E: Engine> ProvingAssembly<E> {
             t_1.add_assign(&worker, &contrib_z_2);
         }
 
-        println!("3");
-
         drop(a_coset_lde_bitreversed);
         drop(b_coset_lde_bitreversed);
         drop(c_coset_lde_bitreversed);
@@ -1163,8 +1147,6 @@ impl<E: Engine> ProvingAssembly<E> {
 
             t_1.add_assign(&worker, &z_1_minus_z_2_shifted);
         }
-
-        println!("4");
 
         {
             let mut z_1_minus_z_2 = z_1_coset_lde_bitreversed.clone();
@@ -1197,8 +1179,6 @@ impl<E: Engine> ProvingAssembly<E> {
         let t_poly = t_1.icoset_fft_for_generator(&worker, &E::Fr::multiplicative_generator());
 
         debug_assert!(get_degree::<E::Fr>(&t_poly) <= 3*n);
-
-        println!("End work with polynomials");
 
         let mut t_poly_parts = t_poly.break_into_multiples(required_domain_size)?;
 
