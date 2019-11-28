@@ -759,9 +759,6 @@ impl<E: Engine> ProvingAssembly<E> where E::Fr : PartialTwoBitReductionField {
             worker: &Worker,
             transcript: &mut T
         ) -> Result<(), SynthesisError> {
-            println!("Start open multiple");
-            use std::time::Instant;
-            let start = Instant::now();
             let required_divisor_size = witness_opening_requests[0].polynomials[0].size();
 
             let mut final_aggregate = Polynomial::from_values(vec![E::Fr::zero(); required_divisor_size])?;
@@ -893,7 +890,6 @@ impl<E: Engine> ProvingAssembly<E> where E::Fr : PartialTwoBitReductionField {
                 &params.coset_params
             )?;
 
-            println!("Opening taken {:?}", start.elapsed());
             Ok(())
     }
 
@@ -1650,7 +1646,6 @@ mod test {
         fn synthesize<CS: ConstraintSystem<E>>(&self, cs: &mut CS) -> Result<(), SynthesisError> {
             // yeah, fibonacci...
 
-            println!("Start synthesis");
             let one = E::Fr::one();
             let mut negative_one = one;
             negative_one.negate();
@@ -1694,8 +1689,6 @@ mod test {
                 cs.enforce_zero_3((a, b, c), (one, one, negative_one))?;
             }
 
-            println!("Done synthesis");
-
             Ok(())
         }
     }
@@ -1726,15 +1719,18 @@ mod test {
 
         use std::time::Instant;
 
-        let sizes = vec![(2 << 18) - 10, (2 << 19) - 10, (2 << 20) - 10, (2 << 21) - 10, (2 << 22) - 10, (2 << 23) - 10, (2 << 24) - 10];
+        let log_2_rate = 4;
+        let rate = 1 << log_2_rate;
+        println!("Using rate {}", rate);
+        let sizes = vec![(1 << 18) - 10, (1 << 19) - 10, (1 << 20) - 10, (1 << 21) - 10, (1 << 22) - 10, (1 << 23) - 10, (1 << 24) - 10];
         let coset_schedules = vec![
-            vec![3, 3, 3, 3, 3, 3],
-            vec![3, 3, 3, 3, 3, 2, 2],
-            vec![3, 3, 3, 3, 3, 3, 2],
-            vec![3, 3, 3, 3, 3, 3, 3],
-            vec![3, 3, 3, 3, 3, 3, 2, 2],
-            vec![3, 3, 3, 3, 3, 3, 3, 2],
-            vec![3, 3, 3, 3, 3, 3, 3, 3],
+            vec![3, 3, 3, 3, 3, 3], // 18
+            vec![3, 3, 3, 3, 3, 2, 2], // 19
+            vec![3, 3, 3, 3, 3, 3, 2], // 20
+            vec![3, 3, 3, 3, 3, 3, 3], // 21 
+            vec![3, 3, 3, 3, 3, 3, 3, 2, 2], // 22 
+            vec![3, 3, 3, 3, 3, 3, 3, 3, 2], // 23 
+            vec![3, 3, 3, 3, 3, 3, 3, 3, 3], // 24
         ];
 
         let worker = Worker::new();
@@ -1747,7 +1743,7 @@ mod test {
             };
 
             let params = RedshiftParameters {
-                lde_factor: 16,
+                lde_factor: rate,
                 num_queries: 4,
                 output_coeffs_at_degree_plus_one: 1,
                 coset_params: coset_params
@@ -1760,15 +1756,13 @@ mod test {
 
             let omegas_bitreversed = BitReversedOmegas::<Fr>::new_for_domain_size(size.next_power_of_two());
             let omegas_inv_bitreversed = <OmegasInvBitreversed::<Fr> as CTPrecomputations::<Fr>>::new_for_domain_size(size.next_power_of_two());
-            let omegas_inv_bitreversed_for_fri = <CosetOmegasInvBitreversed::<Fr> as FriPrecomputations::<Fr>>::new_for_domain_size(size.next_power_of_two() * 16);
+            let omegas_inv_bitreversed_for_fri = <CosetOmegasInvBitreversed::<Fr> as FriPrecomputations::<Fr>>::new_for_domain_size(size.next_power_of_two() * rate);
 
-            println!("Making setup");
             let (_, setup_precomp) = setup_with_precomputations::<Transparent252, _, _, Transcr>(
                 &circuit,
                 &params,
                 &omegas_bitreversed
             ).unwrap();
-            println!("Done with setup");
 
             let mut prover = ProvingAssembly::<Transparent252>::new();
             circuit.synthesize(&mut prover).unwrap();

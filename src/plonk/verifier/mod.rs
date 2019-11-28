@@ -918,7 +918,6 @@ mod test {
         fn synthesize<CS: ConstraintSystem<E>>(&self, cs: &mut CS) -> Result<(), SynthesisError> {
             // yeah, fibonacci...
 
-            println!("Start synthesis");
             let one = E::Fr::one();
             let mut negative_one = one;
             negative_one.negate();
@@ -961,8 +960,6 @@ mod test {
 
                 cs.enforce_zero_3((a, b, c), (one, one, negative_one))?;
             }
-
-            println!("Done synthesis");
 
             Ok(())
         }

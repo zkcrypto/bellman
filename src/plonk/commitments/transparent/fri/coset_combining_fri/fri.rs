@@ -158,8 +158,6 @@ impl<F: PrimeField> CosetCombiningFriIop<F> {
         prng: &mut P,
         params: &<Self as FriIop<F>>::Params
     ) -> Result<FRIProofPrototype<F, <Self as FriIop<F>>::IopType>, SynthesisError> {
-        // first we create the largest tree that
-
         let mut coset_schedule_index = 0;
         let coset_factor = params.cosets_schedule[coset_schedule_index];
 
@@ -189,7 +187,9 @@ impl<F: PrimeField> CosetCombiningFriIop<F> {
         assert!(lde_factor.is_power_of_two());
 
         let initial_degree_plus_one = initial_domain_size / lde_factor;
-        assert!(initial_degree_plus_one / total_wrap_factor == output_coeffs_at_degree_plus_one);
+        assert_eq!(initial_degree_plus_one / total_wrap_factor, output_coeffs_at_degree_plus_one, 
+            "number of FRI round does not match the ouput degree: initial degree+1 =  {}, wrapping factor {}, output at degree+1 = {}",
+             initial_degree_plus_one, total_wrap_factor, output_coeffs_at_degree_plus_one);
 
         let mut intermediate_commitments = vec![];
         let mut intermediate_values = vec![];

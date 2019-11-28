@@ -736,9 +736,6 @@ impl<E: Engine> ProvingAssembly<E> {
             worker: &Worker,
             transcript: &mut T
         ) -> Result<E::G1Affine, SynthesisError> {
-            println!("Start open multiple");
-            use std::time::Instant;
-            let start = Instant::now();
             let required_size = opening_request.polynomials[0].size();
 
             let mut final_aggregate = Polynomial::from_coeffs(vec![E::Fr::zero(); required_size])?;
@@ -759,7 +756,6 @@ impl<E: Engine> ProvingAssembly<E> {
 
             let opening = Self::commit_single_poly(&q, bases, &worker)?;
 
-            println!("Opening taken {:?}", start.elapsed());
             Ok(opening)
     }
 
@@ -1611,7 +1607,6 @@ mod test {
         fn synthesize<CS: ConstraintSystem<E>>(&self, cs: &mut CS) -> Result<(), SynthesisError> {
             // yeah, fibonacci...
 
-            println!("Start synthesis");
             let one = E::Fr::one();
             let mut negative_one = one;
             negative_one.negate();
@@ -1655,8 +1650,6 @@ mod test {
                 cs.enforce_zero_3((a, b, c), (one, one, negative_one))?;
             }
 
-            println!("Done synthesis");
-
             Ok(())
         }
     }
@@ -1678,7 +1671,7 @@ mod test {
         use crate::plonk::fft::cooley_tukey_ntt::*;
         use crate::plonk::commitments::transparent::fri::coset_combining_fri::precomputation::*;
 
-        let sizes: Vec<usize> = vec![(2 << 18) - 10, (2 << 19) - 10, (2 << 20) - 10, (2 << 21) - 10, (2 << 22) - 10, (2 << 23) - 10, (2 << 24) - 10];
+        let sizes: Vec<usize> = vec![(1 << 18) - 10, (1 << 19) - 10, (1 << 20) - 10, (1 << 21) - 10, (1 << 22) - 10, (1 << 23) - 10, (1 << 24) - 10];
 
         let max_size = *sizes.last().unwrap();
 
@@ -1814,7 +1807,7 @@ mod test {
         use crate::plonk::fft::cooley_tukey_ntt::*;
         use crate::plonk::commitments::transparent::fri::coset_combining_fri::precomputation::*;
 
-        let sizes: Vec<usize> = vec![(2 << 18) - 10, (2 << 19) - 10, (2 << 20) - 10, (2 << 21) - 10, (2 << 22) - 10, (2 << 23) - 10, (2 << 24) - 10];
+        let sizes: Vec<usize> = vec![(1 << 18) - 10, (1 << 19) - 10, (1 << 20) - 10, (1 << 21) - 10, (1 << 22) - 10, (1 << 23) - 10, (1 << 24) - 10];
 
         let max_size = *sizes.last().unwrap();
 
