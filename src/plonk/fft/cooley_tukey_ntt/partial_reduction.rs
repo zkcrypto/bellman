@@ -40,9 +40,9 @@ pub(crate) fn serial_ct_ntt_partial_reduction<F: PartialTwoBitReductionField, P:
     precomputed_omegas: &P
 )
 {
-    assert_eq!(a.len(), precomputed_omegas.domain_size());
+    assert_eq!(a.len(), precomputed_omegas.domain_size(), "precomputation size is invalid for ntt");
     assert_eq!(a.len(), (1<<log_n) as usize);
-    assert!(F::NUM_BITS % 64 >= 2);
+    assert!(64 - (F::NUM_BITS % 64) >= 2);
 
     let n = a.len();
     if n == 1 {
@@ -169,8 +169,8 @@ pub(crate) fn parallel_ct_ntt_partial_reduction<F: PartialTwoBitReductionField, 
 )
 {
     assert!(log_n >= log_cpus);
-    assert_eq!(a.len(), precomputed_omegas.domain_size());
-    assert!(F::NUM_BITS % 64 >= 2);
+    assert_eq!(a.len(), precomputed_omegas.domain_size(), "precomputation size is invalid for ntt");
+    assert!(64 - (F::NUM_BITS % 64) >= 2);
 
     let n = a.len();
     if n == 1 {

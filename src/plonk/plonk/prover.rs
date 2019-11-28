@@ -1678,7 +1678,7 @@ mod test {
         use crate::plonk::fft::cooley_tukey_ntt::*;
         use crate::plonk::commitments::transparent::fri::coset_combining_fri::precomputation::*;
 
-        let sizes: Vec<usize> = vec![(2 << 18) - 2, (2 << 19) - 2, (2 << 20) - 2, (2 << 21) - 2, (2 << 22) - 2, (2 << 23) - 2, (2 << 24) - 2];
+        let sizes: Vec<usize> = vec![(2 << 18) - 10, (2 << 19) - 10, (2 << 20) - 10, (2 << 21) - 10, (2 << 22) - 10, (2 << 23) - 10, (2 << 24) - 10];
 
         let max_size = *sizes.last().unwrap();
 
@@ -1814,7 +1814,7 @@ mod test {
         use crate::plonk::fft::cooley_tukey_ntt::*;
         use crate::plonk::commitments::transparent::fri::coset_combining_fri::precomputation::*;
 
-        let sizes: Vec<usize> = vec![(2 << 18) - 2, (2 << 19) - 2, (2 << 20) - 2, (2 << 21) - 2, (2 << 22) - 2, (2 << 23) - 2, (2 << 24) - 2];
+        let sizes: Vec<usize> = vec![(2 << 18) - 10, (2 << 19) - 10, (2 << 20) - 10, (2 << 21) - 10, (2 << 22) - 10, (2 << 23) - 10, (2 << 24) - 10];
 
         let max_size = *sizes.last().unwrap();
 
@@ -1862,6 +1862,7 @@ mod test {
         println!("Done making bases");
 
         for size in sizes.into_iter() {
+            println!("Working for size {}", size);
 
             let circuit = BenchmarkCircuit::<Eng> {
                 // num_steps: 1_000_000,

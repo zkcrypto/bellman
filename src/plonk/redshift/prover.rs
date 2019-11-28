@@ -1726,7 +1726,7 @@ mod test {
 
         use std::time::Instant;
 
-        let sizes = vec![(2 << 18) - 2, (2 << 19) - 2, (2 << 20) - 2, (2 << 21) - 2, (2 << 22) - 2, (2 << 23) - 2, (2 << 24) - 2];
+        let sizes = vec![(2 << 18) - 10, (2 << 19) - 10, (2 << 20) - 10, (2 << 21) - 10, (2 << 22) - 10, (2 << 23) - 10, (2 << 24) - 10];
         let coset_schedules = vec![
             vec![3, 3, 3, 3, 3, 3],
             vec![3, 3, 3, 3, 3, 2, 2],
@@ -1740,7 +1740,7 @@ mod test {
         let worker = Worker::new();
 
         for (size, coset_schedule) in sizes.into_iter().zip(coset_schedules.into_iter()) {
-
+            println!("Working for size {}", size);
             let coset_params = CosetParams {
                 cosets_schedule: coset_schedule,
                 coset_factor: Fr::multiplicative_generator()
@@ -1762,11 +1762,13 @@ mod test {
             let omegas_inv_bitreversed = <OmegasInvBitreversed::<Fr> as CTPrecomputations::<Fr>>::new_for_domain_size(size.next_power_of_two());
             let omegas_inv_bitreversed_for_fri = <CosetOmegasInvBitreversed::<Fr> as FriPrecomputations::<Fr>>::new_for_domain_size(size.next_power_of_two() * 16);
 
+            println!("Making setup");
             let (_, setup_precomp) = setup_with_precomputations::<Transparent252, _, _, Transcr>(
                 &circuit,
                 &params,
                 &omegas_bitreversed
             ).unwrap();
+            println!("Done with setup");
 
             let mut prover = ProvingAssembly::<Transparent252>::new();
             circuit.synthesize(&mut prover).unwrap();

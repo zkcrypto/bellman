@@ -96,9 +96,6 @@ impl<F: PrimeField> IopInstance<F> for FriSpecificBlake2sTree<F> {
     fn create(values: &[F], params: &Self::Params) -> Self {
         assert!(params.values_per_leaf.is_power_of_two());
 
-        println!("Creating a tree of size {}", values.len());
-        let start = Instant::now();
-
         let values_per_leaf = params.values_per_leaf;
         let num_leafs = values.len() / values_per_leaf;
         assert!(num_leafs.is_power_of_two());
@@ -182,8 +179,6 @@ impl<F: PrimeField> IopInstance<F> for FriSpecificBlake2sTree<F> {
 
             nodes_for_hashing = next_levels;
         }
-
-        println!("Done creating a tree of size {} in {:?}", values.len(), start.elapsed());
 
         Self {
             size: size,
