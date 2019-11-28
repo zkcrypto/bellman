@@ -1,0 +1,22 @@
+language: rust
+os:
+  - linux
+  - osx
+  - windows
+rust:
+  - stable
+  - beta
+  - nightly
+script:
+  - (cd run_all_tests && cargo run)
+# Also run the tests on a non-x86, big-endian system.
+matrix:
+  include:
+    - name: "mips64"
+      os: linux
+      rust: stable
+      install:
+        - cargo install cross
+      script:
+        - (cd blake2b && cross test --target mips64-unknown-linux-gnuabi64)
+        - (cd blake2s && cross test --target mips64-unknown-linux-gnuabi64)

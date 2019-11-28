@@ -1,0 +1,12 @@
+[package]
+name = "kangarootwelve"
+version = "0.0.0"
+authors = ["Jack O'Connor <oconnor663@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+
+[build-dependencies]
+
+[dev-dependencies]
+hex = "0.3.2"

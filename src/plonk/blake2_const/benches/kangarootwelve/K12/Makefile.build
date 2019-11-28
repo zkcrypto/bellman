@@ -1,0 +1,102 @@
+<?xml version="1.0"?>
+<!--
+Implementation by the Keccak Team, namely, Guido Bertoni, Joan Daemen,
+Michaël Peeters, Gilles Van Assche and Ronny Van Keer,
+hereby denoted as "the implementer".
+
+For more information, feedback or questions, please refer to our website:
+https://keccak.team/
+
+To the extent possible under law, the implementer has waived all copyright
+and related or neighboring rights to the source code in this file.
+http://creativecommons.org/publicdomain/zero/1.0/
+-->
+<build xmlns:xi="http://www.w3.org/2001/XInclude">
+
+    <fragment name="optimized">
+        <gcc>-fomit-frame-pointer</gcc>
+        <gcc>-O2</gcc>
+        <gcc>-g0</gcc>
+        <gcc>-march=native</gcc>
+        <gcc>-mtune=native</gcc>
+    </fragment>
+
+    <!-- Keccak-p[1600] -->
+
+    <fragment name="inplace32bi" inherits="optimized">
+        <c>lib/Inplace32BI/KeccakP-1600-inplace32BI.c</c>
+        <h>lib/Inplace32BI/KeccakP-1600-SnP.h</h>
+    </fragment>
+
+    <fragment name="optimized64" inherits="optimized">
+        <c>lib/Optimized64/KeccakP-1600-opt64.c</c>
+        <h>lib/Optimized64/KeccakP-1600-config.h</h>
+        <h>lib/Optimized64/KeccakP-1600-SnP.h</h>
+        <gcc>-m64</gcc>
+    </fragment>
+
+    <fragment name="optimizedAVX2" inherits="optimized">
+        <c>lib/OptimizedAVX2/KeccakP-1600-AVX2.s</c>
+        <h>lib/OptimizedAVX2/KeccakP-1600-config.h</h>
+        <h>lib/OptimizedAVX2/KeccakP-1600-SnP.h</h>
+        <c>lib/OptimizedAVX2/KeccakP-1600-times2-SIMD128.c</c>
+        <c>lib/OptimizedAVX2/KeccakP-1600-times4-SIMD256.c</c>
+    </fragment>
+
+    <fragment name="optimizedAVX512" inherits="optimized">
+        <c>lib/OptimizedAVX512/KeccakP-1600-AVX512.s</c>
+        <h>lib/OptimizedAVX512/KeccakP-1600-config.h</h>
+        <h>lib/OptimizedAVX512/KeccakP-1600-SnP.h</h>
+        <c>lib/OptimizedAVX512/KeccakP-1600-times2-SIMD512.c</c>
+        <c>lib/OptimizedAVX512/KeccakP-1600-times4-SIMD512.c</c>
+        <c>lib/OptimizedAVX512/KeccakP-1600-times8-SIMD512.c</c>
+    </fragment>
+
+    <!-- KangarooTwelve -->
+
+    <fragment name="KangarooTwelve">
+        <c>lib/KangarooTwelve.c</c>
+        <h>lib/KangarooTwelve.h</h>
+    </fragment>
+
+    <!-- For the name of the targets, please see the end of this file. -->
+
+    <fragment name="common">
+        <h>lib/brg_endian.h</h>
+    </fragment>
+
+    <!-- To run many tests -->
+    <fragment name="K12Tests" inherits="common KangarooTwelve">
+        <c>tests/main.c</c>
+        <c>tests/testPerformance.c</c>
+        <h>tests/timing.h</h>
+        <h>tests/testPerformance.h</h>
+        <c>tests/testKangarooTwelve.c</c>
+        <h>tests/testKangarooTwelve.h</h>
+        <gcc>-lm</gcc>
+    </fragment>
+
+    <!-- To make a library -->
+    <fragment name="libk12.a" inherits="KangarooTwelve"/>
+    <fragment name="libk12.so" inherits="KangarooTwelve"/>
+
+    <!-- Generically optimized 32-bit implementation -->
+    <fragment name="generic32" inherits="inplace32bi"/>
+
+    <!-- Generically optimized 64-bit implementation -->
+    <fragment name="generic64" inherits="optimized64"/>
+
+    <!-- Implementation selected for the Haswell and Skylake microarchitectures -->
+    <fragment name="Haswell" inherits="optimizedAVX2"/>
+
+    <!-- Implementation selected for the SkylakeX microarchitecture -->
+    <fragment name="SkylakeX" inherits="optimizedAVX512"/>
+
+    <!-- Target names are of the form x/y where x is taken from the first set and y from the second set. -->
+    <group all="all">
+        <product delimiter="/">
+            <factor set="generic32 generic64 Haswell SkylakeX"/>
+            <factor set="K12Tests libk12.a libk12.so"/>
+        </product>
+    </group>
+</build>
