@@ -54,7 +54,7 @@ POINT_projective POINT_add_mixed(POINT_projective a, POINT_affine b) {
   FIELD u2 = FIELD_mul(b.x, z1z1);
   FIELD s2 = FIELD_mul(FIELD_mul(b.y, a.z), z1z1);
 
-  if(FIELD_eq(a.x, u2) && FIELD_eq(b.y, s2))
+  if(FIELD_eq(a.x, u2) && FIELD_eq(a.y, s2))
     return POINT_double(a);
   else {
     FIELD h = FIELD_sub(u2, a.x); // H = U2-X1

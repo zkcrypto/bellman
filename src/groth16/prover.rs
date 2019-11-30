@@ -298,7 +298,7 @@ where
         a_aux_source,
         Arc::new(prover.a_aux_density),
         aux_assignment.clone(),
-        &mut None, // GPU kernel option removed until https://github.com/finalitylabs/bellman/issues/1 is resolved
+        &mut multiexp_kern,
     );
 
     let b_input_density = Arc::new(prover.b_input_density);
