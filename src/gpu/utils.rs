@@ -1,8 +1,8 @@
 use crate::gpu::error::{GPUError, GPUResult};
 use ocl::{Device, Platform};
 
-use std::collections::HashMap;
 use log::info;
+use std::collections::HashMap;
 use std::env;
 
 pub const GPU_NVIDIA_PLATFORM_NAME: &str = "NVIDIA CUDA";
