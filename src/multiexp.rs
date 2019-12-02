@@ -353,6 +353,7 @@ lazy_static::lazy_static! {
     static ref GPU_MULTIEXP_SUPPORTED: Mutex<Option<bool>> = { Mutex::new(None) };
 }
 
+use std::env;
 pub fn gpu_multiexp_supported<E>(n: usize) -> gpu::GPUResult<gpu::MultiexpKernel<E>>
 where
     E: paired::Engine,
@@ -363,6 +364,13 @@ where
     let pool = Worker::new();
     let rng = &mut rand::thread_rng();
     let mut kern = Some(gpu::MultiexpKernel::<E>::create(chunk_size)?);
+
+    // Checking the correctness of GPU results can be time consuming. User can disable this
+    // feature using BELLMAN_GPU_NO_CHECK flag.
+    if env::var("BELLMAN_GPU_NO_CHECK").is_ok() {
+        return Ok(kern.unwrap());
+    }
+
     let res = {
         let mut supported = GPU_MULTIEXP_SUPPORTED.lock().unwrap();
         if let Some(res) = *supported {

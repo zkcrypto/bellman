@@ -558,6 +558,7 @@ lazy_static::lazy_static! {
     static ref GPU_FFT_SUPPORTED: Mutex<Option<bool>> = { Mutex::new(None) };
 }
 
+use std::env;
 pub fn gpu_fft_supported<E>(log_d: u32) -> gpu::GPUResult<gpu::FFTKernel<E>>
 where
     E: Engine,
@@ -566,6 +567,12 @@ where
     let test_size: u32 = 1 << log_test_size;
     let rng = &mut rand::thread_rng();
     let mut kern = gpu::FFTKernel::create(1 << log_d)?;
+
+    // Checking the correctness of GPU results can be time consuming. User can disable this
+    // feature using BELLMAN_GPU_NO_CHECK flag.
+    if env::var("BELLMAN_GPU_NO_CHECK").is_ok() {
+        return Ok(kern);
+    }
 
     let res = {
         let mut supported = GPU_FFT_SUPPORTED.lock().unwrap();
