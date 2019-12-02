@@ -37,7 +37,7 @@ lazy_static::lazy_static! {
             ("GeForce GTX 1060".to_string(), 1280),
         ].into_iter().collect();
 
-        env::var("BELLMAN_CUSTOM_GPU").and_then(|var| {
+        match env::var("BELLMAN_CUSTOM_GPU").and_then(|var| {
             for card in var.split(",") {
                 let splitted = card.split(":").collect::<Vec<_>>();
                 if splitted.len() != 2 { panic!("Invalid BELLMAN_CUSTOM_GPU!"); }
@@ -46,7 +46,7 @@ lazy_static::lazy_static! {
                 core_counts.insert(name, cores);
             }
             Ok(())
-        }).unwrap();
+        }) { Err(_) => { }, Ok(_) => { } }
 
         core_counts
     };
