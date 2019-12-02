@@ -2,6 +2,7 @@ use crate::gpu::error::{GPUError, GPUResult};
 use ocl::{Device, Platform};
 
 use std::collections::HashMap;
+use log::info;
 use std::env;
 
 pub const GPU_NVIDIA_PLATFORM_NAME: &str = "NVIDIA CUDA";
@@ -43,6 +44,7 @@ lazy_static::lazy_static! {
                 if splitted.len() != 2 { panic!("Invalid BELLMAN_CUSTOM_GPU!"); }
                 let name = splitted[0].trim().to_string();
                 let cores : usize = splitted[1].trim().parse().expect("Invalid BELLMAN_CUSTOM_GPU!");
+                info!("Adding \"{}\" to GPU list with {} CUDA cores.", name, cores);
                 core_counts.insert(name, cores);
             }
             Ok(())
