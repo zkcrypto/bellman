@@ -147,6 +147,9 @@ pub mod groth16;
 pub mod multicore;
 pub mod multiexp;
 
+#[cfg(feature = "gpu")]
+pub use gpu::GPU_NVIDIA_DEVICES;
+
 use ff::{Field, ScalarEngine};
 
 use std::error::Error;
