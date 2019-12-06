@@ -26,6 +26,7 @@ log = "0.4.8"
 lazy_static = "1.4.0"
 ocl = { version = "0.19.4", package = "fil-ocl", optional = true }
 itertools = { version = "0.8.0", optional = true }
+fs2 = { version = "0.4.3", optional = true }
 rand = "0.7"
 
 [dev-dependencies]
@@ -35,7 +36,7 @@ sha2 = "0.8"
 
 [features]
 default = ["groth16", "multicore"]
-gpu = ["ocl", "itertools"]
+gpu = ["ocl", "itertools", "fs2"]
 gpu-test = ["gpu"]
 groth16 = ["paired"]
 multicore = ["futures-cpupool", "crossbeam", "num_cpus"]

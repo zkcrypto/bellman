@@ -10,6 +10,8 @@ use paired::Engine;
 
 use super::{ParameterSource, Proof};
 use crate::domain::{gpu_fft_supported, EvaluationDomain, Scalar};
+#[cfg(feature = "gpu")]
+use crate::gpu;
 use crate::multicore::Worker;
 use crate::multiexp::{gpu_multiexp_supported, multiexp, DensityTracker, FullDensity};
 use crate::{Circuit, ConstraintSystem, Index, LinearCombination, SynthesisError, Variable};
@@ -181,6 +183,9 @@ where
     E: Engine,
     C: Circuit<E>,
 {
+    #[cfg(feature = "gpu")]
+    let lock = gpu::lock()?;
+
     let mut prover = ProvingAssignment {
         a_aux_density: DensityTracker::new(),
         b_input_density: DensityTracker::new(),
@@ -377,6 +382,9 @@ where
     g_c.add_assign(&b1_answer);
     g_c.add_assign(&h.wait()?);
     g_c.add_assign(&l.wait()?);
+
+    #[cfg(feature = "gpu")]
+    gpu::unlock(lock);
 
     Ok(Proof {
         a: g_a.into_affine(),
