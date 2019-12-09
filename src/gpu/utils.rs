@@ -65,6 +65,15 @@ pub fn get_core_count(d: Device) -> GPUResult<usize> {
     }
 }
 
+pub fn get_memory(d: Device) -> GPUResult<u64> {
+    match d.info(ocl::enums::DeviceInfo::GlobalMemSize)? {
+        ocl::enums::DeviceInfoResult::GlobalMemSize(sz) => Ok(sz),
+        _ => Err(GPUError {
+            msg: "Cannot extract GPU memory!".to_string(),
+        }),
+    }
+}
+
 #[derive(Debug)]
 pub struct LockedFile(File);
 
