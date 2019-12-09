@@ -84,16 +84,24 @@ impl<E: Engine, G: Group<E>> EvaluationDomain<E, G> {
         })
     }
 
-    pub fn fft(&mut self, worker: &Worker, kern: &mut Option<gpu::FFTKernel<E>>) {
-        best_fft(kern, &mut self.coeffs, worker, &self.omega, self.exp);
+    pub fn fft(
+        &mut self,
+        worker: &Worker,
+        kern: &mut Option<gpu::FFTKernel<E>>,
+    ) -> gpu::GPUResult<()> {
+        best_fft(kern, &mut self.coeffs, worker, &self.omega, self.exp)?;
+        Ok(())
     }
 
-    pub fn ifft(&mut self, worker: &Worker, kern: &mut Option<gpu::FFTKernel<E>>) {
-        best_fft(kern, &mut self.coeffs, worker, &self.omegainv, self.exp);
+    pub fn ifft(
+        &mut self,
+        worker: &Worker,
+        kern: &mut Option<gpu::FFTKernel<E>>,
+    ) -> gpu::GPUResult<()> {
+        best_fft(kern, &mut self.coeffs, worker, &self.omegainv, self.exp)?;
 
         if let Some(ref mut k) = kern {
-            gpu_mul_by_field(k, &mut self.coeffs, &self.minv, self.exp)
-                .expect("GPU Multiply By Field failed!");
+            gpu_mul_by_field(k, &mut self.coeffs, &self.minv, self.exp)?;
         } else {
             worker.scope(self.coeffs.len(), |scope, chunk| {
                 let minv = self.minv;
@@ -107,6 +115,7 @@ impl<E: Engine, G: Group<E>> EvaluationDomain<E, G> {
                 }
             });
         }
+        Ok(())
     }
 
     pub fn distribute_powers(&mut self, worker: &Worker, g: E::Fr) {
@@ -123,16 +132,25 @@ impl<E: Engine, G: Group<E>> EvaluationDomain<E, G> {
         });
     }
 
-    pub fn coset_fft(&mut self, worker: &Worker, kern: &mut Option<gpu::FFTKernel<E>>) {
+    pub fn coset_fft(
+        &mut self,
+        worker: &Worker,
+        kern: &mut Option<gpu::FFTKernel<E>>,
+    ) -> gpu::GPUResult<()> {
         self.distribute_powers(worker, E::Fr::multiplicative_generator());
-        self.fft(worker, kern);
+        self.fft(worker, kern)?;
+        Ok(())
     }
 
-    pub fn icoset_fft(&mut self, worker: &Worker, kern: &mut Option<gpu::FFTKernel<E>>) {
+    pub fn icoset_fft(
+        &mut self,
+        worker: &Worker,
+        kern: &mut Option<gpu::FFTKernel<E>>,
+    ) -> gpu::GPUResult<()> {
         let geninv = self.geninv;
-
-        self.ifft(worker, kern);
+        self.ifft(worker, kern)?;
         self.distribute_powers(worker, geninv);
+        Ok(())
     }
 
     /// This evaluates t(tau) for this domain, which is
@@ -147,15 +165,18 @@ impl<E: Engine, G: Group<E>> EvaluationDomain<E, G> {
     /// The target polynomial is the zero polynomial in our
     /// evaluation domain, so we must perform division over
     /// a coset.
-    pub fn divide_by_z_on_coset(&mut self, worker: &Worker, kern: &mut Option<gpu::FFTKernel<E>>) {
+    pub fn divide_by_z_on_coset(
+        &mut self,
+        worker: &Worker,
+        kern: &mut Option<gpu::FFTKernel<E>>,
+    ) -> gpu::GPUResult<()> {
         let i = self
             .z(&E::Fr::multiplicative_generator())
             .inverse()
             .unwrap();
 
         if let Some(ref mut k) = kern {
-            gpu_mul_by_field(k, &mut self.coeffs, &i, self.exp)
-                .expect("GPU Multiply By Field failed!");
+            gpu_mul_by_field(k, &mut self.coeffs, &i, self.exp)?;
         } else {
             worker.scope(self.coeffs.len(), |scope, chunk| {
                 for v in self.coeffs.chunks_mut(chunk) {
@@ -167,6 +188,8 @@ impl<E: Engine, G: Group<E>> EvaluationDomain<E, G> {
                 }
             });
         }
+
+        Ok(())
     }
 
     /// Perform O(n) multiplication of two polynomials in the domain.
@@ -283,9 +306,9 @@ fn best_fft<E: Engine, T: Group<E>>(
     worker: &Worker,
     omega: &E::Fr,
     log_n: u32,
-) {
+) -> gpu::GPUResult<()> {
     if let Some(ref mut k) = kern {
-        gpu_fft(k, a, omega, log_n).expect("GPU FFT failed!");
+        gpu_fft(k, a, omega, log_n)?;
     } else {
         let log_cpus = worker.log_num_cpus();
         if log_n <= log_cpus {
@@ -294,6 +317,7 @@ fn best_fft<E: Engine, T: Group<E>>(
             parallel_fft(a, worker, omega, log_n, log_cpus);
         }
     }
+    Ok(())
 }
 
 pub fn gpu_fft<E: Engine, T: Group<E>>(

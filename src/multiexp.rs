@@ -282,11 +282,12 @@ where
         }
 
         let (bss, skip) = bases.get();
-        let result = k
-            .multiexp(bss, Arc::new(exps), skip, n)
-            .expect("GPU Multiexp failed!");
+        let result = k.multiexp(bss, Arc::new(exps), skip, n);
 
-        return Box::new(pool.compute(move || Ok(result)));
+        return Box::new(pool.compute(move || match result {
+            Ok(p) => Ok(p),
+            Err(e) => Err(SynthesisError::from(e)),
+        }));
     }
 
     let c = if exponents.len() < 32 {
@@ -354,7 +355,7 @@ lazy_static::lazy_static! {
 }
 
 use std::env;
-pub fn gpu_multiexp_supported<E>() -> gpu::GPUResult<gpu::MultiexpKernel<E>>
+pub fn gpu_multiexp_supported<E>() -> Result<gpu::MultiexpKernel<E>, SynthesisError>
 where
     E: paired::Engine,
 {
@@ -396,11 +397,9 @@ where
                 exps.clone(),
                 &mut kern,
             )
-            .wait()
-            .unwrap();
-            let cpu_g1 = multiexp(&pool, (bases_g1, 0), FullDensity, exps.clone(), &mut None)
-                .wait()
-                .unwrap();
+            .wait()?;
+            let cpu_g1 =
+                multiexp(&pool, (bases_g1, 0), FullDensity, exps.clone(), &mut None).wait()?;
             let gpu_g2 = multiexp(
                 &pool,
                 (bases_g2.clone(), 0),
@@ -408,11 +407,8 @@ where
                 exps.clone(),
                 &mut kern,
             )
-            .wait()
-            .unwrap();
-            let cpu_g2 = multiexp(&pool, (bases_g2, 0), FullDensity, exps, &mut None)
-                .wait()
-                .unwrap();
+            .wait()?;
+            let cpu_g2 = multiexp(&pool, (bases_g2, 0), FullDensity, exps, &mut None).wait()?;
             let res = cpu_g1 == gpu_g1 && cpu_g2 == gpu_g2;
             *supported = Some(res);
             res
@@ -421,9 +417,9 @@ where
     if res {
         Ok(kern.unwrap())
     } else {
-        Err(gpu::GPUError {
+        Err(SynthesisError::from(gpu::GPUError {
             msg: "GPU Multiexp not supported!".to_string(),
-        })
+        }))
     }
 }
 
