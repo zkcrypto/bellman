@@ -68,7 +68,7 @@ where
     let aff_size = std::mem::size_of::<E::G1Affine>() + std::mem::size_of::<E::G2Affine>();
     let exp_size = std::mem::size_of::<E::Fr>();
     let proj_size = std::mem::size_of::<E::G1>() + std::mem::size_of::<E::G2>();
-    ((((mem as f64) * MEMORY_PADDING) as usize)
+    ((((mem as f64) * (1f64 - MEMORY_PADDING)) as usize)
         - (2 * core_count * ((1 << MAX_WINDOW_SIZE) + 1) * proj_size))
         / (aff_size + exp_size)
 }
