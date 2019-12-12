@@ -9,7 +9,7 @@ use rand_core::RngCore;
 use std::cmp::Ordering;
 use std::fmt;
 use std::num::Wrapping;
-use std::ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign};
+use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
 const MODULUS_R: Wrapping<u32> = Wrapping(64513);
 
@@ -19,6 +19,17 @@ pub struct Fr(Wrapping<u32>);
 impl fmt::Display for Fr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         write!(f, "{}", (self.0).0)
+    }
+}
+
+impl Neg for Fr {
+    type Output = Self;
+
+    fn neg(mut self) -> Self {
+        if !<Fr as Field>::is_zero(&self) {
+            self.0 = MODULUS_R - self.0;
+        }
+        self
     }
 }
 
@@ -135,12 +146,6 @@ impl Field for Fr {
 
     fn double(&mut self) {
         self.0 = (self.0 << 1) % MODULUS_R;
-    }
-
-    fn negate(&mut self) {
-        if !<Fr as Field>::is_zero(self) {
-            self.0 = MODULUS_R - self.0;
-        }
     }
 
     fn inverse(&self) -> Option<Self> {
@@ -413,7 +418,7 @@ impl CurveProjective for Fr {
     }
 
     fn negate(&mut self) {
-        <Fr as Field>::negate(self);
+        self.0 = self.neg().0;
     }
 
     fn mul_assign<S: Into<<Self::Scalar as PrimeField>::Repr>>(&mut self, other: S) {
@@ -495,7 +500,7 @@ impl CurveAffine for Fr {
     }
 
     fn negate(&mut self) {
-        <Fr as Field>::negate(self);
+        self.0 = self.neg().0;
     }
 
     fn mul<S: Into<<Self::Scalar as PrimeField>::Repr>>(&self, other: S) -> Self::Projective {

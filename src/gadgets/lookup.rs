@@ -1,7 +1,7 @@
 //! Window table lookup gadgets.
 
 use ff::{Field, ScalarEngine};
-use std::ops::AddAssign;
+use std::ops::{AddAssign, Neg};
 
 use super::boolean::Boolean;
 use super::num::{AllocatedNum, Num};
@@ -16,8 +16,7 @@ where
     assert_eq!(assignment.len(), 1 << window_size);
 
     for (i, constant) in constants.into_iter().enumerate() {
-        let mut cur = assignment[i];
-        cur.negate();
+        let mut cur = assignment[i].neg();
         cur.add_assign(constant);
         assignment[i] = cur;
         for (j, eval) in assignment.iter_mut().enumerate().skip(i + 1) {
@@ -151,7 +150,7 @@ where
     let y = AllocatedNum::alloc(cs.namespace(|| "y"), || {
         let mut tmp = coords[*i.get()?].1;
         if *bits[2].get_value().get()? {
-            tmp.negate();
+            tmp = tmp.neg();
         }
         Ok(tmp)
     })?;
@@ -281,7 +280,7 @@ mod test {
             assert_eq!(res.0.get_value().unwrap(), points[index].0);
             let mut tmp = points[index].1;
             if c_val {
-                tmp.negate()
+                tmp = tmp.neg()
             }
             assert_eq!(res.1.get_value().unwrap(), tmp);
         }

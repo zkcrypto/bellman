@@ -417,7 +417,7 @@ mod test {
     use pairing::bls12_381::{Bls12, Fr};
     use rand_core::SeedableRng;
     use rand_xorshift::XorShiftRng;
-    use std::ops::SubAssign;
+    use std::ops::{Neg, SubAssign};
 
     use super::{AllocatedNum, Boolean};
     use crate::gadgets::test::*;
@@ -519,8 +519,7 @@ mod test {
 
     #[test]
     fn test_into_bits_strict() {
-        let mut negone = Fr::one();
-        negone.negate();
+        let negone = Fr::one().neg();
 
         let mut cs = TestConstraintSystem::<Bls12>::new();
 
