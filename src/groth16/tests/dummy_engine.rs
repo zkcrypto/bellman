@@ -10,6 +10,7 @@ use std::cmp::Ordering;
 use std::fmt;
 use std::num::Wrapping;
 use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
+use subtle::{Choice, ConditionallySelectable};
 
 const MODULUS_R: Wrapping<u32> = Wrapping(64513);
 
@@ -19,6 +20,16 @@ pub struct Fr(Wrapping<u32>);
 impl fmt::Display for Fr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         write!(f, "{}", (self.0).0)
+    }
+}
+
+impl ConditionallySelectable for Fr {
+    fn conditional_select(a: &Self, b: &Self, choice: Choice) -> Self {
+        Fr(Wrapping(u32::conditional_select(
+            &(a.0).0,
+            &(b.0).0,
+            choice,
+        )))
     }
 }
 
