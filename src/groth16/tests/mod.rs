@@ -5,6 +5,7 @@ mod dummy_engine;
 use self::dummy_engine::*;
 
 use std::marker::PhantomData;
+use std::ops::{AddAssign, MulAssign, SubAssign};
 
 use crate::{Circuit, ConstraintSystem, SynthesisError};
 

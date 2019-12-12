@@ -6,6 +6,7 @@ use crate::{ConstraintSystem, Index, LinearCombination, SynthesisError, Variable
 
 use std::collections::HashMap;
 use std::fmt::Write;
+use std::ops::{AddAssign, MulAssign};
 
 use byteorder::{BigEndian, ByteOrder};
 use std::cmp::Ordering;

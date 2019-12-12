@@ -474,6 +474,7 @@ mod test_with_bls12_381 {
     use ff::Field;
     use pairing::bls12_381::{Bls12, Fr};
     use rand::thread_rng;
+    use std::ops::MulAssign;
 
     #[test]
     fn serialization() {

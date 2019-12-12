@@ -9,6 +9,7 @@ use rand_core::RngCore;
 use std::cmp::Ordering;
 use std::fmt;
 use std::num::Wrapping;
+use std::ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign};
 
 const MODULUS_R: Wrapping<u32> = Wrapping(64513);
 
@@ -18,6 +19,96 @@ pub struct Fr(Wrapping<u32>);
 impl fmt::Display for Fr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         write!(f, "{}", (self.0).0)
+    }
+}
+
+impl<'r> Add<&'r Fr> for Fr {
+    type Output = Self;
+
+    fn add(self, other: &Self) -> Self {
+        let mut ret = self;
+        AddAssign::add_assign(&mut ret, other);
+        ret
+    }
+}
+
+impl Add for Fr {
+    type Output = Self;
+
+    fn add(self, other: Self) -> Self {
+        self + &other
+    }
+}
+
+impl<'r> AddAssign<&'r Fr> for Fr {
+    fn add_assign(&mut self, other: &Self) {
+        self.0 = (self.0 + other.0) % MODULUS_R;
+    }
+}
+
+impl AddAssign for Fr {
+    fn add_assign(&mut self, other: Self) {
+        AddAssign::add_assign(self, &other);
+    }
+}
+
+impl<'r> Sub<&'r Fr> for Fr {
+    type Output = Self;
+
+    fn sub(self, other: &Self) -> Self {
+        let mut ret = self;
+        SubAssign::sub_assign(&mut ret, other);
+        ret
+    }
+}
+
+impl Sub for Fr {
+    type Output = Self;
+
+    fn sub(self, other: Self) -> Self {
+        self - &other
+    }
+}
+
+impl<'r> SubAssign<&'r Fr> for Fr {
+    fn sub_assign(&mut self, other: &Self) {
+        self.0 = ((MODULUS_R + self.0) - other.0) % MODULUS_R;
+    }
+}
+
+impl SubAssign for Fr {
+    fn sub_assign(&mut self, other: Self) {
+        SubAssign::sub_assign(self, &other);
+    }
+}
+
+impl<'r> Mul<&'r Fr> for Fr {
+    type Output = Self;
+
+    fn mul(self, other: &Self) -> Self {
+        let mut ret = self;
+        MulAssign::mul_assign(&mut ret, other);
+        ret
+    }
+}
+
+impl Mul for Fr {
+    type Output = Self;
+
+    fn mul(self, other: Self) -> Self {
+        self * &other
+    }
+}
+
+impl<'r> MulAssign<&'r Fr> for Fr {
+    fn mul_assign(&mut self, other: &Self) {
+        self.0 = (self.0 * other.0) % MODULUS_R;
+    }
+}
+
+impl MulAssign for Fr {
+    fn mul_assign(&mut self, other: Self) {
+        MulAssign::mul_assign(self, &other);
     }
 }
 
@@ -50,18 +141,6 @@ impl Field for Fr {
         if !<Fr as Field>::is_zero(self) {
             self.0 = MODULUS_R - self.0;
         }
-    }
-
-    fn add_assign(&mut self, other: &Self) {
-        self.0 = (self.0 + other.0) % MODULUS_R;
-    }
-
-    fn sub_assign(&mut self, other: &Self) {
-        self.0 = ((MODULUS_R + self.0) - other.0) % MODULUS_R;
-    }
-
-    fn mul_assign(&mut self, other: &Self) {
-        self.0 = (self.0 * other.0) % MODULUS_R;
     }
 
     fn inverse(&self) -> Option<Self> {
@@ -121,9 +200,9 @@ impl SqrtField for Fr {
                     for _ in 0..(m - i - 1) {
                         c.square();
                     }
-                    <Fr as Field>::mul_assign(&mut r, &c);
+                    MulAssign::mul_assign(&mut r, &c);
                     c.square();
-                    <Fr as Field>::mul_assign(&mut t, &c);
+                    MulAssign::mul_assign(&mut t, &c);
                     m = i;
                 }
 
@@ -280,8 +359,8 @@ impl Engine for DummyEngine {
 
         for &(a, b) in i {
             let mut tmp = *a;
-            <Fr as Field>::mul_assign(&mut tmp, b);
-            <Fr as Field>::add_assign(&mut acc, &tmp);
+            MulAssign::mul_assign(&mut tmp, b);
+            AddAssign::add_assign(&mut acc, &tmp);
         }
 
         acc
@@ -326,11 +405,11 @@ impl CurveProjective for Fr {
     }
 
     fn add_assign(&mut self, other: &Self) {
-        <Fr as Field>::add_assign(self, other);
+        AddAssign::add_assign(self, other);
     }
 
     fn add_assign_mixed(&mut self, other: &Self) {
-        <Fr as Field>::add_assign(self, other);
+        AddAssign::add_assign(self, other);
     }
 
     fn negate(&mut self) {
@@ -340,7 +419,7 @@ impl CurveProjective for Fr {
     fn mul_assign<S: Into<<Self::Scalar as PrimeField>::Repr>>(&mut self, other: S) {
         let tmp = Fr::from_repr(other.into()).unwrap();
 
-        <Fr as Field>::mul_assign(self, &tmp);
+        MulAssign::mul_assign(self, &tmp);
     }
 
     fn into_affine(&self) -> Fr {
@@ -423,7 +502,7 @@ impl CurveAffine for Fr {
         let mut res = *self;
         let tmp = Fr::from_repr(other.into()).unwrap();
 
-        <Fr as Field>::mul_assign(&mut res, &tmp);
+        MulAssign::mul_assign(&mut res, &tmp);
 
         res
     }

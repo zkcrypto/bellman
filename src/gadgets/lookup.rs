@@ -1,6 +1,7 @@
 //! Window table lookup gadgets.
 
 use ff::{Field, ScalarEngine};
+use std::ops::AddAssign;
 
 use super::boolean::Boolean;
 use super::num::{AllocatedNum, Num};

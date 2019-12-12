@@ -7,6 +7,7 @@ use std::time::{Duration, Instant};
 // Bring in some tools for using pairing-friendly curves
 use ff::{Field, ScalarEngine};
 use pairing::Engine;
+use std::ops::{AddAssign, MulAssign};
 
 // We're going to use the BLS12-381 pairing-friendly elliptic curve.
 use pairing::bls12_381::Bls12;

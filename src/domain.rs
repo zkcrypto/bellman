@@ -13,6 +13,7 @@
 
 use ff::{Field, PrimeField, ScalarEngine};
 use group::CurveProjective;
+use std::ops::{AddAssign, MulAssign, SubAssign};
 
 use super::SynthesisError;
 

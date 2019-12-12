@@ -1,6 +1,7 @@
 //! Gadgets representing numbers in the scalar field of the underlying curve.
 
 use ff::{BitIterator, Field, PrimeField, PrimeFieldRepr, ScalarEngine};
+use std::ops::{AddAssign, MulAssign};
 
 use crate::{ConstraintSystem, LinearCombination, SynthesisError, Variable};
 
@@ -416,6 +417,7 @@ mod test {
     use pairing::bls12_381::{Bls12, Fr};
     use rand_core::SeedableRng;
     use rand_xorshift::XorShiftRng;
+    use std::ops::SubAssign;
 
     use super::{AllocatedNum, Boolean};
     use crate::gadgets::test::*;

@@ -5,6 +5,7 @@ use super::num::Num;
 use super::Assignment;
 use crate::{ConstraintSystem, SynthesisError};
 use ff::{Field, PrimeField, ScalarEngine};
+use std::ops::AddAssign;
 
 /// Takes a sequence of booleans and exposes them as compact
 /// public inputs

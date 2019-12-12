@@ -161,7 +161,7 @@ use std::error::Error;
 use std::fmt;
 use std::io;
 use std::marker::PhantomData;
-use std::ops::{Add, Sub};
+use std::ops::{Add, MulAssign, Sub};
 
 /// Computations are expressed in terms of arithmetic circuits, in particular
 /// rank-1 quadratic constraint systems. The `Circuit` trait represents a
