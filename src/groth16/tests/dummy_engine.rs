@@ -144,8 +144,8 @@ impl Field for Fr {
         self.0 = (self.0 * self.0) % MODULUS_R;
     }
 
-    fn double(&mut self) {
-        self.0 = (self.0 << 1) % MODULUS_R;
+    fn double(&self) -> Self {
+        Fr((self.0 << 1) % MODULUS_R)
     }
 
     fn inverse(&self) -> Option<Self> {
@@ -406,7 +406,7 @@ impl CurveProjective for Fr {
     }
 
     fn double(&mut self) {
-        <Fr as Field>::double(self);
+        self.0 = <Fr as Field>::double(self).0;
     }
 
     fn add_assign(&mut self, other: &Self) {

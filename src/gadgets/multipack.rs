@@ -20,7 +20,7 @@ where
         for bit in bits {
             num = num.add_bool_with_coeff(CS::one(), bit, coeff);
 
-            coeff.double();
+            coeff = coeff.double();
         }
 
         let input = cs.alloc_input(|| format!("input {}", i), || Ok(*num.get_value().get()?))?;
@@ -63,7 +63,7 @@ pub fn compute_multipacking<E: ScalarEngine>(bits: &[bool]) -> Vec<E::Fr> {
                 cur.add_assign(&coeff);
             }
 
-            coeff.double();
+            coeff = coeff.double();
         }
 
         result.push(cur);

@@ -177,7 +177,7 @@ impl<E: ScalarEngine> AllocatedNum<E> {
         for bit in result.iter().rev() {
             lc = lc + (coeff, bit.get_variable());
 
-            coeff.double();
+            coeff = coeff.double();
         }
 
         lc = lc - self.variable;
@@ -203,7 +203,7 @@ impl<E: ScalarEngine> AllocatedNum<E> {
         for bit in bits.iter() {
             lc = lc + (coeff, bit.get_variable());
 
-            coeff.double();
+            coeff = coeff.double();
         }
 
         lc = lc - self.variable;
