@@ -63,7 +63,7 @@ impl<E: ScalarEngine, G: Group<E>> EvaluationDomain<E, G> {
         // Compute omega, the 2^exp primitive root of unity
         let mut omega = E::Fr::root_of_unity();
         for _ in exp..E::Fr::S {
-            omega.square();
+            omega = omega.square();
         }
 
         // Extend the coeffs vector with zeroes if necessary

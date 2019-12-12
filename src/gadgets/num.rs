@@ -254,8 +254,7 @@ impl<E: ScalarEngine> AllocatedNum<E> {
         let var = cs.alloc(
             || "squared num",
             || {
-                let mut tmp = *self.value.get()?;
-                tmp.square();
+                let tmp = self.value.get()?.square();
 
                 value = Some(tmp);
 

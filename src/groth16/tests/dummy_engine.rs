@@ -140,8 +140,8 @@ impl Field for Fr {
         (self.0).0 == 0
     }
 
-    fn square(&mut self) {
-        self.0 = (self.0 * self.0) % MODULUS_R;
+    fn square(&self) -> Self {
+        Fr((self.0 * self.0) % MODULUS_R)
     }
 
     fn double(&self) -> Self {
@@ -191,22 +191,21 @@ impl SqrtField for Fr {
                 while t != <Fr as Field>::one() {
                     let mut i = 1;
                     {
-                        let mut t2i = t;
-                        t2i.square();
+                        let mut t2i = t.square();
                         loop {
                             if t2i == <Fr as Field>::one() {
                                 break;
                             }
-                            t2i.square();
+                            t2i = t2i.square();
                             i += 1;
                         }
                     }
 
                     for _ in 0..(m - i - 1) {
-                        c.square();
+                        c = c.square();
                     }
                     MulAssign::mul_assign(&mut r, &c);
-                    c.square();
+                    c = c.square();
                     MulAssign::mul_assign(&mut t, &c);
                     m = i;
                 }
