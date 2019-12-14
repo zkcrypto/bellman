@@ -31,7 +31,7 @@ pub fn verify_proof<'a, E: Engine>(
     let mut acc = pvk.ic[0].into_projective();
 
     for (i, b) in public_inputs.iter().zip(pvk.ic.iter().skip(1)) {
-        acc.add_assign(&b.mul(i.into_repr()));
+        AddAssign::<&E::G1>::add_assign(&mut acc, &b.mul(i.into_repr()));
     }
 
     // The original verification equation is:
