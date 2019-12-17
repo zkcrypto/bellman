@@ -282,7 +282,7 @@ where
         }
 
         let (bss, skip) = bases.get();
-        let result = k.multiexp(bss, Arc::new(exps), skip, n);
+        let result = k.multiexp(pool, bss, Arc::new(exps), skip, n);
 
         return Box::new(pool.compute(move || match result {
             Ok(p) => Ok(p),
