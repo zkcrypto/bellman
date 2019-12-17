@@ -15,7 +15,7 @@ use std::sync::Arc;
 
 const MAX_WINDOW_SIZE: usize = 10;
 const LOCAL_WORK_SIZE: usize = 256;
-const MEMORY_PADDING: f64 = 0.2f64; // Let 20% of GPU memory be free
+const MEMORY_PADDING: usize = 1 * 1024 * 1024 * 1024; // Consider 1GB of free memory for the GPU
 
 // Multiexp kernel for a single GPU
 pub struct SingleMultiexpKernel<E>
@@ -68,8 +68,7 @@ where
     let aff_size = std::mem::size_of::<E::G1Affine>() + std::mem::size_of::<E::G2Affine>();
     let exp_size = std::mem::size_of::<E::Fr>();
     let proj_size = std::mem::size_of::<E::G1>() + std::mem::size_of::<E::G2>();
-    ((((mem as f64) * (1f64 - MEMORY_PADDING)) as usize)
-        - (2 * core_count * ((1 << MAX_WINDOW_SIZE) + 1) * proj_size))
+    ((mem as usize) - MEMORY_PADDING - (2 * core_count * ((1 << MAX_WINDOW_SIZE) + 1) * proj_size))
         / (aff_size + exp_size)
 }
 

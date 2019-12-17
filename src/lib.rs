@@ -358,6 +358,9 @@ impl fmt::Display for SynthesisError {
         if let SynthesisError::IoError(ref e) = *self {
             write!(f, "I/O error: ")?;
             e.fmt(f)
+        } else if let SynthesisError::GPUError(ref e) = *self {
+            write!(f, "GPU error: ")?;
+            e.fmt(f)
         } else {
             write!(f, "{}", self.description())
         }
