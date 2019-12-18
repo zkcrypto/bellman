@@ -11,14 +11,15 @@ booleans and number abstractions.
 This fork contains GPU parallel acceleration to the FFT and Multiexponentation algorithms in the groth16 prover codebase under a conditional compilation feature `#[cfg(feature = "gpu")]` and `gpu-test` for testing.
 
 ### Requirements
-NVIDIA GPU Graphics Driver
-OpenCL
+- NVIDIA GPU Graphics Driver
+
+- OpenCL
 
 ### Environment variables
 
 The gpu extension contains some env vars that may be set externally to this library.
 
-#### BELLMAN_NO_GPU
+- #### BELLMAN_NO_GPU
 
 Will disable the GPU feature from the library and force usage of the CPU.
 ```
@@ -26,7 +27,7 @@ Example
 env::set_var("BELLMAN_NO_GPU", "1");
 ```
 
-#### BELLMAN_GPU_NO_CHECK
+- #### BELLMAN_GPU_NO_CHECK
 
 Checking the correctness of GPU results can be time consuming. User can disable this feature.
 ```
@@ -35,7 +36,7 @@ env::set_var("BELLMAN_GPU_NO_CHECK", "1");
 
 ```
 
-#### BELLMAN_CUSTOM_GPU
+- #### BELLMAN_CUSTOM_GPU
 
 Will allow for adding a GPU not in the tested list. This requires researching the name of the GPU device and the number of cores in the format `["name:cores"]`.
 ```
@@ -43,7 +44,7 @@ Example
 env::set_var("BELLMAN_CUSTOM_GPU", "GeForce RTX 2080 Ti:4352, GeForce GTX 1060:1280");
 ```
 
-#### BELLMAN_CPU_UTILIZATION
+- #### BELLMAN_CPU_UTILIZATION
 
 Can be set in the interval [0,1] to designate a proportion of the multiexponenation calculation to be moved to cpu in parallel to the GPU to keep all hardware occupied. 
 
