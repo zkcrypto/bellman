@@ -6,6 +6,61 @@
 and primitive structures, as well as basic gadget implementations such as
 booleans and number abstractions.
 
+## GPU
+
+This fork contains GPU parallel acceleration to the FFT and Multiexponentation algorithms in the groth16 prover codebase under a conditional compilation feature `#[cfg(feature = "gpu")]` and `gpu-test` for testing.
+
+### Environment variables
+
+The gpu extension contains some env vars that may be set externally to this library.
+
+#### BELLMAN_NO_GPU
+
+Will disable the GPU feature from the library and force usage of the CPU.
+```
+Example
+env::set_var("BELLMAN_NO_GPU", "1");
+```
+
+#### BELLMAN_GPU_NO_CHECK
+
+Checking the correctness of GPU results can be time consuming. User can disable this feature.
+```
+Example
+env::set_var("BELLMAN_GPU_NO_CHECK", "1");
+
+```
+
+#### BELLMAN_CUSTOM_GPU
+
+Will allow for adding a GPU not in the tested list. This requires researching the name of the GPU device and the number of cores in the format `["name:cores"]`.
+```
+Example
+env::set_var("BELLMAN_CUSTOM_GPU", "GeForce RTX 2080 Ti:4352, GeForce GTX 1060:1280");
+```
+
+#### BELLMAN_CPU_UTILIZATION
+
+Can be set in the interval [0,1] to designate a proportion of the multiexponenation calculation to be moved to cpu in parallel to the GPU to keep all hardware occupied. 
+
+```
+Example
+env::set_var("BELLMAN_CPU_UTILIZATION", "0.5");
+```
+
+#### Supported / Tested Cards
+
+Currently only Nvidia hardware is supported, see [issue](https://github.com/finalitylabs/bellman/issues/3). Depending on the size of the proof being passed to the gpu for work, certain cards will not be able to allocate enough memory to either the FFT or Multiexp kernel. Below are a list of devices that work for small sets. In the future we will add the cuttoff point at which a given card will not be able to allocate enough memory to utilize the GPU.
+
+```
+("GeForce RTX 2080 Ti".to_string(), 4352),
+("GeForce RTX 2080 SUPER".to_string(), 3072),
+("GeForce RTX 2080".to_string(), 2944),
+("GeForce GTX 1080 Ti".to_string(), 3584),
+("GeForce GTX 1080".to_string(), 2560),
+("GeForce GTX 1060".to_string(), 1280),
+```
+
 ## License
 
 Licensed under either of
