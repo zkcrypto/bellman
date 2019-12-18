@@ -10,6 +10,10 @@ booleans and number abstractions.
 
 This fork contains GPU parallel acceleration to the FFT and Multiexponentation algorithms in the groth16 prover codebase under a conditional compilation feature `#[cfg(feature = "gpu")]` and `gpu-test` for testing.
 
+### Requirements
+NVIDIA GPU Graphics Driver
+OpenCL
+
 ### Environment variables
 
 The gpu extension contains some env vars that may be set externally to this library.
