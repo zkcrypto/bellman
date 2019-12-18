@@ -17,6 +17,14 @@ pub trait Circuit<E: Engine> {
         self,
         cs: &mut CS
     ) -> Result<(), SynthesisError>;
+
+    fn barik_synthesize<CS: ConstraintSystem<E>>(
+        &self,
+        cs: &mut CS
+    ) -> Result<(), SynthesisError>
+    {
+        Ok(())
+    }
 }
 
 /// Represents a variable in our constraint system.
@@ -274,6 +282,61 @@ pub trait ConstraintSystem<E: Engine>: Sized {
 
         Namespace(self.get_root(), PhantomData)
     }
+
+    fn resize_for_enforces(&mut self,count_for_resize: u32)
+    {
+        panic!("barik loh kek 1");
+        // do nothing
+    }
+
+    fn resize_for_allocs(&mut self,count_for_resize: u32)
+    {
+        panic!("barik loh kek 111");
+        // do nothing
+    }
+
+    fn get_size_of_a(&mut self)->usize
+    {
+        println!("ya kek 1");
+        panic!("barik loh kek 2");
+        0 as usize
+    }
+
+    fn get_size_of_aux(&mut self)->usize
+    {
+        println!("ya kek 1");
+        panic!("barik loh kek 222");
+        0 as usize
+    }
+
+    fn barik_alloc<F, A, AR>(
+        &mut self,
+        barik_index: &mut usize,
+        annotation: A,
+        f: F
+    ) -> Result<Variable, SynthesisError>
+        where F: FnOnce() -> Result<E::Fr, SynthesisError>, A: FnOnce() -> AR, AR: Into<String>
+    {
+        panic!("barik loh kek in alloc");
+    }
+
+    fn barik_enforce<A, AR, LA, LB, LC>(
+        &mut self,
+        annotation: A,
+        barik_index: &mut usize,
+        a: LA,
+        b: LB,
+        c: LC
+    )
+        where A: FnOnce() -> AR, AR: Into<String>,
+              LA: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
+              LB: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
+              LC: FnOnce(LinearCombination<E>) -> LinearCombination<E>
+    {
+        // lol
+
+        panic!("barik loh kek 3");
+    }
 }
 
 /// This is a "namespaced" constraint system which borrows a constraint system (pushing
@@ -340,6 +403,38 @@ impl<'cs, E: Engine, CS: ConstraintSystem<E>> ConstraintSystem<E> for Namespace<
     fn get_root(&mut self) -> &mut Self::Root
     {
         self.0.get_root()
+    }
+
+    fn resize_for_enforces(&mut self, count_for_resize: u32) { self.0.resize_for_enforces(count_for_resize); }
+
+    fn resize_for_allocs(&mut self,count_for_resize: u32) { self.0.resize_for_allocs(count_for_resize); }
+
+    fn get_size_of_a(&mut self)->usize { self.0.get_size_of_a() }
+
+    fn get_size_of_aux(&mut self)->usize { self.0.get_size_of_aux() }
+
+    fn barik_alloc<F, A, AR>(
+        &mut self,
+        barik_index: &mut usize,
+        annotation: A,
+        f: F
+    ) -> Result<Variable, SynthesisError>
+        where F: FnOnce() -> Result<E::Fr, SynthesisError>, A: FnOnce() -> AR, AR: Into<String> { self.0.barik_alloc(barik_index, annotation, f) }
+
+    fn barik_enforce<A, AR, LA, LB, LC>(
+        &mut self,
+        annotation: A,
+        barik_index: &mut usize,
+        a: LA,
+        b: LB,
+        c: LC
+    )
+        where A: FnOnce() -> AR, AR: Into<String>,
+              LA: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
+              LB: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
+              LC: FnOnce(LinearCombination<E>) -> LinearCombination<E>
+    {
+        self.0.barik_enforce(annotation, barik_index, a, b, c)
     }
 }
 
