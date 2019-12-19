@@ -79,6 +79,17 @@ fn calc_window_size(n: usize, exp_bits: usize, core_count: usize) -> usize {
     return MAX_WINDOW_SIZE;
 }
 
+fn calc_best_chunk_size(max_window_size: usize, core_count: usize, exp_bits: usize) -> usize {
+    // Best chunk-size (N) can also be calculated using the same logic as calc_window_size:
+    // n = e^window_size * window_size * 2 * core_count / exp_bits
+    (((max_window_size as f64).exp() as f64)
+        * (max_window_size as f64)
+        * 2f64
+        * (core_count as f64)
+        / (exp_bits as f64))
+        .ceil() as usize
+}
+
 fn calc_chunk_size<E>(mem: u64, core_count: usize) -> usize
 where
     E: Engine,
@@ -99,9 +110,12 @@ where
         let src = sources::kernel::<E>();
         let pq = ProQue::builder().device(d).src(src).dims(1).build()?;
 
+        let exp_bits = std::mem::size_of::<E::Fr>() * 8;
         let core_count = utils::get_core_count(d)?;
         let mem = utils::get_memory(d)?;
         let max_n = calc_chunk_size::<E>(mem, core_count);
+        let best_n = calc_best_chunk_size(MAX_WINDOW_SIZE, core_count, exp_bits);
+        let n = std::cmp::min(max_n, best_n);
         let max_bucket_len = 1 << MAX_WINDOW_SIZE;
 
         // Each group will have `num_windows` threads and as there are `num_groups` groups, there will
@@ -111,7 +125,7 @@ where
         let g1basebuff = Buffer::builder()
             .queue(pq.queue().clone())
             .flags(MemFlags::new().read_write())
-            .len(max_n)
+            .len(n)
             .build()?;
         let g1buckbuff = Buffer::builder()
             .queue(pq.queue().clone())
@@ -127,7 +141,7 @@ where
         let g2basebuff = Buffer::builder()
             .queue(pq.queue().clone())
             .flags(MemFlags::new().read_write())
-            .len(max_n)
+            .len(n)
             .build()?;
         let g2buckbuff = Buffer::builder()
             .queue(pq.queue().clone())
@@ -143,7 +157,7 @@ where
         let expbuff = Buffer::builder()
             .queue(pq.queue().clone())
             .flags(MemFlags::new().read_write())
-            .len(max_n)
+            .len(n)
             .build()?;
 
         Ok(SingleMultiexpKernel {
@@ -156,7 +170,7 @@ where
             g2_result_buffer: g2resbuff,
             exp_buffer: expbuff,
             core_count: core_count,
-            n: max_n,
+            n,
         })
     }
 
