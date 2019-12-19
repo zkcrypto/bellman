@@ -59,12 +59,20 @@ Currently only Nvidia hardware is supported, see [issue](https://github.com/fina
 
 ```
 ("Device_Name", Cores),
+("TITAN RTX", 4608),
+("Tesla V100", 5120),
+("Tesla P100", 3584),
 ("GeForce RTX 2080 Ti", 4352),
 ("GeForce RTX 2080 SUPER", 3072),
 ("GeForce RTX 2080", 2944),
+("GeForce RTX 2070 SUPER", 2560),
 ("GeForce GTX 1080 Ti", 3584),
 ("GeForce GTX 1080", 2560),
+("GeForce GTX 2060", 1920),
+("GeForce GTX 1660 Ti", 1536),
 ("GeForce GTX 1060", 1280),
+("GeForce GTX 1650 SUPER", 1280),
+("GeForce GTX 1650", 896),
 ```
 
 ## License
