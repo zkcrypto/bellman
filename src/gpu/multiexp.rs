@@ -170,7 +170,7 @@ where
             g2_result_buffer: g2resbuff,
             exp_buffer: expbuff,
             core_count: core_count,
-            n: n,
+            n,
         })
     }
 
