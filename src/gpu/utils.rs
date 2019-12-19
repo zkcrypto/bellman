@@ -32,12 +32,23 @@ pub fn get_devices(platform_name: &str) -> GPUResult<Vec<Device>> {
 lazy_static::lazy_static! {
     static ref CORE_COUNTS: HashMap<String, usize> = {
         let mut core_counts : HashMap<String, usize> = vec![
+            ("TITAN RTX".to_string(), 4608),
+
+            ("Tesla V100".to_string(), 5120),
+            ("Tesla P100".to_string(), 3584),
+
             ("GeForce RTX 2080 Ti".to_string(), 4352),
             ("GeForce RTX 2080 SUPER".to_string(), 3072),
             ("GeForce RTX 2080".to_string(), 2944),
+            ("GeForce RTX 2070 SUPER".to_string(), 2560),
+
             ("GeForce GTX 1080 Ti".to_string(), 3584),
             ("GeForce GTX 1080".to_string(), 2560),
+            ("GeForce GTX 2060".to_string(), 1920),
+            ("GeForce GTX 1660 Ti".to_string(), 1536),
             ("GeForce GTX 1060".to_string(), 1280),
+            ("GeForce GTX 1650 SUPER".to_string(), 1280),
+            ("GeForce GTX 1650".to_string(), 896),
         ].into_iter().collect();
 
         match env::var("BELLMAN_CUSTOM_GPU").and_then(|var| {
