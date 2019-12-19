@@ -82,7 +82,12 @@ fn calc_window_size(n: usize, exp_bits: usize, core_count: usize) -> usize {
 fn calc_best_chunk_size(max_window_size: usize, core_count: usize, exp_bits: usize) -> usize {
     // Best chunk-size (N) can also be calculated using the same logic as calc_window_size:
     // n = e^window_size * window_size * 2 * core_count / exp_bits
-    ((max_window_size as f64).exp() as usize) * max_window_size * 2 * core_count / exp_bits
+    (((max_window_size as f64).exp() as f64)
+        * (max_window_size as f64)
+        * 2f64
+        * (core_count as f64)
+        / (exp_bits as f64))
+        .ceil() as usize
 }
 
 fn calc_chunk_size<E>(mem: u64, core_count: usize) -> usize
