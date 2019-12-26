@@ -23,9 +23,8 @@ impl<'a, E: Engine, CS: PlonkConstraintSystem<E> + 'a> crate::ConstraintSystem<E
 {
     type Root = Self;
 
-
     fn one() -> crate::Variable {
-        crate::Variable::new_unchecked(crate::Index::Input(1))
+        crate::Variable::new_unchecked(crate::Index::Input(0))
     }
 
     fn alloc<F, A, AR>(&mut self, _: A, f: F) -> Result<crate::Variable, crate::SynthesisError>
@@ -72,16 +71,24 @@ impl<'a, E: Engine, CS: PlonkConstraintSystem<E> + 'a> crate::ConstraintSystem<E
         LB: FnOnce(crate::LinearCombination<E>) -> crate::LinearCombination<E>,
         LC: FnOnce(crate::LinearCombination<E>) -> crate::LinearCombination<E>,
     {
-        let mut negative_one = E::Fr::one();
-        negative_one.negate();
-
-        fn convert<E: Engine>(lc: crate::LinearCombination<E>) -> Vec<(E::Fr, PlonkVariable)> {
+        
+        /// Represents either a "true" variable or a constant
+        /// auxillary variable.
+        #[derive(Copy, Clone, PartialEq, Debug, Hash, Eq)]
+        enum Var
+        {
+            InputVar(PlonkVariable),
+            ConstVar
+        }
+        
+        fn convert<E: Engine>(lc: crate::LinearCombination<E>) -> Vec<(E::Fr, Var)> {
             let mut ret = Vec::with_capacity(lc.as_ref().len());
 
             for &(v, coeff) in lc.as_ref().iter() {
                 let var = match v.get_unchecked() {
-                    crate::Index::Input(i) => PlonkVariable(PlonkIndex::Input(i)),
-                    crate::Index::Aux(i) => PlonkVariable(PlonkIndex::Aux(i)),
+                    crate::Index::Input(0) => Var::ConstVar,
+                    crate::Index::Input(i) => Var::InputVar(PlonkVariable(PlonkIndex::Input(i))),
+                    crate::Index::Aux(i) => Var::InputVar(PlonkVariable(PlonkIndex::Aux(i))),
                 };
 
                 ret.push((coeff, var));
@@ -90,215 +97,218 @@ impl<'a, E: Engine, CS: PlonkConstraintSystem<E> + 'a> crate::ConstraintSystem<E
             ret
         }
 
-        fn eval_short<E: Engine, CS: PlonkConstraintSystem<E>>(
-            terms: &Vec<(E::Fr, PlonkVariable)>,
-            cs: &CS,
-        ) -> Option<E::Fr> {
-            debug_assert!(terms.len() < 3 && terms.len() > 0);
-            let mut extra_value = E::Fr::zero();
-
-            for &(coeff, var) in terms.iter() {
-                let mut var_value = match cs.get_value(var) {
-                    Ok(tmp) => tmp,
-                    Err(_) => return None,
-                };
-                var_value.mul_assign(&coeff);
-
-                extra_value.add_assign(&var_value);
-            }
-
-            Some(extra_value)
-        }
-
-        fn eval<E: Engine, CS: PlonkConstraintSystem<E>>(
-            terms: &Vec<(E::Fr, PlonkVariable)>,
-            cs: &CS,
-        ) -> Option<Vec<E::Fr>> {
-            debug_assert!(terms.len() >= 3);
-
-            let mut new_values = Vec::with_capacity(terms.len() - 1);
-            let mut iter = terms.iter();
-
-            let &(coeff_0, var) = iter.next().unwrap();
-            let mut var_0_value = match cs.get_value(var) {
-                Ok(tmp) => tmp,
-                Err(_) => return None,
-            };
-            var_0_value.mul_assign(&coeff_0);
-
-            let &(coeff_1, var) = iter.next().unwrap();
-            let mut var_1_value = match cs.get_value(var) {
-                Ok(tmp) => tmp,
-                Err(_) => return None,
-            };
-            var_1_value.mul_assign(&coeff_1);
-
-            let mut new_var_value = var_0_value;
-            new_var_value.add_assign(&var_1_value);
-
-            new_values.push(new_var_value);
-
-            for &(coeff, var) in iter {
-                let mut ret = new_var_value;
-                let mut var_value = match cs.get_value(var) {
-                    Ok(tmp) => tmp,
-                    Err(_) => return None,
-                };
-                var_value.mul_assign(&coeff);
-                ret.add_assign(&var_value);
-
-                new_values.push(var_value);
-                new_var_value = var_value;
-            }
-
-            Some(new_values)
-        }
-
-        fn allocate_lc_intermediate_variables<E: Engine, CS: PlonkConstraintSystem<E>>(
-            original_terms: Vec<(E::Fr, PlonkVariable)>, 
-            intermediate_values: Option<Vec<E::Fr>>,
-            cs: &mut CS,
-        ) -> PlonkVariable {
-            let new_variables = if let Some(values) = intermediate_values {
-                debug_assert!(values.len() == original_terms.len() - 1);
-
-                let new_variables: Vec<_> = values.into_iter().map(|v| 
-                    cs.alloc(
-                        || Ok(v)
-                    ).expect("must allocate")
-                ).collect();
-
-                new_variables
-            } else {
-                let new_variables: Vec<_> = (0..(original_terms.len() - 1)).map(|_| 
-                    cs.alloc(
-                        || Err(SynthesisError::AssignmentMissing)
-                    ).expect("must allocate")
-                ).collect();
-
-                new_variables
-            };
-
-            let mut original_iter = original_terms.into_iter();
-            let mut new_iter = new_variables.into_iter();
-
-            let mut intermediate_var = new_iter.next().expect("there is at least one new variable");
-
-            let (c_0, v_0) = original_iter.next().expect("there is at least one old variable");
-            let (c_1, v_1) = original_iter.next().expect("there are at least two old variables");
-
-            let mut negative_one = E::Fr::one();
-            negative_one.negate();
-
-            let one = E::Fr::one();
-
-            cs.enforce_zero_3((v_0, v_1, intermediate_var), (c_0, c_1, negative_one)).expect("must enforce");
-
-            debug_assert!(new_iter.len() == original_iter.len());
-
-            let remaining = new_iter.len();
-
-            for _ in 0..remaining {
-                let (coeff, original_var) = original_iter.next().expect("there is at least one more old variable");
-                let new_var = new_iter.next().expect("there is at least one more new variable");
-                cs.enforce_zero_3((original_var, intermediate_var, new_var), (coeff, one, negative_one)).expect("must enforce");
-
-                intermediate_var = new_var;
-            }
-
-            intermediate_var
-        }
-
         let a_terms = convert(a(crate::LinearCombination::zero()));
         let b_terms = convert(b(crate::LinearCombination::zero()));
         let c_terms = convert(c(crate::LinearCombination::zero()));
 
-        fn enforce<E: Engine, CS: PlonkConstraintSystem<E>>(
-            terms: Vec<(E::Fr, PlonkVariable)>,
+        ///first check if we are dealing with a boolean constraint
+        ///we use the following euristics: 
+        ///analyse comment string 
+        ///calculate the number of arguments in each linear combination - in boolean constraint length of each lc is at most 2
+        /// this function returns true in the case of boolean constraint
+        
+        fn handle_boolean_constraint<A, AR, E: Engine>(
+            la: &Vec<(E::Fr, Var)>,
+            lb: &Vec<(E::Fr, Var)>,
+            lc: &Vec<(E::Fr, Var)>,
+        ) -> bool
+        where
+            A: FnOnce() -> AR,
+            AR: Into<String>
+        {
+            return true;
+        }
+        
+
+        fn eval_lc_short<E: Engine, CS: PlonkConstraintSystem<E>>(
+            term1: (E::Fr, PlonkVariable),
+            term2: (E::Fr, PlonkVariable),
+            cs: &CS,
+        ) -> Option<E::Fr>
+        {
+            let mut extra_value = E::Fr::zero();
+
+            let mut var_value = match cs.get_value(term1.1) {
+                Ok(tmp) => tmp,
+                Err(_) => return None,
+            };
+            var_value.mul_assign(&term1.0);
+            extra_value.add_assign(&var_value);
+
+            var_value = match cs.get_value(term2.1) {
+                Ok(tmp) => tmp,
+                Err(_) => return None,
+            };
+            var_value.mul_assign(&term2.0);
+            extra_value.add_assign(&var_value);
+
+            Some(extra_value)
+        }
+
+
+        fn allocate_new_lc_var<E: Engine, CS: PlonkConstraintSystem<E>>(
+            term1: (E::Fr, PlonkVariable),
+            term2: (E::Fr, PlonkVariable),
             cs: &mut CS,
-        ) -> Option<PlonkVariable> {
+        ) -> PlonkVariable
+        {
+            
+            let extra_value = eval_lc_short(term1, term2, &*cs);
+            let extra_variable = cs.alloc(||
+                {
+                    if let Some(value) = extra_value {
+                        Ok(value)
+                    } else {
+                        Err(SynthesisError::AssignmentMissing)
+                    }
+                }
+                ).expect("must allocate");
+            
+            cs.enforce_mul_3((term1.1, term2.1, extra_variable)).expect("must allocate");
+            extra_variable
+        }
+
+
+        fn allocate_lc_intermediate_variables<E: Engine, CS: PlonkConstraintSystem<E>>(
+            terms: Vec<(E::Fr, Var)>, 
+            cs: &mut CS,
+        ) -> (PlonkVariable, Option<E::Fr>) {
+            
+            debug_assert!(terms.len() > 2);
+            let mut const_var_found = false;
+            let mut const_coeff = E::Fr::zero();
+            let mut current_var : Option<(E::Fr, PlonkVariable)> = None;
+
+            for &(coeff, var) in terms.iter() {
+                match var {
+                    Var::ConstVar => {
+                        if const_var_found {
+                            unreachable!();
+                        }
+                        const_var_found = true;
+                        const_coeff = coeff;
+                    }
+                    Var::InputVar(pv) => {
+                        current_var = match current_var {
+                            None => Some((coeff, pv)),
+                            Some((old_coeff, old_pv)) => {
+                                let new_val = allocate_new_lc_var((old_coeff, old_pv), (coeff, pv), cs);
+                                Some((E::Fr::one(), new_val))
+                            }
+                        }
+                    }                  
+                }
+
+            }
+
+            let var = match current_var {
+                Some((_, pv)) => pv,
+                None => unreachable!(),
+            };
+
+            let coef = match const_var_found{
+                false => None,
+                true => Some(const_coeff)
+            } ;
+
+            return (var, coef)         
+        }
+
+                    
+        /// after parsing we should return on of three possible results: 
+        /// variable, constant or sum variable + constant
+        
+        fn parse_lc<E: Engine, CS: PlonkConstraintSystem<E>>(
+            terms: Vec<(E::Fr, Var)>,
+            cs: &mut CS,
+        ) -> (Option<(E::Fr, PlonkVariable)>, Option<(E::Fr)>) {
             // there are few options
             match terms.len() {
                 0 => {
-                    // - no terms, so it's zero and we should later make a gate that basically constraints a*0 = 0
-                    None
+                    //Every linear combination in real cs should contain at least one term!
+                    unreachable!();
                 },
+
                 1 => {
                     let (c_0, v_0) = terms[0];
-                    if c_0 == E::Fr::one() {
-                        // if factor is one then we can just forwrad the variable
-                        return Some(v_0);
-                    }
-                    // make a single new variable that has coefficient of minus one
-                    let mut coeff = E::Fr::one();
-                    coeff.negate();
-                    let extra_value = eval_short(&terms, &*cs);
-                    let extra_variable = cs.alloc(||
-                    {
-                        if let Some(value) = extra_value {
-                            Ok(value)
-                        } else {
-                            Err(SynthesisError::AssignmentMissing)
-                        }
-                    }
-                    ).expect("must allocate");
-                    
-                    cs.enforce_zero_2((v_0, extra_variable), (c_0, coeff)).expect("must enforce");
-                    Some(extra_variable)
+                    let result = match v_0 {
+                        Var::InputVar(pv) => (Some((c_0, pv)), None),
+                        Var::ConstVar => (None, Some(c_0)),
+                    };
+                    // forward the result
+                    return result;
                 },
+
                 2 => {
-                    // make a single new variable that has coefficient of minus one
-                    let mut coeff = E::Fr::one();
-                    coeff.negate();
-                    let extra_value = eval_short(&terms, &*cs);
-                    let extra_variable = cs.alloc(||
-                    {
-                        if let Some(value) = extra_value {
-                            Ok(value)
-                        } else {
-                            Err(SynthesisError::AssignmentMissing)
-                        }
-                    }
-                    ).expect("must allocate");
                     let (c_0, v_0) = terms[0];
                     let (c_1, v_1) = terms[1];
-                    cs.enforce_zero_3((v_0, v_1, extra_variable), (c_0, c_1, coeff)).expect("must enforce");
-                    Some(extra_variable)
-                },
+                    
+                    //check of one of v_0, v_1 is constant and the other is variable or vice versa
+                    //the case of two constants is impossible in real cs!
+                    let result = match (v_0, v_1) {
+                        (Var::InputVar(pv), Var::ConstVar) => (Some((c_0, pv)), Some(c_1)),
+                        (Var::ConstVar, Var::InputVar(pv)) => (Some((c_1, pv)), Some(c_0)),
+                        (Var::InputVar(pv0), Var::InputVar(pv1)) => {
+                            let extra_variable = allocate_new_lc_var((c_0, pv0), (c_1, pv1), cs);
+                            (Some((E::Fr::one(), extra_variable)), None)    
+                            }
+                        (Var::ConstVar, Var::ConstVar) => unreachable!(),
+                    };
+
+                    return result;
+                }
+
                 _ => {
                     // here we need to allocate intermediate variables and output the last one
-                    let intermediate_values = eval(&terms, &*cs);
-                    let last_variable = allocate_lc_intermediate_variables(
-                        terms,
-                        intermediate_values, 
-                        cs
-                    );
-
-                    Some(last_variable)
-                }
+                    let last_vars = allocate_lc_intermediate_variables(terms, cs);
+                    return (Some((E::Fr::one(), last_vars.0)), last_vars.1);                
+                }                  
             }
         }
 
-        let a_var = enforce(a_terms, self.cs);
-        let b_var = enforce(b_terms, self.cs);
-        let c_var = enforce(c_terms, self.cs);
+        let a_var = parse_lc(a_terms, self.cs);
+        let b_var = parse_lc(b_terms, self.cs);
+        let c_var = parse_lc(c_terms, self.cs);
 
-        match (a_var, b_var, c_var) {
-            (Some(var), None, None) | (None, Some(var), None) | (None, None, Some(var)) => {
-                self.cs.enforce_constant(var, E::Fr::zero()).expect("must enforce");
-            },
 
-            (Some(var_0), Some(var_1), None) | (None, Some(var_0), Some(var_1)) | (Some(var_0), None, Some(var_1)) => {
-                self.cs.enforce_mul_2((var_0, var_1)).expect("must enforce");
-            },
+        /// parse result and return expr of the form: coeff * var + constant
 
-            (Some(var_0), Some(var_1), Some(var_2)) => {
-                self.cs.enforce_mul_3((var_0, var_1, var_2)).expect("must enforce");
-            },
-            _ => {
-                unreachable!()
-            }
-        }        
+        fn unfold_var<E: Engine>(
+            var: (Option<(E::Fr, PlonkVariable)>, Option<(E::Fr)>),
+            stub: PlonkVariable,
+        ) -> (E::Fr, PlonkVariable, E::Fr)
+        {
+            
+            let result = match var {
+                (Some((coeff, var)), Some(constant)) => (coeff, var, constant),
+                (Some((coeff, var)), None) => (coeff, var, E::Fr::zero()),
+                (None, Some(constant)) => (E::Fr::zero(), stub, constant), 
+                _ => unreachable!(),
+            };
+
+            return result;
+        }
+
+        // our final equation is of the following form
+        // (x a_var + c_1) (y b_var + c_2) = (z c_var + c_3)
+        // we can convert it to standard PLONK form: 
+        // (xy) a_var + b_var + (x c_2) a_var + (y c_1) b_var - z c_var + (c_1 c_2 - c_3) */
+
+        let (mut x, a_var, mut c_1) : (E::Fr, PlonkVariable, E::Fr) = unfold_var(a_var, CS::ZERO);
+        let (y, b_var, c_2) : (E::Fr, PlonkVariable, E::Fr) = unfold_var(b_var, CS::ZERO);
+        let (mut z, c_var, mut c_3) : (E::Fr, PlonkVariable, E::Fr) = unfold_var(c_var, CS::ZERO);
+
+        let mut a_coef : E::Fr = x;
+        a_coef.mul_assign(&y);
+
+        x.mul_assign(&c_2);
+        y.mul_assign(&c_1);
+        z.negate();
+        c_1.mul_assign(&c_2);
+        c_3.negate();
+        c_1.add_assign(&c_3);
+
+        self.cs.new_gate((a_var, b_var, c_var), (a_coef, x, y, z, c_1));    
     }
 
     fn push_namespace<NR, N>(&mut self, _: N)

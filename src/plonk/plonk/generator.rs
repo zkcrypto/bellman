@@ -72,11 +72,14 @@ impl<E: Engine> ConstraintSystem<E> for GeneratorAssembly<E> {
     }
 
     // allocate an abstract gate
-    fn new_gate<F>(&mut self, variables: (Variable, Variable, Variable), coeffs:(E::Fr, E::Fr, E::Fr, E::Fr, E::Fr), values: F) -> Result<(), SynthesisError>
-    where
-        F: FnOnce() -> Result<(E::Fr, E::Fr), SynthesisError>
+    fn new_gate<F>(&mut self, variables: (Variable, Variable, Variable), 
+        coeffs:(E::Fr, E::Fr, E::Fr, E::Fr, E::Fr)) -> Result<(), SynthesisError>
     {
-        unimplemented!()
+        let gate = Gate::<E::Fr>::new_gate(variables, coeffs);
+        self.aux_gates.push(gate);
+        self.n += 1;
+
+        Ok(())
     }
 
     // allocate a constant
