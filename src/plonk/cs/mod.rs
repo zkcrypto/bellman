@@ -40,7 +40,7 @@ pub trait ConstraintSystem<E: Engine> {
     fn enforce_boolean(&mut self, variable: Variable) -> Result<(), SynthesisError>;
 
     // allocate an abstract gate
-    fn new_gate<F>(&mut self, variables: (Variable, Variable, Variable), 
+    fn new_gate(&mut self, variables: (Variable, Variable, Variable), 
         coeffs:(E::Fr, E::Fr, E::Fr, E::Fr, E::Fr)) -> Result<(), SynthesisError>;
 
     // allocate a constant

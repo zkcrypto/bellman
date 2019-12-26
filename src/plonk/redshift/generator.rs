@@ -72,10 +72,10 @@ impl<E: Engine> ConstraintSystem<E> for GeneratorAssembly<E> {
     }
 
     // allocate an abstract gate
-    fn new_gate<F>(&mut self, variables: (Variable, Variable, Variable), 
+    fn new_gate(&mut self, variables: (Variable, Variable, Variable), 
         coeffs:(E::Fr, E::Fr, E::Fr, E::Fr, E::Fr)) -> Result<(), SynthesisError>
     {
-        let gate = Gate::<E::Fr>::new_gate(variables, coeffs;
+        let gate = Gate::<E::Fr>::new_gate(variables, coeffs);
         self.aux_gates.push(gate);
         self.n += 1;
 

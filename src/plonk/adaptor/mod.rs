@@ -273,9 +273,10 @@ impl<'a, E: Engine, CS: PlonkConstraintSystem<E> + 'a> crate::ConstraintSystem<E
 
         /// parse result and return expr of the form: coeff * var + constant
 
-        fn unfold_var<E: Engine>(
+        fn unfold_var<E: Engine, CS: PlonkConstraintSystem<E>>(
             var: (Option<(E::Fr, PlonkVariable)>, Option<(E::Fr)>),
             stub: PlonkVariable,
+            cs: &mut CS,
         ) -> (E::Fr, PlonkVariable, E::Fr)
         {
             
@@ -294,9 +295,9 @@ impl<'a, E: Engine, CS: PlonkConstraintSystem<E> + 'a> crate::ConstraintSystem<E
         // we can convert it to standard PLONK form: 
         // (xy) a_var + b_var + (x c_2) a_var + (y c_1) b_var - z c_var + (c_1 c_2 - c_3) */
 
-        let (mut x, a_var, mut c_1) : (E::Fr, PlonkVariable, E::Fr) = unfold_var(a_var, CS::ZERO);
-        let (y, b_var, c_2) : (E::Fr, PlonkVariable, E::Fr) = unfold_var(b_var, CS::ZERO);
-        let (mut z, c_var, mut c_3) : (E::Fr, PlonkVariable, E::Fr) = unfold_var(c_var, CS::ZERO);
+        let (mut x, a_var, mut c_1) : (E::Fr, PlonkVariable, E::Fr) = unfold_var(a_var, CS::ZERO, self.cs);
+        let (mut y, b_var, c_2) : (E::Fr, PlonkVariable, E::Fr) = unfold_var(b_var, CS::ZERO, self.cs);
+        let (mut z, c_var, mut c_3) : (E::Fr, PlonkVariable, E::Fr) = unfold_var(c_var, CS::ZERO, self.cs);
 
         let mut a_coef : E::Fr = x;
         a_coef.mul_assign(&y);
