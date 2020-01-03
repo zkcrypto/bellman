@@ -587,7 +587,8 @@ pub fn gpu_fft_supported<E>(log_d: u32) -> gpu::GPUResult<gpu::FFTKernel<E>>
 where
     E: Engine,
 {
-    let log_test_size: u32 = std::cmp::min(E::Fr::S - 1, 10);
+    const LOG_TEST_SIZE: u32 = 10;
+    let log_test_size: u32 = std::cmp::min(E::Fr::S - 1, std::cmp::min(LOG_TEST_SIZE, log_d));
     let test_size: u32 = 1 << log_test_size;
     let rng = &mut rand::thread_rng();
     let mut kern = gpu::FFTKernel::create(1 << log_d)?;
