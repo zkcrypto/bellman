@@ -95,7 +95,9 @@ jobs:
           command: cargo clippy --all-features
 
   build:
-    executor: default
+    machine:
+      resource_class: gpu.nvidia.medium
+      image: ubuntu-1604-cuda-10.1:201909-23
     steps:
       - *restore-workspace
       - *restore-cache
