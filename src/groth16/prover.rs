@@ -13,7 +13,10 @@ use crate::domain::{create_fft_kernel, EvaluationDomain, Scalar};
 use crate::gpu;
 use crate::multicore::Worker;
 use crate::multiexp::{create_multiexp_kernel, multiexp, DensityTracker, FullDensity};
-use crate::{Circuit, ConstraintSystem, Index, LinearCombination, SynthesisError, Variable};
+use crate::{
+    Circuit, ConstraintSystem, Index, LinearCombination, SynthesisError, Variable, BELLMAN_VERSION,
+};
+use log::info;
 
 fn eval<E: Engine>(
     lc: &LinearCombination<E>,
@@ -182,6 +185,8 @@ where
     E: Engine,
     C: Circuit<E>,
 {
+    info!("Bellperson {} is being used!", BELLMAN_VERSION);
+
     #[cfg(feature = "gpu")]
     let lock = gpu::lock()?;
 
