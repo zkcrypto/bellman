@@ -15,18 +15,68 @@ use std::marker::PhantomData;
 
 use std::collections::HashSet;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LcVariant {
+    A,
+    B,
+    C,
+}
+
 // These are transpilation options over A * B - C = 0 constraint
+#[derive(Clone, PartialEq, Eq)]
 enum TranspilationVariant<E: Engine> {
-    NoOp,
+    LeaveAsSingleVariable(E::Fr),
     IntoQuandaticGate((E::Fr, E::Fr, E::Fr)),
     IntoLinearGate((E::Fr, E::Fr)),
     IntoSingleAdditionGate((E::Fr, E::Fr, E::Fr, E::Fr)),
     IntoMultipleAdditionGates((E::Fr, E::Fr, E::Fr, E::Fr), Vec<E::Fr>),
+    MergeLinearCombinations((LcVariant, E::Fr, Box<TranspilationVariant<E>>)),
     IsConstant(E::Fr), 
     TransformLc(Box<(TranspilationVariant<E>, TranspilationVariant<E>, TranspilationVariant<E>)>)
 }
 
-struct Transpiler<E: Engine> {
+impl<E: Engine> std::fmt::Debug for TranspilationVariant<E> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TranspilationVariant::LeaveAsSingleVariable(c) => {
+                writeln!(f, "Variant: leave LC as a single variable")?;
+                writeln!(f, "With coefficient {}", c)?;
+            },
+            TranspilationVariant::IntoQuandaticGate(c) => {
+                writeln!(f, "Variant: into quadratic gate")?;
+                writeln!(f, "{} + {} * x + {} * x^2", c.0, c.1, c.2)?;
+            },
+            TranspilationVariant::IntoLinearGate(c) => {
+                writeln!(f, "Variant: into linear gate")?;
+                writeln!(f, "{} + {} * x", c.0, c.1)?;
+            },
+            TranspilationVariant::IntoSingleAdditionGate(c) => {
+                writeln!(f, "Variant: into single addition gate")?;
+                writeln!(f, "{}*a + {}*b + {}*c + {} = 0", c.0, c.1, c.2, c.3)?;
+            },
+            TranspilationVariant::IntoMultipleAdditionGates(_, _) => {
+                writeln!(f, "Variant: into multiple addition gates")?;
+            },
+            TranspilationVariant::MergeLinearCombinations(c) => {
+                writeln!(f, "Variant: merge linear combinations")?;
+                writeln!(f, "Merge with hint: {:?}", c.0)?;
+            },
+            TranspilationVariant::IsConstant(c) => {
+                writeln!(f, "Variant: into constant factor {}", c)?;
+            },
+            TranspilationVariant::TransformLc(b) => {
+                writeln!(f, "Variant: into combinatoric transform LC")?;
+                writeln!(f, "A: {:?}", b.as_ref().0)?;
+                writeln!(f, "B: {:?}", b.as_ref().1)?;
+                writeln!(f, "C: {:?}", b.as_ref().2)?;
+            },
+        }
+
+        Ok(())
+    }
+}
+
+pub struct Transpiler<E: Engine> {
     current_constraint_index: usize,
     current_plonk_input_idx: usize,
     current_plonk_aux_idx: usize,
@@ -35,7 +85,7 @@ struct Transpiler<E: Engine> {
 }
 
 impl<E: Engine> Transpiler<E> {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             current_constraint_index: 0,
             current_plonk_input_idx: 1,
@@ -57,8 +107,14 @@ impl<E: Engine> Transpiler<E> {
         
         let (contains_constant, num_linear_terms) = num_unique_values::<E, Self>(&lc, &mut self.scratch);
         assert!(num_linear_terms > 0);
-        if num_linear_terms <= 2 {
-            let (new_var, (mut a_coef, mut b_coef, mut c_coef, mut constant_coeff)) = rewrite_lc_into_single_addition_gate(&lc, &mut self, &mut self.scratch);
+        if num_linear_terms == 1 && !contains_constant {
+            let (existing_var, coeff) = lc.as_ref()[0];
+
+            let hint = TranspilationVariant::<E>::LeaveAsSingleVariable(coeff);
+
+            return (existing_var, hint);
+        } else if num_linear_terms <= 2 {
+            let (new_var, (mut a_coef, mut b_coef, mut c_coef, mut constant_coeff)) = rewrite_lc_into_single_addition_gate(&lc, self, &mut (self.scratch.clone()));
 
             if multiplier == E::Fr::zero() {
                 assert!(free_term_constant == E::Fr::zero());
@@ -79,7 +135,7 @@ impl<E: Engine> Transpiler<E> {
 
             return (new_var, hint);
         } else {
-            let (new_var, first_gate, mut other_coefs) = rewrite_lc_into_multiple_addition_gates(&lc, &mut self, &mut self.scratch);
+            let (new_var, first_gate, mut other_coefs) = rewrite_lc_into_multiple_addition_gates(&lc, self, &mut (self.scratch.clone()));
             let (mut a_coef, mut b_coef, mut c_coef, mut constant_coeff) = first_gate;
             if multiplier == E::Fr::zero() {
                 assert!(free_term_constant == E::Fr::zero());
@@ -116,7 +172,7 @@ impl<E: Engine> crate::ConstraintSystem<E> for Transpiler<E>
         crate::Variable::new_unchecked(crate::Index::Input(1))
     }
 
-    fn alloc<F, A, AR>(&mut self, _: A, f: F) -> Result<crate::Variable, crate::SynthesisError>
+    fn alloc<F, A, AR>(&mut self, _: A, _f: F) -> Result<crate::Variable, crate::SynthesisError>
     where
         F: FnOnce() -> Result<E::Fr, crate::SynthesisError>,
         A: FnOnce() -> AR,
@@ -130,7 +186,7 @@ impl<E: Engine> crate::ConstraintSystem<E> for Transpiler<E>
     fn alloc_input<F, A, AR>(
         &mut self,
         _: A,
-        f: F,
+        _f: F,
     ) -> Result<crate::Variable, crate::SynthesisError>
     where
         F: FnOnce() -> Result<E::Fr, crate::SynthesisError>,
@@ -142,7 +198,7 @@ impl<E: Engine> crate::ConstraintSystem<E> for Transpiler<E>
         Ok(crate::Variable::new_unchecked(crate::Index::Input(self.current_plonk_input_idx)))
     }
 
-    fn enforce<A, AR, LA, LB, LC>(&mut self, _: A, a: LA, b: LB, c: LC)
+    fn enforce<A, AR, LA, LB, LC>(&mut self, _ann: A, a: LA, b: LB, c: LC)
     where
         A: FnOnce() -> AR,
         AR: Into<String>,
@@ -150,6 +206,8 @@ impl<E: Engine> crate::ConstraintSystem<E> for Transpiler<E>
         LB: FnOnce(crate::LinearCombination<E>) -> crate::LinearCombination<E>,
         LC: FnOnce(crate::LinearCombination<E>) -> crate::LinearCombination<E>,
     {
+        let ann: String = _ann().into();
+        println!("Enforce {}", ann);
         let zero_fr = E::Fr::zero();
         let one_fr = E::Fr::one();
 
@@ -162,9 +220,9 @@ impl<E: Engine> crate::ConstraintSystem<E> for Transpiler<E>
 
         // A or B or C are just constant terms
 
-        let mut a = a(crate::LinearCombination::zero());
-        let mut b = b(crate::LinearCombination::zero());
-        let mut c = c(crate::LinearCombination::zero());
+        let a = a(crate::LinearCombination::zero());
+        let b = b(crate::LinearCombination::zero());
+        let c = c(crate::LinearCombination::zero());
 
         let (a_is_constant, a_constant_coeff) = is_constant::<E, Self>(&a);
         let (b_is_constant, b_constant_coeff) = is_constant::<E, Self>(&b);
@@ -192,9 +250,11 @@ impl<E: Engine> crate::ConstraintSystem<E> for Transpiler<E>
                     unreachable!()
                 };
 
+                let current_lc_number = self.increment_lc_number();
+
                 let (_, hint) = self.rewrite_lc(&lc_ref, multiplier, c_constant_coeff);
 
-                let current_lc_number = self.increment_lc_number();
+                println!("Hint = {:?}", hint);
 
                 self.hints.push((current_lc_number, hint));
 
@@ -212,13 +272,118 @@ impl<E: Engine> crate::ConstraintSystem<E> for Transpiler<E>
                     return;
                 }
 
+                let (_new_a_var, hint_a) = self.rewrite_lc(&a, one_fr, zero_fr);
+                let (_new_b_var, hint_b) = self.rewrite_lc(&b, one_fr, zero_fr);
+
+                let current_lc_number = self.increment_lc_number();
+
+                let hint_c = TranspilationVariant::<E>::IsConstant(c_constant_coeff);
+
+                let hint = TranspilationVariant::<E>::TransformLc(Box::new((hint_a, hint_b, hint_c)));
+
+                println!("Hint = {:?}", hint);
+
+                self.hints.push((current_lc_number, hint));
+
             },
             (true, false, false) | (false, true, false) => {
                 // LC * 1 = LC
-            }
 
+                let multiplier = if a_is_constant {
+                    a_constant_coeff
+                } else if b_is_constant {
+                    b_constant_coeff
+                } else {
+                    unreachable!()
+                };
+
+                let lc_variant = if a_is_constant {
+                    LcVariant::A
+                } else {
+                    LcVariant::B
+                };
+
+                if multiplier == zero_fr {
+                    // LC_0 * 0 = LC => LC = 0
+                    let lc_ref = if !a_is_constant {
+                        &a
+                    } else if !b_is_constant {
+                        &b
+                    } else {
+                        unreachable!()
+                    };
+
+                    let (_new_var, hint_lc) = self.rewrite_lc(&lc_ref, multiplier, zero_fr);
+
+                    let current_lc_number = self.increment_lc_number();
+
+                    let hint = TranspilationVariant::<E>::MergeLinearCombinations((lc_variant, multiplier, Box::new(hint_lc)));
+
+                    println!("Hint = {:?}", hint);
+
+                    self.hints.push((current_lc_number, hint));
+
+                    return;
+                }
+
+                let mut final_lc = if !a_is_constant {
+                    a
+                } else if !b_is_constant {
+                    b
+                } else {
+                    unreachable!()
+                };
+
+                if multiplier != one_fr {
+                    for (_, c) in final_lc.0.iter_mut() {
+                        c.mul_assign(&multiplier);
+                    }
+                }
+
+                let final_lc = final_lc - &c;
+
+                let (_new_var, hint_lc) = self.rewrite_lc(&final_lc, one_fr, zero_fr);
+
+                let current_lc_number = self.increment_lc_number();
+
+                let hint = TranspilationVariant::<E>::MergeLinearCombinations((lc_variant, multiplier, Box::new(hint_lc)));
+
+                println!("Hint = {:?}", hint);
+
+                self.hints.push((current_lc_number, hint));
+
+                return;
+
+            },
+            (true, true, false) => {
+                let mut final_constant = a_constant_coeff;
+                final_constant.mul_assign(&b_constant_coeff);
+
+                let (_new_var, hint_lc) = self.rewrite_lc(&c, one_fr, final_constant);
+
+                let current_lc_number = self.increment_lc_number();
+
+                let hint = TranspilationVariant::<E>::MergeLinearCombinations((LcVariant::C, one_fr, Box::new(hint_lc)));
+
+                println!("Hint = {:?}", hint);
+
+                self.hints.push((current_lc_number, hint));
+
+            },
             (false, false, false) => {
                 // potentially it can still be quadratic
+                let (is_quadratic_gate, coeffs) = is_quadratic_gate::<E, Self>(&a, &b, &c, &mut self.scratch);
+                if is_quadratic_gate {
+                    let current_lc_number = self.increment_lc_number();
+
+                    let hint = TranspilationVariant::<E>::IntoQuandaticGate(coeffs);
+
+                    println!("Hint = {:?}", hint);
+
+                    self.hints.push((current_lc_number, hint));
+
+                    return;
+                }
 
                 // rewrite into addition gates and multiplication gates
                 
@@ -229,6 +394,8 @@ impl<E: Engine> crate::ConstraintSystem<E> for Transpiler<E>
                 let current_lc_number = self.increment_lc_number();
 
                 let hint = TranspilationVariant::<E>::TransformLc(Box::new((hint_a, hint_b, hint_c)));
+
+                println!("Hint = {:?}", hint);
 
                 self.hints.push((current_lc_number, hint));
             }
@@ -263,22 +430,31 @@ fn is_quadratic_gate<E: Engine, CS: ConstraintSystem<E>>(
     scratch: &mut HashSet::<crate::cs::Variable>
 ) -> (bool, (E::Fr, E::Fr, E::Fr)) {
     let zero = E::Fr::zero();
-    let one = E::Fr::one();
     
-    let (c_is_constant, c_constant_coeff) = is_constant::<E, CS>(&c);
-    if !c_is_constant {
-        return (false, (zero, zero, zero));
-    }
-
-    let (a_containts_constant, a_constant_coeff) = get_constant_term::<E, CS>(&a);
-    let (b_containts_constant, b_constant_coeff) = get_constant_term::<E, CS>(&b);
+    let (_a_containts_constant, a_constant_coeff) = get_constant_term::<E, CS>(&a);
+    let (_b_containts_constant, b_constant_coeff) = get_constant_term::<E, CS>(&b);
+    let (_c_containts_constant, c_constant_coeff) = get_constant_term::<E, CS>(&c);
 
     let (a_is_linear, a_linear_var, a_linear_var_coeff) = is_linear_term::<E, CS>(&a, scratch);
     let (b_is_linear, b_linear_var, b_linear_var_coeff) = is_linear_term::<E, CS>(&b, scratch);
+    let (c_is_linear, c_linear_var, c_linear_var_coeff) = is_linear_term::<E, CS>(&c, scratch);
 
-    if a_containts_constant && a_is_linear && b_containts_constant && b_is_linear && a_linear_var == b_linear_var {
-        // something like (v - 1) * (v - 1) = 0
-        // and we can make a gate like v^ - 2v + 1 == 0
+    let (c_is_constant, _) = is_constant::<E, CS>(&c);
+
+    let mut is_quadratic = false;
+    if c_is_constant {
+        is_quadratic = a_is_linear && b_is_linear && a_linear_var == b_linear_var;
+    } else {
+        if a_is_linear && b_is_linear && c_is_linear && a_linear_var == b_linear_var && b_linear_var == c_linear_var {
+            is_quadratic = true;
+        } else {
+            return (false, (zero, zero, zero));
+        }
+    }
+
+    if is_quadratic {
+        // something like (v - 1) * (v - 1) = (v - 1)
+        // and we can make a quadratic gate
 
         let mut quadratic_term = a_linear_var_coeff;
         quadratic_term.mul_assign(&b_linear_var_coeff);
@@ -291,6 +467,9 @@ fn is_quadratic_gate<E: Engine, CS: ConstraintSystem<E>>(
 
         let mut linear_term = linear_term_0;
         linear_term.add_assign(&linear_term_1);
+        if c_is_linear {
+            linear_term.sub_assign(&c_linear_var_coeff);
+        }
 
         let mut constant_term = a_constant_coeff;
         constant_term.mul_assign(&b_constant_coeff);
@@ -306,9 +485,14 @@ fn is_quadratic_gate<E: Engine, CS: ConstraintSystem<E>>(
 }
 
 fn is_constant<E: Engine, CS: ConstraintSystem<E>>(lc: &LinearCombination<E>) -> (bool, E::Fr) {
+    // formally it's an empty LC, so it's a constant 0
+    if lc.as_ref().len() == 0 {
+        return (true, E::Fr::zero());
+    }
+    
     let result = get_constant_term::<E, CS>(&lc);
 
-    if result.0 && lc.as_ref().len() <= 1 {
+    if result.0 && lc.as_ref().len() == 1 {
         return result;
     }
 
@@ -316,10 +500,6 @@ fn is_constant<E: Engine, CS: ConstraintSystem<E>>(lc: &LinearCombination<E>) ->
 }
 
 fn get_constant_term<E: Engine, CS: ConstraintSystem<E>>(lc: &LinearCombination<E>) -> (bool, E::Fr) {
-    if lc.as_ref().len() == 0 {
-        return (true, E::Fr::zero());
-    }
-
     let cs_one = CS::one();
     
     for (var, coeff) in lc.as_ref().iter() {
@@ -337,7 +517,7 @@ fn num_unique_values<E: Engine, CS: ConstraintSystem<E>>(lc: &LinearCombination<
 
     debug_assert!(scratch.is_empty());
     
-    let mut contains_constant = true;
+    let mut contains_constant = false;
 
     for (var, _) in lc.as_ref().iter() {
         if var != &cs_one {
@@ -387,7 +567,7 @@ fn rewrite_lc_into_single_addition_gate<E: Engine, CS: ConstraintSystem<E>>(
     cs: &mut CS,
     scratch: &mut HashSet<crate::cs::Variable>
 ) -> (Variable, (E::Fr, E::Fr, E::Fr, E::Fr)) {
-    let (contains_constant, num_linear_terms) = num_unique_values::<E, CS>(&lc, scratch);
+    let (_contains_constant, num_linear_terms) = num_unique_values::<E, CS>(&lc, scratch);
     assert!(num_linear_terms > 0 && num_linear_terms <= 2);
 
     // we can just make an addition gate
@@ -431,7 +611,7 @@ fn rewrite_lc_into_multiple_addition_gates<E: Engine, CS: ConstraintSystem<E>>(
     scratch: &mut HashSet<crate::cs::Variable>
 ) -> (Variable, (E::Fr, E::Fr, E::Fr, E::Fr), Vec<E::Fr>) // first rewrite is full, than it's Z + a * X - Y = 0
 {
-    let (contains_constant, num_linear_terms) = num_unique_values::<E, CS>(&lc, scratch);
+    let (_contains_constant, num_linear_terms) = num_unique_values::<E, CS>(&lc, scratch);
     assert!(num_linear_terms > 0 && num_linear_terms <= 2);
     // we can just make an addition gate
     let cs_one = CS::one();
@@ -445,7 +625,7 @@ fn rewrite_lc_into_multiple_addition_gates<E: Engine, CS: ConstraintSystem<E>>(
     let mut a_coeff = E::Fr::zero();
     let mut b_coeff = E::Fr::zero();
 
-    let it = lc.as_ref().iter();
+    let mut it = lc.as_ref().iter();
 
     for (var, coeff) in &mut it {
         if var != &cs_one {
@@ -487,21 +667,24 @@ fn rewrite_lc_into_multiple_addition_gates<E: Engine, CS: ConstraintSystem<E>>(
     (new_var, first_addition_gate, extra_coefficients)
 }
 
-#[derive(Clone)]
-pub struct AdaptorCircuit<T>(pub T);
 
-impl<'a, E: Engine, C: crate::Circuit<E> + Clone> PlonkCircuit<E> for AdaptorCircuit<C> {
-    fn synthesize<CS: PlonkConstraintSystem<E>>(&self, cs: &mut CS) -> Result<(), SynthesisError> {
-        let mut adaptor = Adaptor {
-            cs: cs,
-            _marker: PhantomData,
-        };
 
-        match self.0.clone().synthesize(&mut adaptor) {
-            Err(_) => return Err(SynthesisError::AssignmentMissing),
-            Ok(_) => {}
-        };
 
-        Ok(())
-    }
-}
+// #[derive(Clone)]
+// pub struct AdaptorCircuit<T>(pub T);
+
+// impl<'a, E: Engine, C: crate::Circuit<E> + Clone> PlonkCircuit<E> for AdaptorCircuit<C> {
+//     fn synthesize<CS: PlonkConstraintSystem<E>>(&self, cs: &mut CS) -> Result<(), SynthesisError> {
+//         let mut adaptor = Adaptor {
+//             cs: cs,
+//             _marker: PhantomData,
+//         };
+
+//         match self.0.clone().synthesize(&mut adaptor) {
+//             Err(_) => return Err(SynthesisError::AssignmentMissing),
+//             Ok(_) => {}
+//         };
+
+//         Ok(())
+//     }
+// }

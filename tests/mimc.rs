@@ -339,3 +339,26 @@ fn test_mimc_bn256() {
     println!("Average proving time: {:?} seconds", proving_avg);
     println!("Average verifying time: {:?} seconds", verifying_avg);
 }
+
+
+#[cfg(feature = "plonk")]
+#[test]
+fn test_mimc_transpilation_into_plonk() {
+    use bellman_ce::plonk::adaptor::alternative::Transpiler;
+    // This may not be cryptographically safe, use
+    // `OsRng` (for example) in production software.
+    let rng = &mut thread_rng();
+
+    // Generate the MiMC round constants
+    let constants = (0..MIMC_ROUNDS).map(|_| rng.gen()).collect::<Vec<_>>();
+
+    let c = MiMCDemo::<Bn256> {
+        xl: None,
+        xr: None,
+        constants: &constants
+    };
+
+    let mut transpiler = Transpiler::new();
+
+    c.synthesize(&mut transpiler).unwrap();
+}
