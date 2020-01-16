@@ -223,7 +223,7 @@ impl<'a, E: Engine, CS: PlonkConstraintSystem<E> + 'a> crate::ConstraintSystem<E
         fn parse_lc<E: Engine, CS: PlonkConstraintSystem<E>>(
             terms: Vec<(E::Fr, Var)>,
             cs: &mut CS,
-        ) -> (Option<(E::Fr, PlonkVariable)>, Option<(E::Fr)>) {
+        ) -> (Option<(E::Fr, PlonkVariable)>, Option<E::Fr>) {
             // there are few options
             match terms.len() {
                 0 => {

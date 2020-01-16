@@ -15,13 +15,99 @@ use std::marker::PhantomData;
 
 use std::collections::HashSet;
 
-pub struct Adaptor<'a, E: Engine, CS: PlonkConstraintSystem<E> + 'a> {
-    cs: &'a mut CS,
-    _marker: PhantomData<E>,
+// These are transpilation options over A * B - C = 0 constraint
+enum TranspilationVariant<E: Engine> {
+    NoOp,
+    IntoQuandaticGate((E::Fr, E::Fr, E::Fr)),
+    IntoLinearGate((E::Fr, E::Fr)),
+    IntoSingleAdditionGate((E::Fr, E::Fr, E::Fr, E::Fr)),
+    IntoMultipleAdditionGates((E::Fr, E::Fr, E::Fr, E::Fr), Vec<E::Fr>),
+    IsConstant(E::Fr), 
+    TransformLc(Box<(TranspilationVariant<E>, TranspilationVariant<E>, TranspilationVariant<E>)>)
 }
 
-impl<'a, E: Engine, CS: PlonkConstraintSystem<E> + 'a> crate::ConstraintSystem<E>
-    for Adaptor<'a, E, CS>
+struct Transpiler<E: Engine> {
+    current_constraint_index: usize,
+    current_plonk_input_idx: usize,
+    current_plonk_aux_idx: usize,
+    scratch: HashSet<crate::cs::Variable>,
+    hints: Vec<(usize, TranspilationVariant<E>)>,
+}
+
+impl<E: Engine> Transpiler<E> {
+    fn new() -> Self {
+        Self {
+            current_constraint_index: 0,
+            current_plonk_input_idx: 1,
+            current_plonk_aux_idx: 0,
+            scratch: HashSet::with_capacity((E::Fr::NUM_BITS * 2) as usize),
+            hints: vec![],
+        }
+    }
+
+    fn increment_lc_number(&mut self) -> usize {
+        let current_lc_number = self.current_constraint_index;
+        self.current_constraint_index += 1;
+
+        current_lc_number
+    }
+
+    fn rewrite_lc(&mut self, lc: &LinearCombination<E>, multiplier: E::Fr, free_term_constant: E::Fr) -> (Variable, TranspilationVariant<E>) {
+        let one_fr = E::Fr::one();
+        
+        let (contains_constant, num_linear_terms) = num_unique_values::<E, Self>(&lc, &mut self.scratch);
+        assert!(num_linear_terms > 0);
+        if num_linear_terms <= 2 {
+            let (new_var, (mut a_coef, mut b_coef, mut c_coef, mut constant_coeff)) = rewrite_lc_into_single_addition_gate(&lc, &mut self, &mut self.scratch);
+
+            if multiplier == E::Fr::zero() {
+                assert!(free_term_constant == E::Fr::zero());
+                // it's a constraint 0 * LC = 0
+            } else {
+                //scale
+                if multiplier != one_fr {
+                    a_coef.mul_assign(&multiplier);
+                    b_coef.mul_assign(&multiplier);
+                    c_coef.mul_assign(&multiplier);
+                    constant_coeff.mul_assign(&multiplier);
+                }
+
+                constant_coeff.sub_assign(&free_term_constant);
+            }
+         
+            let hint = TranspilationVariant::<E>::IntoSingleAdditionGate((a_coef, b_coef, c_coef, constant_coeff));
+
+            return (new_var, hint);
+        } else {
+            let (new_var, first_gate, mut other_coefs) = rewrite_lc_into_multiple_addition_gates(&lc, &mut self, &mut self.scratch);
+            let (mut a_coef, mut b_coef, mut c_coef, mut constant_coeff) = first_gate;
+            if multiplier == E::Fr::zero() {
+                assert!(free_term_constant == E::Fr::zero());
+                // it's a constraint 0 * LC = 0
+            } else {
+                //scale
+                if multiplier != one_fr {
+                    a_coef.mul_assign(&multiplier);
+                    b_coef.mul_assign(&multiplier);
+                    c_coef.mul_assign(&multiplier);
+                    constant_coeff.mul_assign(&multiplier);
+
+                    for c in other_coefs.iter_mut() {
+                        c.mul_assign(&multiplier);
+                    }
+                }
+
+                constant_coeff.sub_assign(&free_term_constant);
+            }
+
+            let hint = TranspilationVariant::<E>::IntoMultipleAdditionGates((a_coef, b_coef, c_coef, constant_coeff), other_coefs);
+
+            return (new_var, hint);
+        }
+    }
+}
+
+impl<E: Engine> crate::ConstraintSystem<E> for Transpiler<E>
 {
     type Root = Self;
 
@@ -36,14 +122,9 @@ impl<'a, E: Engine, CS: PlonkConstraintSystem<E> + 'a> crate::ConstraintSystem<E
         A: FnOnce() -> AR,
         AR: Into<String>,
     {
-        let var = self.cs.alloc(|| {
-            f().map_err(|_| crate::SynthesisError::AssignmentMissing)
-        })?;
+        self.current_plonk_aux_idx += 1;
 
-        Ok(match var {
-            PlonkVariable(PlonkIndex::Aux(index)) => crate::Variable::new_unchecked(crate::Index::Aux(index)),
-            _ => unreachable!(),
-        })
+        Ok(crate::Variable::new_unchecked(crate::Index::Aux(self.current_plonk_aux_idx)))
     }
 
     fn alloc_input<F, A, AR>(
@@ -56,14 +137,9 @@ impl<'a, E: Engine, CS: PlonkConstraintSystem<E> + 'a> crate::ConstraintSystem<E
         A: FnOnce() -> AR,
         AR: Into<String>,
     {
-        let var = self.cs.alloc_input(|| {
-            f().map_err(|_| crate::SynthesisError::AssignmentMissing)
-        })?;
+        self.current_plonk_input_idx += 1;
 
-        Ok(match var {
-            PlonkVariable(PlonkIndex::Input(index)) => crate::Variable::new_unchecked(crate::Index::Input(index)),
-            _ => unreachable!(),
-        })
+        Ok(crate::Variable::new_unchecked(crate::Index::Input(self.current_plonk_input_idx)))
     }
 
     fn enforce<A, AR, LA, LB, LC>(&mut self, _: A, a: LA, b: LB, c: LC)
@@ -74,233 +150,89 @@ impl<'a, E: Engine, CS: PlonkConstraintSystem<E> + 'a> crate::ConstraintSystem<E
         LB: FnOnce(crate::LinearCombination<E>) -> crate::LinearCombination<E>,
         LC: FnOnce(crate::LinearCombination<E>) -> crate::LinearCombination<E>,
     {
-        let mut negative_one = E::Fr::one();
-        negative_one.negate();
+        let zero_fr = E::Fr::zero();
+        let one_fr = E::Fr::one();
 
-        fn convert<E: Engine>(lc: crate::LinearCombination<E>) -> Vec<(E::Fr, PlonkVariable)> {
-            let mut ret = Vec::with_capacity(lc.as_ref().len());
+        let mut negative_one_fr = E::Fr::one();
+        negative_one_fr.negate();
 
-            for &(v, coeff) in lc.as_ref().iter() {
-                let var = match v.get_unchecked() {
-                    crate::Index::Input(i) => PlonkVariable(PlonkIndex::Input(i)),
-                    crate::Index::Aux(i) => PlonkVariable(PlonkIndex::Aux(i)),
+        // we need to determine the type of transformation constraint
+
+        // let's handle trivial cases first
+
+        // A or B or C are just constant terms
+
+        let mut a = a(crate::LinearCombination::zero());
+        let mut b = b(crate::LinearCombination::zero());
+        let mut c = c(crate::LinearCombination::zero());
+
+        let (a_is_constant, a_constant_coeff) = is_constant::<E, Self>(&a);
+        let (b_is_constant, b_constant_coeff) = is_constant::<E, Self>(&b);
+        let (c_is_constant, c_constant_coeff) = is_constant::<E, Self>(&c);        
+
+        match (a_is_constant, b_is_constant, c_is_constant) {
+            (true, true, true) => {
+                unreachable!("R1CS has a gate 1 * 1 = 1");
+            },
+            (true, false, true) | (false, true, true) => {
+                // we have something like 1 * LC = 1
+                let lc_ref = if !a_is_constant {
+                    &a
+                } else if !b_is_constant {
+                    &b
+                } else {
+                    unreachable!()
                 };
 
-                ret.push((coeff, var));
-            }
-
-            ret
-        }
-
-        fn eval_short<E: Engine, CS: PlonkConstraintSystem<E>>(
-            terms: &Vec<(E::Fr, PlonkVariable)>,
-            cs: &CS,
-        ) -> Option<E::Fr> {
-            debug_assert!(terms.len() < 3 && terms.len() > 0);
-            let mut extra_value = E::Fr::zero();
-
-            for &(coeff, var) in terms.iter() {
-                let mut var_value = match cs.get_value(var) {
-                    Ok(tmp) => tmp,
-                    Err(_) => return None,
+                let multiplier = if a_is_constant {
+                    a_constant_coeff
+                } else if b_is_constant {
+                    b_constant_coeff
+                } else {
+                    unreachable!()
                 };
-                var_value.mul_assign(&coeff);
 
-                extra_value.add_assign(&var_value);
-            }
+                let (_, hint) = self.rewrite_lc(&lc_ref, multiplier, c_constant_coeff);
 
-            Some(extra_value)
-        }
+                let current_lc_number = self.increment_lc_number();
 
-        fn eval<E: Engine, CS: PlonkConstraintSystem<E>>(
-            terms: &Vec<(E::Fr, PlonkVariable)>,
-            cs: &CS,
-        ) -> Option<Vec<E::Fr>> {
-            debug_assert!(terms.len() >= 3);
+                self.hints.push((current_lc_number, hint));
 
-            let mut new_values = Vec::with_capacity(terms.len() - 1);
-            let mut iter = terms.iter();
+            },
+            (false, false, true) => {                
+                // potential quadatic gate
+                let (is_quadratic_gate, coeffs) = is_quadratic_gate::<E, Self>(&a, &b, &c, &mut self.scratch);
+                if is_quadratic_gate {
+                    let current_lc_number = self.increment_lc_number();
 
-            let &(coeff_0, var) = iter.next().unwrap();
-            let mut var_0_value = match cs.get_value(var) {
-                Ok(tmp) => tmp,
-                Err(_) => return None,
-            };
-            var_0_value.mul_assign(&coeff_0);
+                    let hint = TranspilationVariant::<E>::IntoQuandaticGate(coeffs);
 
-            let &(coeff_1, var) = iter.next().unwrap();
-            let mut var_1_value = match cs.get_value(var) {
-                Ok(tmp) => tmp,
-                Err(_) => return None,
-            };
-            var_1_value.mul_assign(&coeff_1);
+                    self.hints.push((current_lc_number, hint));
 
-            let mut new_var_value = var_0_value;
-            new_var_value.add_assign(&var_1_value);
-
-            new_values.push(new_var_value);
-
-            for &(coeff, var) in iter {
-                let mut ret = new_var_value;
-                let mut var_value = match cs.get_value(var) {
-                    Ok(tmp) => tmp,
-                    Err(_) => return None,
-                };
-                var_value.mul_assign(&coeff);
-                ret.add_assign(&var_value);
-
-                new_values.push(var_value);
-                new_var_value = var_value;
-            }
-
-            Some(new_values)
-        }
-
-        fn allocate_lc_intermediate_variables<E: Engine, CS: PlonkConstraintSystem<E>>(
-            original_terms: Vec<(E::Fr, PlonkVariable)>, 
-            intermediate_values: Option<Vec<E::Fr>>,
-            cs: &mut CS,
-        ) -> PlonkVariable {
-            let new_variables = if let Some(values) = intermediate_values {
-                debug_assert!(values.len() == original_terms.len() - 1);
-
-                let new_variables: Vec<_> = values.into_iter().map(|v| 
-                    cs.alloc(
-                        || Ok(v)
-                    ).expect("must allocate")
-                ).collect();
-
-                new_variables
-            } else {
-                let new_variables: Vec<_> = (0..(original_terms.len() - 1)).map(|_| 
-                    cs.alloc(
-                        || Err(SynthesisError::AssignmentMissing)
-                    ).expect("must allocate")
-                ).collect();
-
-                new_variables
-            };
-
-            let mut original_iter = original_terms.into_iter();
-            let mut new_iter = new_variables.into_iter();
-
-            let mut intermediate_var = new_iter.next().expect("there is at least one new variable");
-
-            let (c_0, v_0) = original_iter.next().expect("there is at least one old variable");
-            let (c_1, v_1) = original_iter.next().expect("there are at least two old variables");
-
-            let mut negative_one = E::Fr::one();
-            negative_one.negate();
-
-            let one = E::Fr::one();
-
-            cs.enforce_zero_3((v_0, v_1, intermediate_var), (c_0, c_1, negative_one)).expect("must enforce");
-
-            debug_assert!(new_iter.len() == original_iter.len());
-
-            let remaining = new_iter.len();
-
-            for _ in 0..remaining {
-                let (coeff, original_var) = original_iter.next().expect("there is at least one more old variable");
-                let new_var = new_iter.next().expect("there is at least one more new variable");
-                cs.enforce_zero_3((original_var, intermediate_var, new_var), (coeff, one, negative_one)).expect("must enforce");
-
-                intermediate_var = new_var;
-            }
-
-            intermediate_var
-        }
-
-        let a_terms = convert(a(crate::LinearCombination::zero()));
-        let b_terms = convert(b(crate::LinearCombination::zero()));
-        let c_terms = convert(c(crate::LinearCombination::zero()));
-
-        fn enforce<E: Engine, CS: PlonkConstraintSystem<E>>(
-            terms: Vec<(E::Fr, PlonkVariable)>,
-            cs: &mut CS,
-        ) -> Option<PlonkVariable> {
-            // there are few options
-            match terms.len() {
-                0 => {
-                    // - no terms, so it's zero and we should later make a gate that basically constraints a*0 = 0
-                    None
-                },
-                1 => {
-                    let (c_0, v_0) = terms[0];
-                    if c_0 == E::Fr::one() {
-                        // if factor is one then we can just forwrad the variable
-                        return Some(v_0);
-                    }
-                    // make a single new variable that has coefficient of minus one
-                    let mut coeff = E::Fr::one();
-                    coeff.negate();
-                    let extra_value = eval_short(&terms, &*cs);
-                    let extra_variable = cs.alloc(||
-                    {
-                        if let Some(value) = extra_value {
-                            Ok(value)
-                        } else {
-                            Err(SynthesisError::AssignmentMissing)
-                        }
-                    }
-                    ).expect("must allocate");
-                    
-                    cs.enforce_zero_2((v_0, extra_variable), (c_0, coeff)).expect("must enforce");
-                    Some(extra_variable)
-                },
-                2 => {
-                    // make a single new variable that has coefficient of minus one
-                    let mut coeff = E::Fr::one();
-                    coeff.negate();
-                    let extra_value = eval_short(&terms, &*cs);
-                    let extra_variable = cs.alloc(||
-                    {
-                        if let Some(value) = extra_value {
-                            Ok(value)
-                        } else {
-                            Err(SynthesisError::AssignmentMissing)
-                        }
-                    }
-                    ).expect("must allocate");
-                    let (c_0, v_0) = terms[0];
-                    let (c_1, v_1) = terms[1];
-                    cs.enforce_zero_3((v_0, v_1, extra_variable), (c_0, c_1, coeff)).expect("must enforce");
-                    Some(extra_variable)
-                },
-                _ => {
-                    // here we need to allocate intermediate variables and output the last one
-                    let intermediate_values = eval(&terms, &*cs);
-                    let last_variable = allocate_lc_intermediate_variables(
-                        terms,
-                        intermediate_values, 
-                        cs
-                    );
-
-                    Some(last_variable)
+                    return;
                 }
+
+            },
+            (true, false, false) | (false, true, false) => {
+                // LC * 1 = LC
             }
-        }
 
-        let a_var = enforce(a_terms, self.cs);
-        let b_var = enforce(b_terms, self.cs);
-        let c_var = enforce(c_terms, self.cs);
+            (false, false, false) => {
+                // potentially it can still be quadratic
 
-        match (a_var, b_var, c_var) {
-            (Some(var), None, None) | (None, Some(var), None) | (None, None, Some(var)) => {
-                self.cs.enforce_constant(var, E::Fr::zero()).expect("must enforce");
-            },
+                // rewrite into addition gates and multiplication gates
+                
+                let (_new_a_var, hint_a) = self.rewrite_lc(&a, one_fr, zero_fr);
+                let (_new_b_var, hint_b) = self.rewrite_lc(&b, one_fr, zero_fr);
+                let (_new_c_var, hint_c) = self.rewrite_lc(&c, one_fr, zero_fr);
 
-            (Some(var_0), Some(var_1), None) | (None, Some(var_0), Some(var_1)) | (Some(var_0), None, Some(var_1)) => {
-                self.cs.enforce_mul_2((var_0, var_1)).expect("must enforce");
-            },
+                let current_lc_number = self.increment_lc_number();
 
-            (Some(var_0), Some(var_1), Some(var_2)) => {
-                self.cs.enforce_mul_3((var_0, var_1, var_2)).expect("must enforce");
-            },
-            _ => {
-                unreachable!()
+                let hint = TranspilationVariant::<E>::TransformLc(Box::new((hint_a, hint_b, hint_c)));
+
+                self.hints.push((current_lc_number, hint));
             }
-        }        
+        }  
     }
 
     fn push_namespace<NR, N>(&mut self, _: N)
@@ -376,7 +308,7 @@ fn is_quadratic_gate<E: Engine, CS: ConstraintSystem<E>>(
 fn is_constant<E: Engine, CS: ConstraintSystem<E>>(lc: &LinearCombination<E>) -> (bool, E::Fr) {
     let result = get_constant_term::<E, CS>(&lc);
 
-    if result.0 && lc.as_ref().len() == 1 {
+    if result.0 && lc.as_ref().len() <= 1 {
         return result;
     }
 
@@ -384,6 +316,10 @@ fn is_constant<E: Engine, CS: ConstraintSystem<E>>(lc: &LinearCombination<E>) ->
 }
 
 fn get_constant_term<E: Engine, CS: ConstraintSystem<E>>(lc: &LinearCombination<E>) -> (bool, E::Fr) {
+    if lc.as_ref().len() == 0 {
+        return (true, E::Fr::zero());
+    }
+
     let cs_one = CS::one();
     
     for (var, coeff) in lc.as_ref().iter() {
@@ -444,6 +380,111 @@ fn is_linear_term<E: Engine, CS: ConstraintSystem<E>>(lc: &LinearCombination<E>,
 
         return (false, cs_one, E::Fr::zero())
     }    
+}
+
+fn rewrite_lc_into_single_addition_gate<E: Engine, CS: ConstraintSystem<E>>(
+    lc: &LinearCombination<E>,
+    cs: &mut CS,
+    scratch: &mut HashSet<crate::cs::Variable>
+) -> (Variable, (E::Fr, E::Fr, E::Fr, E::Fr)) {
+    let (contains_constant, num_linear_terms) = num_unique_values::<E, CS>(&lc, scratch);
+    assert!(num_linear_terms > 0 && num_linear_terms <= 2);
+
+    // we can just make an addition gate
+    let cs_one = CS::one();
+
+    let mut constant_term = E::Fr::zero();
+
+    let mut found_a = false;
+    let mut a_coeff = E::Fr::zero();
+    let mut b_coeff = E::Fr::zero();
+
+    let it = lc.as_ref().iter();
+
+    for (var, coeff) in it {
+        if var == &cs_one {
+            constant_term = *coeff;
+        } else {
+            if !found_a {
+                found_a = true;
+                a_coeff = *coeff;
+            } else {
+                b_coeff = *coeff;
+            }
+        }
+    }
+
+    let mut c_coeff = E::Fr::one();
+    c_coeff.negate();
+
+    let new_var = cs.alloc(|| "allocate addition gate", 
+    || {
+        unreachable!()
+    }).expect("must allocate an extra variable");
+
+    (new_var, (a_coeff, b_coeff, c_coeff, constant_term))
+}
+
+fn rewrite_lc_into_multiple_addition_gates<E: Engine, CS: ConstraintSystem<E>>(
+    lc: &LinearCombination<E>,
+    cs: &mut CS,
+    scratch: &mut HashSet<crate::cs::Variable>
+) -> (Variable, (E::Fr, E::Fr, E::Fr, E::Fr), Vec<E::Fr>) // first rewrite is full, than it's Z + a * X - Y = 0
+{
+    let (contains_constant, num_linear_terms) = num_unique_values::<E, CS>(&lc, scratch);
+    assert!(num_linear_terms > 0 && num_linear_terms <= 2);
+    // we can just make an addition gate
+    let cs_one = CS::one();
+
+    assert!(lc.as_ref().len() > 2);
+
+    let (_, constant_term) = get_constant_term::<E, CS>(&lc);
+
+    let mut found_a = false;
+
+    let mut a_coeff = E::Fr::zero();
+    let mut b_coeff = E::Fr::zero();
+
+    let it = lc.as_ref().iter();
+
+    for (var, coeff) in &mut it {
+        if var != &cs_one {
+            if !found_a {
+                found_a = true;
+                a_coeff = *coeff;
+            } else {
+                b_coeff = *coeff;
+                break;
+            }
+        }
+    }
+
+    // we've consumed 2 values
+
+    let mut c_coeff = E::Fr::one();
+    c_coeff.negate();
+
+    let mut new_var = cs.alloc(|| "allocate addition gate", 
+        || {
+            unreachable!()
+        }
+    ).expect("must allocate an extra variable");
+
+    let first_addition_gate = (a_coeff, b_coeff, c_coeff, constant_term);
+
+    let mut extra_coefficients = Vec::with_capacity(lc.as_ref().len() - 2);
+    for (var, coeff) in it {
+        if var != &cs_one {
+            extra_coefficients.push(*coeff);
+            new_var = cs.alloc(|| "allocate addition gate", 
+                || {
+                    unreachable!()
+                }
+            ).expect("must allocate an extra variable");
+        }
+    }
+
+    (new_var, first_addition_gate, extra_coefficients)
 }
 
 #[derive(Clone)]
