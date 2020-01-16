@@ -13,6 +13,8 @@ use crate::plonk::cs::ConstraintSystem as PlonkConstraintSystem;
 
 use std::marker::PhantomData;
 
+pub mod alternative;
+
 pub struct Adaptor<'a, E: Engine, CS: PlonkConstraintSystem<E> + 'a> {
     cs: &'a mut CS,
     _marker: PhantomData<E>,
