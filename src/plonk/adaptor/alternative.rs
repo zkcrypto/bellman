@@ -13,7 +13,7 @@ use crate::plonk::cs::ConstraintSystem as PlonkConstraintSystem;
 
 use std::marker::PhantomData;
 
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum LcVariant {
@@ -54,8 +54,10 @@ impl<E: Engine> std::fmt::Debug for TranspilationVariant<E> {
                 writeln!(f, "Variant: into single addition gate")?;
                 writeln!(f, "{}*a + {}*b + {}*c + {} = 0", c.0, c.1, c.2, c.3)?;
             },
-            TranspilationVariant::IntoMultipleAdditionGates(_, _) => {
+            TranspilationVariant::IntoMultipleAdditionGates(c, next) => {
                 writeln!(f, "Variant: into multiple addition gates")?;
+                writeln!(f, "{}*a + {}*b + {}*c + {} = 0", c.0, c.1, c.2, c.3)?;
+                writeln!(f, "{:?}", next)?;
             },
             TranspilationVariant::MergeLinearCombinations(c) => {
                 writeln!(f, "Variant: merge linear combinations")?;
@@ -81,6 +83,7 @@ pub struct Transpiler<E: Engine> {
     current_plonk_input_idx: usize,
     current_plonk_aux_idx: usize,
     scratch: HashSet<crate::cs::Variable>,
+    deduplication_scratch: HashMap<crate::cs::Variable, E::Fr>,
     hints: Vec<(usize, TranspilationVariant<E>)>,
 }
 
@@ -91,6 +94,7 @@ impl<E: Engine> Transpiler<E> {
             current_plonk_input_idx: 1,
             current_plonk_aux_idx: 0,
             scratch: HashSet::with_capacity((E::Fr::NUM_BITS * 2) as usize),
+            deduplication_scratch: HashMap::with_capacity((E::Fr::NUM_BITS * 2) as usize),
             hints: vec![],
         }
     }
@@ -220,9 +224,9 @@ impl<E: Engine> crate::ConstraintSystem<E> for Transpiler<E>
 
         // A or B or C are just constant terms
 
-        let a = a(crate::LinearCombination::zero());
-        let b = b(crate::LinearCombination::zero());
-        let c = c(crate::LinearCombination::zero());
+        let a = deduplicate::<E, Self>(a(crate::LinearCombination::zero()), &mut self.deduplication_scratch);
+        let b = deduplicate::<E, Self>(b(crate::LinearCombination::zero()), &mut self.deduplication_scratch);
+        let c = deduplicate::<E, Self>(c(crate::LinearCombination::zero()), &mut self.deduplication_scratch);
 
         let (a_is_constant, a_constant_coeff) = is_constant::<E, Self>(&a);
         let (b_is_constant, b_constant_coeff) = is_constant::<E, Self>(&b);
@@ -266,6 +270,8 @@ impl<E: Engine> crate::ConstraintSystem<E> for Transpiler<E>
                     let current_lc_number = self.increment_lc_number();
 
                     let hint = TranspilationVariant::<E>::IntoQuandaticGate(coeffs);
+
+                    println!("Hint = {:?}", hint);
 
                     self.hints.push((current_lc_number, hint));
 
@@ -611,12 +617,12 @@ fn rewrite_lc_into_multiple_addition_gates<E: Engine, CS: ConstraintSystem<E>>(
     scratch: &mut HashSet<crate::cs::Variable>
 ) -> (Variable, (E::Fr, E::Fr, E::Fr, E::Fr), Vec<E::Fr>) // first rewrite is full, than it's Z + a * X - Y = 0
 {
+    assert!(lc.as_ref().len() > 2);
+
     let (_contains_constant, num_linear_terms) = num_unique_values::<E, CS>(&lc, scratch);
-    assert!(num_linear_terms > 0 && num_linear_terms <= 2);
+    assert!(num_linear_terms > 2);
     // we can just make an addition gate
     let cs_one = CS::one();
-
-    assert!(lc.as_ref().len() > 2);
 
     let (_, constant_term) = get_constant_term::<E, CS>(&lc);
 
@@ -667,6 +673,24 @@ fn rewrite_lc_into_multiple_addition_gates<E: Engine, CS: ConstraintSystem<E>>(
     (new_var, first_addition_gate, extra_coefficients)
 }
 
+fn deduplicate<E: Engine, CS: ConstraintSystem<E>>(
+    lc: LinearCombination<E>,
+    scratch: &mut HashMap<crate::cs::Variable, E::Fr>
+) -> LinearCombination<E> {
+    assert!(scratch.is_empty());
+
+    for (var, coeff) in lc.0.into_iter() {
+        if let Some(existing_coeff) = scratch.get_mut(&var) {
+            existing_coeff.add_assign(&coeff);
+        } else {
+            scratch.insert(var, coeff);
+        }
+    }
+
+    let as_vec: Vec<(Variable, E::Fr)> = scratch.drain().collect();
+
+    LinearCombination(as_vec)
+}
 
 
 

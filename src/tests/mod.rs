@@ -91,3 +91,20 @@ impl<E: Engine> Circuit<E> for XORDemo<E> {
     }
 }
 
+#[cfg(feature = "plonk")]
+#[test]
+fn transpile_xor() {
+    use crate::pairing::bn256::Bn256;
+    use crate::plonk::adaptor::alternative::Transpiler;
+
+    let c = XORDemo::<Bn256> {
+        a: None,
+        b: None,
+        _marker: PhantomData
+    };
+
+    let mut transpiler = Transpiler::new();
+
+    c.synthesize(&mut transpiler).unwrap();
+}
+
