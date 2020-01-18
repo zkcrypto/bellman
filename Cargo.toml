@@ -37,7 +37,6 @@ sha2 = "0.8"
 [features]
 default = ["groth16", "multicore"]
 gpu = ["ocl", "itertools", "fs2"]
-gpu-test = ["gpu"]
 groth16 = ["paired"]
 multicore = ["futures-cpupool", "crossbeam", "num_cpus"]
 

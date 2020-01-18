@@ -423,7 +423,7 @@ where
     }
 }
 
-#[cfg(feature = "gpu-test")]
+#[cfg(feature = "gpu")]
 #[test]
 pub fn gpu_multiexp_consistency() {
     use paired::bls12_381::Bls12;
