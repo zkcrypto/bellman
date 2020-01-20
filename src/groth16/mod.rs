@@ -401,6 +401,17 @@ pub struct PreparedVerifyingKey<E: Engine> {
     ic: Vec<E::G1Affine>,
 }
 
+pub struct BatchPreparedVerifyingKey<E: Engine> {
+    /// Pairing result of alpha*beta
+    alpha_g1_beta_g2: E::Fqk,
+    /// gamma in G2
+    gamma_g2: <E::G2Affine as PairingCurveAffine>::Prepared,
+    /// delta in G2
+    delta_g2: <E::G2Affine as PairingCurveAffine>::Prepared,
+    /// Copy of IC from `VerifiyingKey`.
+    ic: Vec<E::G1Affine>,
+}
+
 pub trait ParameterSource<E: Engine> {
     type G1Builder: SourceBuilder<E::G1Affine>;
     type G2Builder: SourceBuilder<E::G2Affine>;
