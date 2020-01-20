@@ -33,10 +33,6 @@ commands:
           name: Test (GPU) (<< parameters.target >>)
           command: TARGET=<< parameters.target >> cargo test --features gpu
           no_output_timeout: 15m
-      - run:
-          name: Build GPU (<< parameters.target >>)
-          command: TARGET=<< parameters.target >> cargo build --features gpu-test
-          no_output_timeout: 15m
 
 jobs:
   cargo_fetch:
@@ -95,7 +91,9 @@ jobs:
           command: cargo clippy --all-features
 
   build:
-    executor: default
+    machine:
+      resource_class: gpu.nvidia.medium
+      image: ubuntu-1604-cuda-10.1:201909-23
     steps:
       - *restore-workspace
       - *restore-cache
