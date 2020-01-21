@@ -2,10 +2,10 @@ version: 2.1
 
 executors:
   default:
-    docker:
-      - image: filecoin/rust:latest
+    machine:
+      image: ubuntu-1604-cuda-10.1:201909-23
     working_directory: /mnt/crate
-    resource_class: 2xlarge
+    resource_class: gpu.nvidia.medium
 
 restore-workspace: &restore-workspace
   attach_workspace:
@@ -35,6 +35,12 @@ commands:
           no_output_timeout: 15m
 
 jobs:
+  install_opencl:
+    steps:
+      - sudo apt-get update
+      - apt-cache search opencl
+      - sudo apt install ocl-icd-opencl-dev
+
   cargo_fetch:
     executor: default
     steps:
@@ -91,9 +97,7 @@ jobs:
           command: cargo clippy --all-features
 
   build:
-    machine:
-      resource_class: gpu.nvidia.medium
-      image: ubuntu-1604-cuda-10.1:201909-23
+    executor: default
     steps:
       - *restore-workspace
       - *restore-cache
@@ -107,6 +111,7 @@ workflows:
 
   test:
     jobs:
+      - install_opencl
       - cargo_fetch
       - rustfmt:
           requires:
