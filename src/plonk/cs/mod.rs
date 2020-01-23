@@ -78,6 +78,10 @@ pub trait ConstraintSystem<E: Engine> {
     fn get_value(&self, _variable: Variable) -> Result<E::Fr, SynthesisError> { 
         Err(SynthesisError::AssignmentMissing)
     }
+
+    fn get_dummy_variable(&self) -> Variable {
+        <Self as ConstraintSystem<E>>::ZERO
+    }
 }
 
 

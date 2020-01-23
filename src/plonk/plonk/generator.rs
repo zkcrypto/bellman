@@ -16,18 +16,18 @@ use crate::plonk::utils::*;
 use super::prover::ProvingAssembly;
 
 #[derive(Debug)]
-struct GeneratorAssembly<E: Engine> {
-    m: usize,
-    n: usize,
-    input_gates: Vec<Gate<E::Fr>>,
-    aux_gates: Vec<Gate<E::Fr>>,
+pub(crate) struct GeneratorAssembly<E: Engine> {
+    pub(crate) m: usize,
+    pub(crate) n: usize,
+    pub(crate) input_gates: Vec<Gate<E::Fr>>,
+    pub(crate) aux_gates: Vec<Gate<E::Fr>>,
 
-    num_inputs: usize,
-    num_aux: usize,
+    pub(crate) num_inputs: usize,
+    pub(crate) num_aux: usize,
 
-    inputs_map: Vec<usize>,
+    pub(crate) inputs_map: Vec<usize>,
 
-    is_finalized: bool,
+    pub(crate) is_finalized: bool,
 }
 
 impl<E: Engine> ConstraintSystem<E> for GeneratorAssembly<E> {
@@ -441,7 +441,7 @@ impl<E: Engine> GeneratorAssembly<E> {
         self.input_gates.len() + self.aux_gates.len()
     }
 
-    fn finalize(&mut self) {
+    pub(crate) fn finalize(&mut self) {
         if self.is_finalized {
             return;
         }
