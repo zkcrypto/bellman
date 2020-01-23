@@ -825,10 +825,10 @@ impl<'a, E: Engine, CS: PlonkConstraintSystem<E> + 'a> Adaptor<'a, E, CS> {
                 let mut c_value = a_value?;
                 c_value.mul_assign(&a_coeff);
                 c_value.add_assign(&constant_coeff);
-                c_value.negate();
+                // c_value.negate();
 
                 Ok(c_value)
-                // c = - constant - a*a_coeff
+                // c = constant + a*a_coeff
             })?;
 
             self.cs.new_gate((a_var, self.cs.get_dummy_variable(), new_var), (a_coeff, b_coeff, c_coeff, zero_fr, constant_coeff))?;
@@ -865,7 +865,7 @@ impl<'a, E: Engine, CS: PlonkConstraintSystem<E> + 'a> Adaptor<'a, E, CS> {
                     c_value.mul_assign(&a_coeff);
                     c_value.add_assign(&b_value);
                     c_value.add_assign(&constant_coeff);
-                    c_value.negate();
+                    // c_value.negate();
     
                     Ok(c_value)
                     // c = - constant - a*a_coeff - b*b_coeff
@@ -953,7 +953,7 @@ impl<'a, E: Engine, CS: PlonkConstraintSystem<E> + 'a> Adaptor<'a, E, CS> {
                     c_value.mul_assign(&a_coeff);
                     c_value.add_assign(&b_value);
                     c_value.add_assign(&constant_coeff);
-                    c_value.negate();
+                    // c_value.negate();
     
                     Ok(c_value)
                     // c = - constant - a*a_coeff - b*b_coeff
@@ -1329,6 +1329,7 @@ fn transpile_xor_using_adaptor() {
     use crate::cs::Circuit;
     use crate::pairing::bn256::Bn256;
     use crate::plonk::plonk::generator::*;
+    use crate::plonk::plonk::prover::*;
 
     let c = XORDemo::<Bn256> {
         a: None,
@@ -1354,7 +1355,23 @@ fn transpile_xor_using_adaptor() {
     adapted_curcuit.synthesize(&mut assembly).unwrap();
     assembly.finalize();
 
-    for (i, g) in assembly.aux_gates.iter().enumerate() {
-        println!("Gate {} = {:?}", i, g);
-    }
+    // for (i, g) in assembly.aux_gates.iter().enumerate() {
+    //     println!("Gate {} = {:?}", i, g);
+    // }
+
+    let c = XORDemo::<Bn256> {
+        a: Some(true),
+        b: Some(true),
+        _marker: PhantomData
+    };
+
+    println!("Trying to prove");
+
+    let adapted_curcuit = AdaptorCircuit::new(c, &hints);
+
+    let mut prover = ProvingAssembly::<Bn256>::new();
+    adapted_curcuit.synthesize(&mut prover).unwrap();
+    prover.finalize();
+
+    assert!(prover.is_satisfied());
 }

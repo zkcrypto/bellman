@@ -147,7 +147,19 @@ impl<E: Engine> ConstraintSystem<E> for ProvingAssembly<E> {
         self.n += 1;
 
         Ok(())
-        
+    }
+
+    fn get_value(&self, var: Variable) -> Result<E::Fr, SynthesisError> {
+        let value = match var {
+            Variable(Index::Input(input)) => {
+                self.input_assingments[input - 1]
+            },
+            Variable(Index::Aux(aux)) => {
+                self.aux_assingments[aux - 1]
+            }
+        };
+
+        Ok(value)
     }
 }
 
@@ -497,7 +509,7 @@ impl<E: Engine> ProvingAssembly<E> {
         self.input_gates.len() + self.aux_gates.len()
     }
 
-    fn finalize(&mut self) {
+    pub(crate) fn finalize(&mut self) {
         if self.is_finalized {
             return;
         }
@@ -514,6 +526,110 @@ impl<E: Engine> ProvingAssembly<E> {
         self.aux_gates.resize(new_aux_len, empty_gate);
 
         self.is_finalized = true;
+    }
+
+    pub fn is_satisfied(mut self) -> bool {
+        self.finalize();
+        assert!(self.is_finalized);
+
+        fn coeff_into_field_element<F: PrimeField>(coeff: & Coeff<F>) -> F {
+            match coeff {
+                Coeff::Zero => {
+                    F::zero()
+                },
+                Coeff::One => {
+                    F::one()
+                },
+                Coeff::NegativeOne => {
+                    let mut tmp = F::one();
+                    tmp.negate();
+
+                    tmp
+                },
+                Coeff::Full(c) => {
+                    *c
+                },
+            }
+        }
+
+        // expect a small number of inputs
+        for (i, gate) in self.input_gates.iter().enumerate()
+        {
+            let q_l = coeff_into_field_element(&gate.q_l);
+            let q_r = coeff_into_field_element(&gate.q_r);
+            let q_o = coeff_into_field_element(&gate.q_o);
+            let q_m = coeff_into_field_element(&gate.q_m);
+            let q_c = coeff_into_field_element(&gate.q_c);
+
+            let a_value = self.get_value(*gate.a_wire()).expect("must get a variable value");
+            let b_value = self.get_value(*gate.b_wire()).expect("must get a variable value");
+            let c_value = self.get_value(*gate.c_wire()).expect("must get a variable value");
+
+            let mut res = q_c;
+
+            let mut tmp = q_l;
+            tmp.mul_assign(&a_value);
+            res.add_assign(&tmp);
+
+            let mut tmp = q_r;
+            tmp.mul_assign(&b_value);
+            res.add_assign(&tmp);
+
+            let mut tmp = q_o;
+            tmp.mul_assign(&c_value);
+            res.add_assign(&tmp);
+
+            let mut tmp = q_m;
+            tmp.mul_assign(&a_value);
+            tmp.mul_assign(&b_value);
+            res.add_assign(&tmp);
+
+            if !res.is_zero() {
+                println!("Unsatisfied at input gate {}", i+1);
+                return false;
+            }
+        }
+
+        for (i, gate) in self.aux_gates.iter().enumerate()
+        {
+            let q_l = coeff_into_field_element(&gate.q_l);
+            let q_r = coeff_into_field_element(&gate.q_r);
+            let q_o = coeff_into_field_element(&gate.q_o);
+            let q_m = coeff_into_field_element(&gate.q_m);
+            let q_c = coeff_into_field_element(&gate.q_c);
+
+            let a_value = self.get_value(*gate.a_wire()).expect("must get a variable value");
+            let b_value = self.get_value(*gate.b_wire()).expect("must get a variable value");
+            let c_value = self.get_value(*gate.c_wire()).expect("must get a variable value");
+
+            let mut res = q_c;
+
+            let mut tmp = q_l;
+            tmp.mul_assign(&a_value);
+            res.add_assign(&tmp);
+
+            let mut tmp = q_r;
+            tmp.mul_assign(&b_value);
+            res.add_assign(&tmp);
+
+            let mut tmp = q_o;
+            tmp.mul_assign(&c_value);
+            res.add_assign(&tmp);
+
+            let mut tmp = q_m;
+            tmp.mul_assign(&a_value);
+            tmp.mul_assign(&b_value);
+            res.add_assign(&tmp);
+
+            if !res.is_zero() {
+                println!("Unsatisfied at aux gate {}", i+1);
+                println!("Gate {:?}", *gate);
+                println!("A = {}, B = {}, C = {}", a_value, b_value, c_value);
+                return false;
+            }
+        }
+
+        true
     }
 
     fn calculate_inverse_vanishing_polynomial_in_a_coset(&self, worker: &Worker, poly_size:usize, vahisning_size: usize) -> Result<Polynomial::<E::Fr, Values>, SynthesisError> {
