@@ -100,6 +100,10 @@ impl<E: Engine> Transpiler<E> {
         }
     }
 
+    pub fn into_hints(self) -> Vec<(usize, TranspilationVariant<E>)> {
+        self.hints
+    }
+
     fn increment_lc_number(&mut self) -> usize {
         let current_lc_number = self.current_constraint_index;
         self.current_constraint_index += 1;

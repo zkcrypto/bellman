@@ -16,7 +16,7 @@ use crate::plonk::utils::*;
 use super::prover::ProvingAssembly;
 
 #[derive(Debug)]
-pub(crate) struct GeneratorAssembly<E: Engine> {
+pub struct GeneratorAssembly<E: Engine> {
     pub(crate) m: usize,
     pub(crate) n: usize,
     pub(crate) input_gates: Vec<Gate<E::Fr>>,
@@ -155,7 +155,7 @@ impl<E: Engine> GeneratorAssembly<E> {
         self.aux_gates[index-1] = gate;
     }
 
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         let mut tmp = Self {
             n: 0,
             m: 0,
@@ -437,11 +437,11 @@ impl<E: Engine> GeneratorAssembly<E> {
         Ok((q_l, q_r, q_o, q_m, q_c, s_id, sigma_1, sigma_2, sigma_3))
     }
 
-    pub(crate) fn num_gates(&self) -> usize {
+    pub fn num_gates(&self) -> usize {
         self.input_gates.len() + self.aux_gates.len()
     }
 
-    pub(crate) fn finalize(&mut self) {
+    pub fn finalize(&mut self) {
         if self.is_finalized {
             return;
         }

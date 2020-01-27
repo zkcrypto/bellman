@@ -16,7 +16,7 @@ use crate::plonk::utils::*;
 use crate::plonk::polynomials::*;
 
 #[derive(Debug)]
-pub(crate) struct ProvingAssembly<E: Engine> {
+pub struct ProvingAssembly<E: Engine> {
     m: usize,
     n: usize,
     input_gates: Vec<Gate<E::Fr>>,
@@ -164,7 +164,7 @@ impl<E: Engine> ConstraintSystem<E> for ProvingAssembly<E> {
 }
 
 impl<E: Engine> ProvingAssembly<E> {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         let mut tmp = Self {
             n: 0,
             m: 0,
@@ -503,13 +503,13 @@ impl<E: Engine> ProvingAssembly<E> {
         Ok((q_l, q_r, q_o, q_m, q_c, s_id, sigma_1, sigma_2, sigma_3))
     }
 
-    pub(crate) fn num_gates(&self) -> usize {
+    pub fn num_gates(&self) -> usize {
         assert!(self.is_finalized);
 
         self.input_gates.len() + self.aux_gates.len()
     }
 
-    pub(crate) fn finalize(&mut self) {
+    pub fn finalize(&mut self) {
         if self.is_finalized {
             return;
         }
