@@ -373,7 +373,6 @@ pub fn gpu_multiexp_consistency() {
     use paired::bls12_381::Bls12;
     use std::time::Instant;
 
-    const CHUNK_SIZE: usize = 1048576;
     const MAX_LOG_D: usize = 20;
     const START_LOG_D: usize = 10;
     let mut kern = gpu::MultiexpKernel::<Bls12>::create().ok();

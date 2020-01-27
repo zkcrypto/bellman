@@ -581,7 +581,7 @@ mod test {
         let expected = hex!("0af5695115ced92c8a0341e43869209636e9aa6472e4576f0f2b996cf812b30e");
 
         let mut out = r.into_iter();
-        for b in expected.into_iter() {
+        for b in expected.iter() {
             for i in 0..8 {
                 let c = out.next().unwrap().get_value().unwrap();
 
@@ -618,7 +618,7 @@ mod test {
         let expected = hex!("2ab8f0683167ba220eef19dccf4f9b1a8193cc09b35e0235842323950530f18a");
 
         let mut out = r.into_iter();
-        for b in expected.into_iter() {
+        for b in expected.iter() {
             for i in 0..8 {
                 let c = out.next().unwrap().get_value().unwrap();
 

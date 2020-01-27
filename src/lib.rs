@@ -364,7 +364,7 @@ impl fmt::Display for SynthesisError {
             write!(f, "GPU error: ")?;
             e.fmt(f)
         } else {
-            write!(f, "{}", self.description())
+            write!(f, "{}", self.to_string())
         }
     }
 }
