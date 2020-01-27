@@ -16,8 +16,8 @@ use bellperson::{Circuit, ConstraintSystem, SynthesisError};
 
 // We're going to use the Groth16 proving system.
 use bellperson::groth16::{
-    create_random_proof, generate_random_parameters, prepare_batch_verifying_key,
-    prepare_verifying_key, verify_proof, verify_proofs_batch, Proof,
+    create_random_proof, create_random_proof_batch, generate_random_parameters,
+    prepare_batch_verifying_key, prepare_verifying_key, verify_proof, verify_proofs_batch, Proof,
 };
 
 const MIMC_ROUNDS: usize = 322;
@@ -54,6 +54,7 @@ fn mimc<E: Engine>(mut xl: E::Fr, mut xr: E::Fr, constants: &[E::Fr]) -> E::Fr {
 
 /// This is our demo circuit for proving knowledge of the
 /// preimage of a MiMC hash invocation.
+#[derive(Clone)]
 struct MiMCDemo<'a, E: Engine> {
     xl: Option<E::Fr>,
     xr: Option<E::Fr>,
@@ -221,6 +222,34 @@ fn test_mimc() {
         proofs.push(proof);
         images.push(vec![image]);
     }
+
+    // batch verification
+    println!("Creating batch proofs...");
+    let proving_batch = Instant::now();
+    {
+        // Create an instance of our circuit (with the
+        // witness)
+        let xl = <Bls12 as ScalarEngine>::Fr::random(rng);
+        let xr = <Bls12 as ScalarEngine>::Fr::random(rng);
+
+        let c = MiMCDemo {
+            xl: Some(xl),
+            xr: Some(xr),
+            constants: &constants,
+        };
+
+        // Create a groth16 proof with our parameters.
+        let proofs = create_random_proof_batch(vec![c; SAMPLES as usize], &params, rng).unwrap();
+        assert_eq!(proofs.len(), 50);
+    }
+
+    let proving_batch = proving_batch.elapsed().subsec_nanos() as f64 / 1_000_000_000f64;
+    println!(
+        "Proving time batch: {:04}s ({:04}s / proof)",
+        proving_batch,
+        proving_batch / SAMPLES as f64,
+    );
+
     let proving_avg = total_proving / SAMPLES;
     let proving_avg =
         proving_avg.subsec_nanos() as f64 / 1_000_000_000f64 + (proving_avg.as_secs() as f64);

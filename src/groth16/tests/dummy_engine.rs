@@ -249,7 +249,7 @@ impl PrimeField for Fr {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct DummyEngine;
 
 impl ScalarEngine for DummyEngine {

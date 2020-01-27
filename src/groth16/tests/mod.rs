@@ -6,9 +6,12 @@ use self::dummy_engine::*;
 
 use std::marker::PhantomData;
 
-use super::{create_proof, generate_parameters, prepare_verifying_key, verify_proof};
+use super::{
+    create_proof, create_proof_batch, generate_parameters, prepare_verifying_key, verify_proof,
+};
 use crate::{Circuit, ConstraintSystem, SynthesisError};
 
+#[derive(Clone)]
 struct XORDemo<E: Engine> {
     a: Option<bool>,
     b: Option<bool>,
@@ -377,4 +380,59 @@ fn test_xordemo() {
     }
 
     assert!(verify_proof(&pvk, &proof, &[Fr::one()]).unwrap());
+}
+
+#[test]
+fn test_create_batch_single() {
+    // test consistency between single and batch creation
+    let g1 = Fr::one();
+    let g2 = Fr::one();
+    let alpha = Fr::from_str("48577").unwrap();
+    let beta = Fr::from_str("22580").unwrap();
+    let gamma = Fr::from_str("53332").unwrap();
+    let delta = Fr::from_str("5481").unwrap();
+    let tau = Fr::from_str("3673").unwrap();
+
+    let params = {
+        let c = XORDemo::<DummyEngine> {
+            a: None,
+            b: None,
+            _marker: PhantomData,
+        };
+
+        generate_parameters(c, g1, g2, alpha, beta, gamma, delta, tau).unwrap()
+    };
+
+    let pvk = prepare_verifying_key(&params.vk);
+
+    let r1 = Fr::from_str("27134").unwrap();
+    let s1 = Fr::from_str("17146").unwrap();
+
+    let r2 = Fr::from_str("27132").unwrap();
+    let s2 = Fr::from_str("17142").unwrap();
+
+    let c = XORDemo {
+        a: Some(true),
+        b: Some(false),
+        _marker: PhantomData,
+    };
+    let proof_single_1 = create_proof(c.clone(), &params, r1, s1).unwrap();
+    let proof_single_2 = create_proof(c.clone(), &params, r2, s2).unwrap();
+
+    let proof_batch = create_proof_batch(
+        vec![c.clone(), c.clone()],
+        &params,
+        vec![r1, r2],
+        vec![s1, s2],
+    )
+    .unwrap();
+
+    assert_eq!(proof_batch[0], proof_single_1);
+    assert_eq!(proof_batch[1], proof_single_2);
+
+    assert!(verify_proof(&pvk, &proof_single_1, &[Fr::one()]).unwrap());
+    assert!(verify_proof(&pvk, &proof_single_2, &[Fr::one()]).unwrap());
+    for proof in &proof_batch {
+        assert!(verify_proof(&pvk, &proof, &[Fr::one()]).unwrap());
+    }
 }
