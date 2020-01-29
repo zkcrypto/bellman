@@ -91,6 +91,67 @@ impl<E: Engine> Circuit<E> for XORDemo<E> {
     }
 }
 
+#[derive(Clone)]
+pub(crate) struct TranspilationTester<E: Engine> {
+    pub(crate) a: Option<E::Fr>,
+    pub(crate) b: Option<E::Fr>,
+}
+
+impl<E: Engine> Circuit<E> for TranspilationTester<E> {
+    fn synthesize<CS: ConstraintSystem<E>>(
+        self,
+        cs: &mut CS
+    ) -> Result<(), SynthesisError>
+    {
+        let a_var = cs.alloc(|| "a", || {
+            if let Some(a_value) = self.a {
+                Ok(a_value)
+            } else {
+                Err(SynthesisError::AssignmentMissing)
+            }
+        })?;
+
+        cs.enforce(
+            || "a is zero",
+            |lc| lc + a_var,
+            |lc| lc + CS::one(),
+            |lc| lc
+        );
+
+        let b_var = cs.alloc(|| "b", || {
+            if let Some(b_value) = self.b {
+                Ok(b_value)
+            } else {
+                Err(SynthesisError::AssignmentMissing)
+            }
+        })?;
+
+        cs.enforce(
+            || "b is one",
+            |lc| lc + b_var,
+            |lc| lc + CS::one(),
+            |lc| lc + CS::one()
+        );
+
+        let c_var = cs.alloc_input(|| "c", || {
+            if let Some(a_value) = self.a {
+                Ok(a_value)
+            } else {
+                Err(SynthesisError::AssignmentMissing)
+            }
+        })?;
+
+        cs.enforce(
+            || "a is equal to c",
+            |lc| lc + a_var,
+            |lc| lc + CS::one(),
+            |lc| lc + c_var
+        );
+
+        Ok(())
+    }
+}
+
 #[cfg(feature = "plonk")]
 #[test]
 fn transpile_xor() {
@@ -106,5 +167,35 @@ fn transpile_xor() {
     let mut transpiler = Transpiler::new();
 
     c.synthesize(&mut transpiler).unwrap();
+}
+
+#[cfg(feature = "plonk")]
+#[test]
+fn transpile_test_circuit() {
+    use crate::pairing::bn256::{Bn256, Fr};
+    use crate::plonk::adaptor::alternative::*;
+    use crate::plonk::plonk::prover::*;
+
+    let c = TranspilationTester::<Bn256> {
+        a: Some(Fr::zero()),
+        b: Some(Fr::one()),
+    };
+
+    let mut transpiler = Transpiler::new();
+
+    c.clone().synthesize(&mut transpiler).unwrap();
+
+    let hints = transpiler.into_hints();
+
+    let adapted_curcuit = AdaptorCircuit::new(c.clone(), &hints);
+
+    use crate::plonk::cs::Circuit as PlonkCircuit;
+
+    let mut prover = ProvingAssembly::<Bn256>::new();
+    adapted_curcuit.synthesize(&mut prover).unwrap();
+    prover.finalize();
+
+    println!("Checking if is satisfied");
+    assert!(prover.is_satisfied());
 }
 

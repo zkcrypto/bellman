@@ -34,8 +34,8 @@ pub(crate) struct ProvingAssembly<E: Engine> {
 }
 
 impl<E: Engine> ConstraintSystem<E> for ProvingAssembly<E> {
-    const ZERO: Variable = Variable(Index::Aux(1));
-    const ONE: Variable = Variable(Index::Aux(2));
+    // const ZERO: Variable = Variable(Index::Aux(1));
+    // const ONE: Variable = Variable(Index::Aux(2));
 
     // allocate a variable
     fn alloc<F>(&mut self, value: F) -> Result<Variable, SynthesisError>
@@ -149,6 +149,10 @@ impl<E: Engine> ConstraintSystem<E> for ProvingAssembly<E> {
         Ok(())
         
     }
+
+    fn get_dummy_variable(&self) -> Variable {
+        self.dummy_variable()
+    }
 }
 
 impl<E: Engine> ProvingAssembly<E> {
@@ -173,20 +177,20 @@ impl<E: Engine> ProvingAssembly<E> {
         let zero = tmp.alloc(|| Ok(E::Fr::zero())).expect("should have no issues");
         tmp.enforce_constant(zero, E::Fr::zero()).expect("should have no issues");
 
-        let one = tmp.alloc(|| Ok(E::Fr::one())).expect("should have no issues");
-        tmp.enforce_constant(one, E::Fr::one()).expect("should have no issues");
+        // let one = tmp.alloc(|| Ok(E::Fr::one())).expect("should have no issues");
+        // tmp.enforce_constant(one, E::Fr::one()).expect("should have no issues");
 
-        match (zero, <Self as ConstraintSystem<E>>::ZERO) {
-            (Variable(Index::Aux(1)), Variable(Index::Aux(1))) => {},
-            _ => panic!("zero variable is incorrect")
-        }
+        // match (zero, <Self as ConstraintSystem<E>>::ZERO) {
+        //     (Variable(Index::Aux(1)), Variable(Index::Aux(1))) => {},
+        //     _ => panic!("zero variable is incorrect")
+        // }
 
-        match (one, <Self as ConstraintSystem<E>>::ONE) {
-            (Variable(Index::Aux(2)), Variable(Index::Aux(2))) => {},
-            _ => panic!("one variable is incorrect")
-        }
+        // match (one, <Self as ConstraintSystem<E>>::ONE) {
+        //     (Variable(Index::Aux(2)), Variable(Index::Aux(2))) => {},
+        //     _ => panic!("one variable is incorrect")
+        // }
 
-        match (tmp.dummy_variable(), <Self as ConstraintSystem<E>>::ZERO) {
+        match (tmp.dummy_variable(), zero) {
             (Variable(Index::Aux(1)), Variable(Index::Aux(1))) => {},
             _ => panic!("zero variable is incorrect")
         }
@@ -209,8 +213,8 @@ impl<E: Engine> ProvingAssembly<E> {
 
     // return variable that is not in a constraint formally, but has some value
     fn dummy_variable(&self) -> Variable {
-        <Self as ConstraintSystem<E>>::ZERO
-        // Variable(Index::Aux(0))
+        // <Self as ConstraintSystem<E>>::ZERO
+        Variable(Index::Aux(1))
     }
 
     pub(crate) fn make_wire_assingments(&self) -> (Vec<E::Fr>, Vec<E::Fr>, Vec<E::Fr>) {
@@ -1664,8 +1668,8 @@ mod test {
                 Ok(E::Fr::one())
             })?;
 
-            cs.enforce_zero_2((a, CS::ONE), (one, negative_one))?;
-            cs.enforce_zero_2((b, CS::ONE), (one, negative_one))?;
+            cs.enforce_zero_2((a, b), (one, negative_one))?;
+            // cs.enforce_zero_2((b, CS::ONE), (one, negative_one))?;
 
             let mut c = cs.alloc(|| {
                 Ok(two)

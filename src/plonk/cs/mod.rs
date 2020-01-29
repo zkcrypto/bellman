@@ -13,8 +13,8 @@ pub trait Circuit<E: Engine> {
 }
 
 pub trait ConstraintSystem<E: Engine> {
-    const ZERO: Variable;
-    const ONE: Variable;
+    // const ZERO: Variable;
+    // const ONE: Variable;
 
     // allocate a variable
     fn alloc<F>(&mut self, value: F) -> Result<Variable, SynthesisError>
@@ -79,9 +79,11 @@ pub trait ConstraintSystem<E: Engine> {
         Err(SynthesisError::AssignmentMissing)
     }
 
-    fn get_dummy_variable(&self) -> Variable {
-        <Self as ConstraintSystem<E>>::ZERO
-    }
+    fn get_dummy_variable(&self) -> Variable;
+
+    // fn get_dummy_variable(&self) -> Variable {
+    //     <Self as ConstraintSystem<E>>::ZERO
+    // }
 }
 
 

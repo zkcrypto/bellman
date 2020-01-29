@@ -31,8 +31,8 @@ struct GeneratorAssembly<E: Engine> {
 }
 
 impl<E: Engine> ConstraintSystem<E> for GeneratorAssembly<E> {
-    const ZERO: Variable = Variable(Index::Aux(1));
-    const ONE: Variable = Variable(Index::Aux(2));
+    // const ZERO: Variable = Variable(Index::Aux(1));
+    // const ONE: Variable = Variable(Index::Aux(2));
 
     // allocate a variable
     fn alloc<F>(&mut self, _value: F) -> Result<Variable, SynthesisError>
@@ -139,6 +139,10 @@ impl<E: Engine> ConstraintSystem<E> for GeneratorAssembly<E> {
         Ok(())
         
     }
+
+    fn get_dummy_variable(&self) -> Variable {
+        self.dummy_variable()
+    }
 }
 
 impl<E: Engine> GeneratorAssembly<E> {
@@ -177,17 +181,17 @@ impl<E: Engine> GeneratorAssembly<E> {
         let one = tmp.alloc(|| Ok(E::Fr::one())).expect("should have no issues");
         tmp.enforce_constant(one, E::Fr::one()).expect("should have no issues");
 
-        match (zero, <Self as ConstraintSystem<E>>::ZERO) {
-            (Variable(Index::Aux(1)), Variable(Index::Aux(1))) => {},
-            _ => panic!("zero variable is incorrect")
-        }
+        // match (zero, <Self as ConstraintSystem<E>>::ZERO) {
+        //     (Variable(Index::Aux(1)), Variable(Index::Aux(1))) => {},
+        //     _ => panic!("zero variable is incorrect")
+        // }
 
-        match (one, <Self as ConstraintSystem<E>>::ONE) {
-            (Variable(Index::Aux(2)), Variable(Index::Aux(2))) => {},
-            _ => panic!("one variable is incorrect")
-        }
+        // match (one, <Self as ConstraintSystem<E>>::ONE) {
+        //     (Variable(Index::Aux(2)), Variable(Index::Aux(2))) => {},
+        //     _ => panic!("one variable is incorrect")
+        // }
 
-        match (tmp.dummy_variable(), <Self as ConstraintSystem<E>>::ZERO) {
+        match (tmp.dummy_variable(), zero) {
             (Variable(Index::Aux(1)), Variable(Index::Aux(1))) => {},
             _ => panic!("zero variable is incorrect")
         }
@@ -197,8 +201,8 @@ impl<E: Engine> GeneratorAssembly<E> {
 
     // return variable that is not in a constraint formally, but has some value
     fn dummy_variable(&self) -> Variable {
-        <Self as ConstraintSystem<E>>::ZERO
-        // Variable(Index::Aux(0))
+        // <Self as ConstraintSystem<E>>::ZERO
+        Variable(Index::Aux(1))
     }
 
     pub(crate) fn make_circuit_description_polynomials(&self, worker: &Worker) -> Result<(

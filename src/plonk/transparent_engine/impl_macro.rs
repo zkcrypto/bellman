@@ -185,6 +185,14 @@ macro_rules! transparent_engine_impl {
             fn into_projective(&self) -> Self::Projective {
                 *self
             }
+
+            fn into_xy_unchecked(&self) -> (Self::Base, Self::Base) {
+                (<$fr as crate::ff::Field>::zero(), <$fr as crate::ff::Field>::zero())
+            }
+
+            fn from_xy_unchecked(x: Self::Base, y: Self::Base) -> Self {
+                <$fr as crate::ff::Field>::zero()
+            }
         }
 
         impl crate::pairing::RawEncodable for $fr {

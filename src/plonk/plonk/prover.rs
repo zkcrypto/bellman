@@ -15,7 +15,7 @@ use crate::plonk::commitments::transcript::*;
 use crate::plonk::utils::*;
 use crate::plonk::polynomials::*;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ProvingAssembly<E: Engine> {
     m: usize,
     n: usize,
@@ -34,8 +34,8 @@ pub struct ProvingAssembly<E: Engine> {
 }
 
 impl<E: Engine> ConstraintSystem<E> for ProvingAssembly<E> {
-    const ZERO: Variable = Variable(Index::Aux(1));
-    const ONE: Variable = Variable(Index::Aux(2));
+    // const ZERO: Variable = Variable(Index::Aux(1));
+    // const ONE: Variable = Variable(Index::Aux(2));
 
     // allocate a variable
     fn alloc<F>(&mut self, value: F) -> Result<Variable, SynthesisError>
@@ -47,6 +47,8 @@ impl<E: Engine> ConstraintSystem<E> for ProvingAssembly<E> {
         self.num_aux += 1;
         let index = self.num_aux;
         self.aux_assingments.push(value);
+
+        // println!("Allocated variable Aux({}) with value {}", index, value);
 
         Ok(Variable(Index::Aux(index)))
     }
@@ -68,6 +70,8 @@ impl<E: Engine> ConstraintSystem<E> for ProvingAssembly<E> {
         // let gate = Gate::<E>::new_enforce_constant_gate(input_var, Some(value), self.dummy_variable());
         self.input_gates.push(gate);
 
+        // println!("Allocated input Input({}) with value {}", index, value);
+
         Ok(input_var)
 
     }
@@ -86,8 +90,14 @@ impl<E: Engine> ConstraintSystem<E> for ProvingAssembly<E> {
         coeffs:(E::Fr,E::Fr,E::Fr,E::Fr,E::Fr)) -> Result<(), SynthesisError>
     {
         let gate = Gate::<E::Fr>::new_gate(variables, coeffs);
+        // println!("Enforced new gate number {}: {:?}", self.n, gate);
         self.aux_gates.push(gate);
         self.n += 1;
+
+        // let satisfied = self.clone().is_satisfied();
+        // if !satisfied {
+        //     return Err(SynthesisError::Unsatisfiable);
+        // }
 
         Ok(())
     }
@@ -96,6 +106,7 @@ impl<E: Engine> ConstraintSystem<E> for ProvingAssembly<E> {
     fn enforce_constant(&mut self, variable: Variable, constant: E::Fr) -> Result<(), SynthesisError>
     {
         let gate = Gate::<E::Fr>::new_enforce_constant_gate(variable, Some(constant), self.dummy_variable());
+        // println!("Enforced new constant gate number {}: {:?}", self.n, gate);
         self.aux_gates.push(gate);
         self.n += 1;
 
@@ -161,6 +172,10 @@ impl<E: Engine> ConstraintSystem<E> for ProvingAssembly<E> {
 
         Ok(value)
     }
+
+    fn get_dummy_variable(&self) -> Variable {
+        self.dummy_variable()
+    }
 }
 
 impl<E: Engine> ProvingAssembly<E> {
@@ -185,20 +200,20 @@ impl<E: Engine> ProvingAssembly<E> {
         let zero = tmp.alloc(|| Ok(E::Fr::zero())).expect("should have no issues");
         tmp.enforce_constant(zero, E::Fr::zero()).expect("should have no issues");
 
-        let one = tmp.alloc(|| Ok(E::Fr::one())).expect("should have no issues");
-        tmp.enforce_constant(one, E::Fr::one()).expect("should have no issues");
+        // let one = tmp.alloc(|| Ok(E::Fr::one())).expect("should have no issues");
+        // tmp.enforce_constant(one, E::Fr::one()).expect("should have no issues");
 
-        match (zero, <Self as ConstraintSystem<E>>::ZERO) {
-            (Variable(Index::Aux(1)), Variable(Index::Aux(1))) => {},
-            _ => panic!("zero variable is incorrect")
-        }
+        // match (zero, <Self as ConstraintSystem<E>>::ZERO) {
+        //     (Variable(Index::Aux(1)), Variable(Index::Aux(1))) => {},
+        //     _ => panic!("zero variable is incorrect")
+        // }
 
-        match (one, <Self as ConstraintSystem<E>>::ONE) {
-            (Variable(Index::Aux(2)), Variable(Index::Aux(2))) => {},
-            _ => panic!("one variable is incorrect")
-        }
+        // match (one, <Self as ConstraintSystem<E>>::ONE) {
+        //     (Variable(Index::Aux(2)), Variable(Index::Aux(2))) => {},
+        //     _ => panic!("one variable is incorrect")
+        // }
 
-        match (tmp.dummy_variable(), <Self as ConstraintSystem<E>>::ZERO) {
+        match (tmp.dummy_variable(), zero) {
             (Variable(Index::Aux(1)), Variable(Index::Aux(1))) => {},
             _ => panic!("zero variable is incorrect")
         }
@@ -221,8 +236,8 @@ impl<E: Engine> ProvingAssembly<E> {
 
     // return variable that is not in a constraint formally, but has some value
     fn dummy_variable(&self) -> Variable {
-        <Self as ConstraintSystem<E>>::ZERO
-        // Variable(Index::Aux(0))
+        // <Self as ConstraintSystem<E>>::ZERO
+        Variable(Index::Aux(1))
     }
 
     pub(crate) fn make_wire_assingments(&self) -> (Vec<E::Fr>, Vec<E::Fr>, Vec<E::Fr>) {
@@ -529,8 +544,8 @@ impl<E: Engine> ProvingAssembly<E> {
     }
 
     pub fn is_satisfied(mut self) -> bool {
-        self.finalize();
-        assert!(self.is_finalized);
+        // self.finalize();
+        // assert!(self.is_finalized);
 
         fn coeff_into_field_element<F: PrimeField>(coeff: & Coeff<F>) -> F {
             match coeff {
@@ -561,11 +576,15 @@ impl<E: Engine> ProvingAssembly<E> {
             let q_m = coeff_into_field_element(&gate.q_m);
             let q_c = coeff_into_field_element(&gate.q_c);
 
+            assert!(q_c.is_zero(), "should not hardcode a constant into the input gate");
+
             let a_value = self.get_value(*gate.a_wire()).expect("must get a variable value");
             let b_value = self.get_value(*gate.b_wire()).expect("must get a variable value");
             let c_value = self.get_value(*gate.c_wire()).expect("must get a variable value");
 
-            let mut res = q_c;
+            let input_value = self.input_assingments[i];
+            let mut res = input_value;
+            res.negate();
 
             let mut tmp = q_l;
             tmp.mul_assign(&a_value);
@@ -585,7 +604,8 @@ impl<E: Engine> ProvingAssembly<E> {
             res.add_assign(&tmp);
 
             if !res.is_zero() {
-                println!("Unsatisfied at input gate {}", i+1);
+                println!("Unsatisfied at input gate {}: {:?}", i+1, gate);
+                println!("A value = {}, B value = {}, C value = {}", a_value, b_value, c_value);
                 return false;
             }
         }
@@ -1721,8 +1741,8 @@ mod test {
                 Ok(E::Fr::one())
             })?;
 
-            cs.enforce_zero_2((a, CS::ONE), (one, negative_one))?;
-            cs.enforce_zero_2((b, CS::ONE), (one, negative_one))?;
+            cs.enforce_zero_2((a, b), (one, negative_one))?;
+            // cs.enforce_zero_2((b, CS::ONE), (one, negative_one))?;
 
             let mut c = cs.alloc(|| {
                 Ok(two)
