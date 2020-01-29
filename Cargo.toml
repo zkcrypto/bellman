@@ -18,8 +18,9 @@ bit-vec = "0.4.4"
 futures = "0.1"
 cfg-if = "0.1"
 
-pairing = {package = "pairing_ce", path = "../pairing" }
+# pairing = {package = "pairing_ce", path = "../pairing" }
 # pairing = {package = "pairing_ce", version = "0.19" }
+pairing = {package = "pairing_ce", git = "https://github.com/matter-labs/pairing.git", branch = "affine-ops"}
 byteorder = "1"
 
 futures-cpupool = {version = "0.1", optional = true}
