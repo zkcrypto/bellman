@@ -64,7 +64,7 @@
 //!         // Vec of None (indicating that the value of each bit is unknown).
 //!         let bit_values = if let Some(preimage) = self.preimage {
 //!             preimage
-//!                 .into_iter()
+//!                 .iter()
 //!                 .map(|byte| (0..8).map(move |i| (byte >> i) & 1u8 == 1u8))
 //!                 .flatten()
 //!                 .map(|b| Some(b))

@@ -9,17 +9,24 @@ use crate::multiexp::SourceBuilder;
 use crate::SynthesisError;
 
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use memmap::{Mmap, MmapOptions};
+use std::fs::File;
 use std::io::{self, Read, Write};
+use std::mem;
+use std::ops::Range;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 #[cfg(test)]
 mod tests;
 
 mod generator;
+mod mapped_params;
 mod prover;
 mod verifier;
 
 pub use self::generator::*;
+pub use self::mapped_params::*;
 pub use self::prover::*;
 pub use self::verifier::*;
 
@@ -221,6 +228,85 @@ impl<E: Engine> VerifyingKey<E> {
             ic,
         })
     }
+
+    pub fn read_mmap(mmap: &Mmap, offset: &mut usize) -> io::Result<Self> {
+        let u32_len = mem::size_of::<u32>();
+        let g1_len = mem::size_of::<<E::G1Affine as CurveAffine>::Uncompressed>();
+        let g2_len = mem::size_of::<<E::G2Affine as CurveAffine>::Uncompressed>();
+
+        let read_g1 = |mmap: &Mmap,
+                       offset: &mut usize|
+         -> Result<<E as paired::Engine>::G1Affine, std::io::Error> {
+            let ptr = &mmap[*offset..*offset + g1_len];
+            // Safety: this operation is safe, because it's simply
+            // casting to a known struct at the correct offset, given
+            // the structure of the on-disk data.
+            let g1_repr: <E::G1Affine as CurveAffine>::Uncompressed = unsafe {
+                *(ptr as *const [u8] as *const <E::G1Affine as CurveAffine>::Uncompressed)
+            };
+
+            *offset += g1_len;
+            g1_repr
+                .into_affine()
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+        };
+
+        let read_g2 = |mmap: &Mmap,
+                       offset: &mut usize|
+         -> Result<<E as paired::Engine>::G2Affine, std::io::Error> {
+            let ptr = &mmap[*offset..*offset + g2_len];
+            // Safety: this operation is safe, because it's simply
+            // casting to a known struct at the correct offset, given
+            // the structure of the on-disk data.
+            let g2_repr: <E::G2Affine as CurveAffine>::Uncompressed = unsafe {
+                *(ptr as *const [u8] as *const <E::G2Affine as CurveAffine>::Uncompressed)
+            };
+
+            *offset += g2_len;
+            g2_repr
+                .into_affine()
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+        };
+
+        let alpha_g1 = read_g1(&mmap, &mut *offset)?;
+        let beta_g1 = read_g1(&mmap, &mut *offset)?;
+        let beta_g2 = read_g2(&mmap, &mut *offset)?;
+        let gamma_g2 = read_g2(&mmap, &mut *offset)?;
+        let delta_g1 = read_g1(&mmap, &mut *offset)?;
+        let delta_g2 = read_g2(&mmap, &mut *offset)?;
+
+        let mut raw_ic_len = &mmap[*offset..*offset + u32_len];
+        let ic_len = raw_ic_len.read_u32::<BigEndian>()? as usize;
+        *offset += u32_len;
+
+        let mut ic = vec![];
+
+        for _ in 0..ic_len {
+            let g1_repr = read_g1(&mmap, &mut *offset);
+            let g1 = g1_repr.and_then(|e| {
+                if e.is_zero() {
+                    Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "point at infinity",
+                    ))
+                } else {
+                    Ok(e)
+                }
+            })?;
+
+            ic.push(g1);
+        }
+
+        Ok(VerifyingKey {
+            alpha_g1,
+            beta_g1,
+            beta_g2,
+            gamma_g2,
+            delta_g1,
+            delta_g2,
+            ic,
+        })
+    }
 }
 
 #[derive(Clone)]
@@ -289,6 +375,199 @@ impl<E: Engine> Parameters<E> {
         }
 
         Ok(())
+    }
+
+    // Quickly iterates through the parameter file, recording all
+    // parameter offsets and caches the verifying key (vk) for quick
+    // access via reference.
+    pub fn build_mapped_parameters(
+        param_file: PathBuf,
+        checked: bool,
+    ) -> io::Result<MappedParameters<E>> {
+        let mut offset: usize = 0;
+        let params = File::open(&param_file)?;
+        let mmap = unsafe { MmapOptions::new().map(&params)? };
+
+        let u32_len = mem::size_of::<u32>();
+        let g1_len = mem::size_of::<<E::G1Affine as CurveAffine>::Uncompressed>();
+        let g2_len = mem::size_of::<<E::G2Affine as CurveAffine>::Uncompressed>();
+
+        let read_length = |mmap: &Mmap, offset: &mut usize| -> Result<usize, std::io::Error> {
+            let mut raw_len = &mmap[*offset..*offset + u32_len];
+            *offset += u32_len;
+
+            match raw_len.read_u32::<BigEndian>() {
+                Ok(len) => Ok(len as usize),
+                Err(err) => Err(err),
+            }
+        };
+
+        let get_offsets = |mmap: &Mmap,
+                           offset: &mut usize,
+                           param: &mut Vec<Range<usize>>,
+                           range_len: usize|
+         -> Result<(), std::io::Error> {
+            let len = read_length(&mmap, &mut *offset)?;
+            for _ in 0..len {
+                (*param).push(Range {
+                    start: *offset,
+                    end: *offset + range_len,
+                });
+                *offset += range_len;
+            }
+
+            Ok(())
+        };
+
+        let vk = VerifyingKey::<E>::read_mmap(&mmap, &mut offset)?;
+
+        let mut h = vec![];
+        let mut l = vec![];
+        let mut a = vec![];
+        let mut b_g1 = vec![];
+        let mut b_g2 = vec![];
+
+        get_offsets(&mmap, &mut offset, &mut h, g1_len)?;
+        get_offsets(&mmap, &mut offset, &mut l, g1_len)?;
+        get_offsets(&mmap, &mut offset, &mut a, g1_len)?;
+        get_offsets(&mmap, &mut offset, &mut b_g1, g1_len)?;
+        get_offsets(&mmap, &mut offset, &mut b_g2, g2_len)?;
+
+        Ok(MappedParameters {
+            param_file,
+            vk,
+            h,
+            l,
+            a,
+            b_g1,
+            b_g2,
+            checked,
+            _e: Default::default(),
+        })
+    }
+
+    // This method is provided as a proof of concept, but isn't
+    // advantageous to use (can be called by read_cached_params in
+    // rust-fil-proofs repo).  It's equivalent to the existing read
+    // method, in that it loads all parameters to RAM.
+    pub fn read_mmap(mmap: &Mmap, checked: bool) -> io::Result<Self> {
+        let u32_len = mem::size_of::<u32>();
+        let g1_len = mem::size_of::<<E::G1Affine as CurveAffine>::Uncompressed>();
+        let g2_len = mem::size_of::<<E::G2Affine as CurveAffine>::Uncompressed>();
+
+        let read_g1 = |mmap: &Mmap, offset: &mut usize| -> io::Result<E::G1Affine> {
+            let ptr = &mmap[*offset..*offset + g1_len];
+            *offset += g1_len;
+            // Safety: this operation is safe, because it's simply
+            // casting to a known struct at the correct offset, given
+            // the structure of the on-disk data.
+            let repr: <E::G1Affine as CurveAffine>::Uncompressed = unsafe {
+                *(ptr as *const [u8] as *const <E::G1Affine as CurveAffine>::Uncompressed)
+            };
+
+            if checked {
+                repr.into_affine()
+            } else {
+                repr.into_affine_unchecked()
+            }
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+            .and_then(|e| {
+                if e.is_zero() {
+                    Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "point at infinity",
+                    ))
+                } else {
+                    Ok(e)
+                }
+            })
+        };
+
+        let read_g2 = |mmap: &Mmap, offset: &mut usize| -> io::Result<E::G2Affine> {
+            let ptr = &mmap[*offset..*offset + g2_len];
+            *offset += g2_len;
+            // Safety: this operation is safe, because it's simply
+            // casting to a known struct at the correct offset, given
+            // the structure of the on-disk data.
+            let repr: <E::G2Affine as CurveAffine>::Uncompressed = unsafe {
+                *(ptr as *const [u8] as *const <E::G2Affine as CurveAffine>::Uncompressed)
+            };
+
+            if checked {
+                repr.into_affine()
+            } else {
+                repr.into_affine_unchecked()
+            }
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+            .and_then(|e| {
+                if e.is_zero() {
+                    Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "point at infinity",
+                    ))
+                } else {
+                    Ok(e)
+                }
+            })
+        };
+
+        let read_length = |mmap: &Mmap, offset: &mut usize| -> Result<usize, std::io::Error> {
+            let mut raw_len = &mmap[*offset..*offset + u32_len];
+            *offset += u32_len;
+
+            match raw_len.read_u32::<BigEndian>() {
+                Ok(len) => Ok(len as usize),
+                Err(err) => Err(err),
+            }
+        };
+
+        let get_g1s = |mmap: &Mmap,
+                       offset: &mut usize,
+                       param: &mut Vec<E::G1Affine>|
+         -> Result<(), std::io::Error> {
+            let len = read_length(&mmap, &mut *offset)?;
+            for _ in 0..len {
+                (*param).push(read_g1(&mmap, &mut *offset)?);
+            }
+
+            Ok(())
+        };
+
+        let get_g2s = |mmap: &Mmap,
+                       offset: &mut usize,
+                       param: &mut Vec<E::G2Affine>|
+         -> Result<(), std::io::Error> {
+            let len = read_length(&mmap, &mut *offset)?;
+            for _ in 0..len {
+                (*param).push(read_g2(&mmap, &mut *offset)?);
+            }
+
+            Ok(())
+        };
+
+        let mut offset: usize = 0;
+        let vk = VerifyingKey::<E>::read_mmap(&mmap, &mut offset)?;
+
+        let mut h = vec![];
+        let mut l = vec![];
+        let mut a = vec![];
+        let mut b_g1 = vec![];
+        let mut b_g2 = vec![];
+
+        get_g1s(&mmap, &mut offset, &mut h)?;
+        get_g1s(&mmap, &mut offset, &mut l)?;
+        get_g1s(&mmap, &mut offset, &mut a)?;
+        get_g1s(&mmap, &mut offset, &mut b_g1)?;
+        get_g2s(&mmap, &mut offset, &mut b_g2)?;
+
+        Ok(Parameters {
+            vk,
+            h: Arc::new(h),
+            l: Arc::new(l),
+            a: Arc::new(a),
+            b_g1: Arc::new(b_g1),
+            b_g2: Arc::new(b_g2),
+        })
     }
 
     pub fn read<R: Read>(mut reader: R, checked: bool) -> io::Result<Self> {
