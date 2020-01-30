@@ -98,21 +98,18 @@ impl<E: Engine, G: Group<E>> EvaluationDomain<E, G> {
     ) -> gpu::GPUResult<()> {
         best_fft(kern, &mut self.coeffs, worker, &self.omegainv, self.exp)?;
 
-        if let Some(ref mut k) = kern {
-            gpu_mul_by_field(k, &mut self.coeffs, &self.minv, self.exp)?;
-        } else {
-            worker.scope(self.coeffs.len(), |scope, chunk| {
-                let minv = self.minv;
+        worker.scope(self.coeffs.len(), |scope, chunk| {
+            let minv = self.minv;
 
-                for v in self.coeffs.chunks_mut(chunk) {
-                    scope.spawn(move |_| {
-                        for v in v {
-                            v.group_mul_assign(&minv);
-                        }
-                    });
-                }
-            });
-        }
+            for v in self.coeffs.chunks_mut(chunk) {
+                scope.spawn(move |_| {
+                    for v in v {
+                        v.group_mul_assign(&minv);
+                    }
+                });
+            }
+        });
+
         Ok(())
     }
 
@@ -163,31 +160,21 @@ impl<E: Engine, G: Group<E>> EvaluationDomain<E, G> {
     /// The target polynomial is the zero polynomial in our
     /// evaluation domain, so we must perform division over
     /// a coset.
-    pub fn divide_by_z_on_coset(
-        &mut self,
-        worker: &Worker,
-        kern: &mut Option<gpu::FFTKernel<E>>,
-    ) -> gpu::GPUResult<()> {
+    pub fn divide_by_z_on_coset(&mut self, worker: &Worker) {
         let i = self
             .z(&E::Fr::multiplicative_generator())
             .inverse()
             .unwrap();
 
-        if let Some(ref mut k) = kern {
-            gpu_mul_by_field(k, &mut self.coeffs, &i, self.exp)?;
-        } else {
-            worker.scope(self.coeffs.len(), |scope, chunk| {
-                for v in self.coeffs.chunks_mut(chunk) {
-                    scope.spawn(move |_| {
-                        for v in v {
-                            v.group_mul_assign(&i);
-                        }
-                    });
-                }
-            });
-        }
-
-        Ok(())
+        worker.scope(self.coeffs.len(), |scope, chunk| {
+            for v in self.coeffs.chunks_mut(chunk) {
+                scope.spawn(move |_| {
+                    for v in v {
+                        v.group_mul_assign(&i);
+                    }
+                });
+            }
+        });
     }
 
     /// Perform O(n) multiplication of two polynomials in the domain.
@@ -333,18 +320,6 @@ pub fn gpu_fft<E: Engine, T: Group<E>>(
     // as it seems safe and needs less modifications in the current structure of Bellman library.
     let a = unsafe { std::mem::transmute::<&mut [T], &mut [E::Fr]>(a) };
     kern.radix_fft(a, omega, log_n)?;
-    Ok(())
-}
-
-pub fn gpu_mul_by_field<E: Engine, T: Group<E>>(
-    kern: &mut gpu::FFTKernel<E>,
-    a: &mut [T],
-    minv: &E::Fr,
-    log_n: u32,
-) -> gpu::GPUResult<()> {
-    // The reason of unsafety is same as above.
-    let a = unsafe { std::mem::transmute::<&mut [T], &mut [E::Fr]>(a) };
-    kern.mul_by_field(a, minv, log_n)?;
     Ok(())
 }
 
