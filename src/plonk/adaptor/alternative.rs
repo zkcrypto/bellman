@@ -1957,7 +1957,7 @@ impl<'a, E: Engine, C: crate::Circuit<E>> PlonkCircuit<E> for AdaptorCircuit<'a,
             deduplication_scratch: HashMap::with_capacity((E::Fr::NUM_BITS * 2) as usize),
         };
 
-        let c = self.circuit.replace(None).unwrap();
+        let c = self.circuit.replace(None).expect("Must replace a circuit out from cell");
 
         match c.synthesize(&mut adaptor) {
             Err(_) => return Err(SynthesisError::AssignmentMissing),
@@ -1984,7 +1984,7 @@ fn transpile_xor_using_adaptor() {
 
     let mut transpiler = Transpiler::new();
 
-    c.synthesize(&mut transpiler).unwrap();
+    c.synthesize(&mut transpiler).expect("sythesize into traspilation must succeed");
 
     let hints = transpiler.hints;
 
@@ -1997,7 +1997,7 @@ fn transpile_xor_using_adaptor() {
     let adapted_curcuit = AdaptorCircuit::new(c, &hints);
 
     let mut assembly = GeneratorAssembly::<Bn256>::new();
-    adapted_curcuit.synthesize(&mut assembly).unwrap();
+    adapted_curcuit.synthesize(&mut assembly).expect("sythesize of transpiled into CS must succeed");
     assembly.finalize();
 
     // for (i, g) in assembly.aux_gates.iter().enumerate() {
