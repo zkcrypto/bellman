@@ -8,14 +8,14 @@ use super::cs::*;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Gate<F: PrimeField> {
-    varialbes: [Variable; 3],
+    variables: [Variable; 3],
     coefficients: [F; 6],
 }
 
 impl<F: PrimeField> Gate<F> {
     pub fn new_gate(variables:(Variable, Variable, Variable), coeffs: [F; 6]) -> Self {
         Self {
-            varialbes: [variables.0, variables.1, variables.2],
+            variables: [variables.0, variables.1, variables.2],
             coefficients: coeffs
         }
     }
@@ -53,7 +53,7 @@ impl<E: Engine> ConstraintSystem<E> for TestAssembly<E> {
         let index = self.num_aux;
         self.aux_assingments.push(value);
 
-        // println!("Allocated variable Aux({}) with value {}", index, value);
+        println!("Allocated variable Aux({}) with value {}", index, value);
 
         Ok(Variable(Index::Aux(index)))
     }
@@ -107,6 +107,10 @@ impl<E: Engine> ConstraintSystem<E> for TestAssembly<E> {
     fn get_value(&self, var: Variable) -> Result<E::Fr, SynthesisError> {
         let value = match var {
             Variable(Index::Aux(0)) => {
+                E::Fr::zero()
+                // return Err(SynthesisError::AssignmentMissing);
+            }
+            Variable(Index::Input(0)) => {
                 return Err(SynthesisError::AssignmentMissing);
             }
             Variable(Index::Input(input)) => {
@@ -127,7 +131,7 @@ impl<E: Engine> ConstraintSystem<E> for TestAssembly<E> {
 
 impl<E: Engine> TestAssembly<E> {
     pub fn new() -> Self {
-        let mut tmp = Self {
+        let tmp = Self {
             n: 0,
             m: 0,
             input_gates: vec![],
@@ -144,26 +148,149 @@ impl<E: Engine> TestAssembly<E> {
             is_finalized: false,
         };
 
-        let dummy_value = E::Fr::zero();
-
-        let zero = E::Fr::zero();
-        let one = E::Fr::one();
-        let mut minus_one = one;
-        minus_one.negate();
-
-        // let dummy_var = tmp.alloc(|| Ok(dummy_value)).expect("must allocate a dummy variable");
-        // tmp.new_gate((dummy_var, dummy_var, dummy_var), [one, zero, zero, zero, minus_one, zero]).expect("should enforce a dummy variable");;
-
-        // match (tmp.dummy_variable(), dummy_var) {
-        //     (Variable(Index::Aux(1)), Variable(Index::Aux(1))) => {},
-        //     _ => panic!("dummy variable is incorrect")
-        // }
-
         tmp
     }
 
     // return variable that is not in a constraint formally, but has some value
     fn dummy_variable(&self) -> Variable {
         Variable(Index::Aux(0))
+    }
+
+    pub fn is_satisfied(&self) -> bool {
+        // expect a small number of inputs
+        for (i, gate) in self.input_gates.iter().enumerate()
+        {
+            let Gate::<E::Fr> {
+                variables: [a_var, b_var, c_var],
+                coefficients: [q_l, q_r, q_o, q_m, q_c, q_c_next]
+            } = *gate;
+
+            assert!(q_c.is_zero(), "should not hardcode a constant into the input gate");
+            assert!(q_c_next.is_zero(), "input gates should not link to the next gate");
+
+            let a_value = self.get_value(a_var).expect("must get a variable value");
+            let b_value = self.get_value(b_var).expect("must get a variable value");
+            let c_value = self.get_value(c_var).expect("must get a variable value");
+
+            let input_value = self.input_assingments[i];
+            let mut res = input_value;
+            res.negate();
+
+            let mut tmp = q_l;
+            tmp.mul_assign(&a_value);
+            res.add_assign(&tmp);
+
+            let mut tmp = q_r;
+            tmp.mul_assign(&b_value);
+            res.add_assign(&tmp);
+
+            let mut tmp = q_o;
+            tmp.mul_assign(&c_value);
+            res.add_assign(&tmp);
+
+            let mut tmp = q_m;
+            tmp.mul_assign(&a_value);
+            tmp.mul_assign(&b_value);
+            res.add_assign(&tmp);
+
+            if !res.is_zero() {
+                println!("Unsatisfied at input gate {}: {:?}", i+1, gate);
+                println!("A value = {}, B value = {}, C value = {}", a_value, b_value, c_value);
+                return false;
+            }
+        }
+
+        for (i, gate_pair) in self.aux_gates.windows(2).enumerate()
+        {
+            let this_gate = gate_pair[0];
+            let next_gate = &gate_pair[1];
+
+            let Gate::<E::Fr> {
+                variables: [a_var, b_var, c_var],
+                coefficients: [q_l, q_r, q_o, q_m, q_c, q_c_next]
+            } = this_gate;
+
+            let a_value = self.get_value(a_var).expect("must get a variable value");
+            let b_value = self.get_value(b_var).expect("must get a variable value");
+            let c_value = self.get_value(c_var).expect("must get a variable value");
+
+            let next_gate_c_var = next_gate.variables[2];
+
+            let c_next_value = self.get_value(next_gate_c_var).expect("must get a variable value");
+
+            let mut res = q_c;
+
+            let mut tmp = q_l;
+            tmp.mul_assign(&a_value);
+            res.add_assign(&tmp);
+
+            let mut tmp = q_r;
+            tmp.mul_assign(&b_value);
+            res.add_assign(&tmp);
+
+            let mut tmp = q_o;
+            tmp.mul_assign(&c_value);
+            res.add_assign(&tmp);
+
+            let mut tmp = q_m;
+            tmp.mul_assign(&a_value);
+            tmp.mul_assign(&b_value);
+            res.add_assign(&tmp);
+
+            let mut tmp = q_c_next;
+            tmp.mul_assign(&c_next_value);
+            res.add_assign(&tmp);
+
+            if !res.is_zero() {
+                println!("Unsatisfied at aux gate {}", i+1);
+                println!("Gate {:?}", this_gate);
+                println!("A = {}, B = {}, C = {}", a_value, b_value, c_value);
+                return false;
+            }
+        }
+
+        {
+            let i = self.aux_gates.len();
+            let last_gate = *self.aux_gates.last().unwrap();
+
+            let Gate::<E::Fr> {
+                variables: [a_var, b_var, c_var],
+                coefficients: [q_l, q_r, q_o, q_m, q_c, q_c_next]
+            } = last_gate;
+
+            let a_value = self.get_value(a_var).expect("must get a variable value");
+            let b_value = self.get_value(b_var).expect("must get a variable value");
+            let c_value = self.get_value(c_var).expect("must get a variable value");
+
+            assert!(q_c_next.is_zero(), "last gate should not be linked to the next one");
+
+            let mut res = q_c;
+
+            let mut tmp = q_l;
+            tmp.mul_assign(&a_value);
+            res.add_assign(&tmp);
+
+            let mut tmp = q_r;
+            tmp.mul_assign(&b_value);
+            res.add_assign(&tmp);
+
+            let mut tmp = q_o;
+            tmp.mul_assign(&c_value);
+            res.add_assign(&tmp);
+
+            let mut tmp = q_m;
+            tmp.mul_assign(&a_value);
+            tmp.mul_assign(&b_value);
+            res.add_assign(&tmp);
+
+            if !res.is_zero() {
+                println!("Unsatisfied at aux gate {}", i+1);
+                println!("Gate {:?}", last_gate);
+                println!("A = {}, B = {}, C = {}", a_value, b_value, c_value);
+                return false;
+            }
+        }
+
+        true
     }
 }

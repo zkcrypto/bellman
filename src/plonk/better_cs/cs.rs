@@ -6,8 +6,8 @@ use std::marker::PhantomData;
 
 pub use crate::plonk::cs::variable::*;
 
-pub trait Circuit<E: Engine> {
-    fn synthesize<CS: ConstraintSystem<E>>(&self, cs: &mut CS) -> Result<(), SynthesisError>;
+pub trait Circuit<E: Engine, G: Copy + Clone + PartialEq + Eq> {
+    fn synthesize<CS: ConstraintSystem<E, GateCoefficients = G>>(&self, cs: &mut CS) -> Result<(), SynthesisError>;
 }
 
 pub trait ConstraintSystem<E: Engine> {
