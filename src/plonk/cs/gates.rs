@@ -2,48 +2,7 @@ use crate::pairing::ff::{Field, PrimeField};
 use crate::pairing::{Engine};
 use std::ops::{Add, Sub, Neg};
 
-// #[derive(Copy, Clone, Debug)]
-// pub enum Variable {
-//     A(usize),
-//     B(usize),
-//     C(usize),
-// }
-
-// impl Variable {
-//     pub(crate) fn get_index(&self) -> usize {
-//         match *self {
-//             Variable::A(index) => index,
-//             Variable::B(index) => index,
-//             Variable::C(index) => index,
-//         }
-//     }
-// }
-
-/// Represents a variable in our constraint system.
-#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
-pub struct Variable(pub(crate) Index);
-
-impl Variable {
-    /// This constructs a variable with an arbitrary index.
-    /// Circuit implementations are not recommended to use this.
-    pub fn new_unchecked(idx: Index) -> Variable {
-        Variable(idx)
-    }
-
-    /// This returns the index underlying the variable.
-    /// Circuit implementations are not recommended to use this.
-    pub fn get_unchecked(&self) -> Index {
-        self.0
-    }
-}
-
-/// Represents the index of either an input variable or
-/// auxillary variable.
-#[derive(Copy, Clone, PartialEq, Debug, Hash, Eq)]
-pub enum Index {
-    Input(usize),
-    Aux(usize)
-}
+pub use super::variable::{Variable, Index};
 
 pub enum Coeff<F: PrimeField> {
     Zero,

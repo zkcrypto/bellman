@@ -5,7 +5,9 @@ use crate::{SynthesisError};
 use std::marker::PhantomData;
 
 pub mod gates;
+pub mod variable;
 
+use self::variable::*;
 use self::gates::*;
 
 pub trait Circuit<E: Engine> {

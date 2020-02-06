@@ -15,3 +15,5 @@ pub mod redshift;
 pub mod plonk;
 
 pub mod commitments;
+
+pub mod better_cs;
