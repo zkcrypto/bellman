@@ -20,6 +20,8 @@ use super::SynthesisError;
 
 use crate::gpu;
 
+use log::{info, warn};
+
 pub struct EvaluationDomain<E: ScalarEngine, G: Group<E>> {
     coeffs: Vec<G>,
     exp: u32,
@@ -293,15 +295,23 @@ fn best_fft<E: Engine, T: Group<E>>(
     log_n: u32,
 ) -> gpu::GPUResult<()> {
     if let Some(ref mut k) = kern {
-        gpu_fft(k, a, omega, log_n)?;
-    } else {
-        let log_cpus = worker.log_num_cpus();
-        if log_n <= log_cpus {
-            serial_fft(a, omega, log_n);
-        } else {
-            parallel_fft(a, worker, omega, log_n, log_cpus);
+        match gpu_fft(k, a, omega, log_n) {
+            Ok(_) => {
+                return Ok(());
+            }
+            Err(e) => {
+                warn!("GPU FFT failed! Falling back to CPU... Error: {}", e);
+            }
         }
     }
+
+    let log_cpus = worker.log_num_cpus();
+    if log_n <= log_cpus {
+        serial_fft(a, omega, log_n);
+    } else {
+        parallel_fft(a, worker, omega, log_n, log_cpus);
+    }
+
     Ok(())
 }
 
@@ -555,7 +565,6 @@ pub fn create_fft_kernel<E>(log_d: u32) -> Option<gpu::FFTKernel<E>>
 where
     E: Engine,
 {
-    use log::{info, warn};
     match gpu::FFTKernel::create(1 << log_d) {
         Ok(k) => {
             info!("GPU FFT kernel instantiated!");

@@ -9,14 +9,16 @@ use rayon::prelude::*;
 
 use super::{ParameterSource, Proof};
 use crate::domain::{create_fft_kernel, EvaluationDomain, Scalar};
-#[cfg(feature = "gpu")]
-use crate::gpu;
+use crate::gpu::LockedKernel;
 use crate::multicore::Worker;
 use crate::multiexp::{create_multiexp_kernel, multiexp, DensityTracker, FullDensity};
 use crate::{
     Circuit, ConstraintSystem, Index, LinearCombination, SynthesisError, Variable, BELLMAN_VERSION,
 };
 use log::info;
+
+#[cfg(feature = "gpu")]
+use crate::gpu::PriorityLock;
 
 fn eval<E: Engine>(
     lc: &LinearCombination<E>,
@@ -159,26 +161,11 @@ impl<E: Engine> ConstraintSystem<E> for ProvingAssignment<E> {
     }
 }
 
-pub fn create_random_proof<E, C, R, P: ParameterSource<E>>(
-    circuit: C,
-    params: P,
-    rng: &mut R,
-) -> Result<Proof<E>, SynthesisError>
-where
-    E: Engine,
-    C: Circuit<E> + Send,
-    R: RngCore,
-{
-    let r = E::Fr::random(rng);
-    let s = E::Fr::random(rng);
-
-    create_proof::<E, C, P>(circuit, params, r, s)
-}
-
-pub fn create_random_proof_batch<E, C, R, P: ParameterSource<E>>(
+pub fn create_random_proof_batch_priority<E, C, R, P: ParameterSource<E>>(
     circuits: Vec<C>,
     params: P,
     rng: &mut R,
+    priority: bool,
 ) -> Result<Vec<Proof<E>>, SynthesisError>
 where
     E: Engine,
@@ -188,14 +175,15 @@ where
     let r_s = (0..circuits.len()).map(|_| E::Fr::random(rng)).collect();
     let s_s = (0..circuits.len()).map(|_| E::Fr::random(rng)).collect();
 
-    create_proof_batch::<E, C, P>(circuits, params, r_s, s_s)
+    create_proof_batch_priority::<E, C, P>(circuits, params, r_s, s_s, priority)
 }
 
-pub fn create_proof_batch<E, C, P: ParameterSource<E>>(
+pub fn create_proof_batch_priority<E, C, P: ParameterSource<E>>(
     circuits: Vec<C>,
     mut params: P,
     r_s: Vec<E::Fr>,
     s_s: Vec<E::Fr>,
+    priority: bool,
 ) -> Result<Vec<Proof<E>>, SynthesisError>
 where
     E: Engine,
@@ -249,9 +237,13 @@ where
     }
 
     #[cfg(feature = "gpu")]
-    let lock = gpu::lock()?;
+    let prio_lock = if priority {
+        Some(PriorityLock::lock())
+    } else {
+        None
+    };
 
-    let mut fft_kern = create_fft_kernel(log_d);
+    let mut fft_kern = LockedKernel::new(|| create_fft_kernel::<E>(log_d), priority);
 
     let a_s = provers
         .iter_mut()
@@ -263,19 +255,19 @@ where
             let mut c =
                 EvaluationDomain::from_coeffs(std::mem::replace(&mut prover.c, Vec::new()))?;
 
-            a.ifft(&worker, &mut fft_kern)?;
-            a.coset_fft(&worker, &mut fft_kern)?;
-            b.ifft(&worker, &mut fft_kern)?;
-            b.coset_fft(&worker, &mut fft_kern)?;
-            c.ifft(&worker, &mut fft_kern)?;
-            c.coset_fft(&worker, &mut fft_kern)?;
+            a.ifft(&worker, fft_kern.get())?;
+            a.coset_fft(&worker, fft_kern.get())?;
+            b.ifft(&worker, fft_kern.get())?;
+            b.coset_fft(&worker, fft_kern.get())?;
+            c.ifft(&worker, fft_kern.get())?;
+            c.coset_fft(&worker, fft_kern.get())?;
 
             a.mul_assign(&worker, &b);
             drop(b);
             a.sub_assign(&worker, &c);
             drop(c);
             a.divide_by_z_on_coset(&worker);
-            a.icoset_fft(&worker, &mut fft_kern)?;
+            a.icoset_fft(&worker, fft_kern.get())?;
             let mut a = a.into_coeffs();
             let a_len = a.len() - 1;
             a.truncate(a_len);
@@ -287,7 +279,7 @@ where
         .collect::<Result<Vec<_>, SynthesisError>>()?;
 
     drop(fft_kern);
-    let mut multiexp_kern = create_multiexp_kernel();
+    let mut multiexp_kern = LockedKernel::new(|| create_multiexp_kernel::<E>(), priority);
 
     let h_s = a_s
         .into_iter()
@@ -297,7 +289,7 @@ where
                 params.get_h(a.len())?,
                 FullDensity,
                 a,
-                &mut multiexp_kern,
+                multiexp_kern.get(),
             );
             Ok(h)
         })
@@ -337,7 +329,7 @@ where
                 params.get_l(aux_assignment.len())?,
                 FullDensity,
                 aux_assignment.clone(),
-                &mut multiexp_kern,
+                multiexp_kern.get(),
             );
             Ok(l)
         })
@@ -358,7 +350,7 @@ where
                 a_inputs_source,
                 FullDensity,
                 input_assignment.clone(),
-                &mut multiexp_kern,
+                multiexp_kern.get(),
             );
 
             let a_aux = multiexp(
@@ -366,7 +358,7 @@ where
                 a_aux_source,
                 Arc::new(prover.a_aux_density),
                 aux_assignment.clone(),
-                &mut multiexp_kern,
+                multiexp_kern.get(),
             );
 
             let b_input_density = Arc::new(prover.b_input_density);
@@ -382,14 +374,14 @@ where
                 b_g1_inputs_source,
                 b_input_density.clone(),
                 input_assignment.clone(),
-                &mut multiexp_kern,
+                multiexp_kern.get(),
             );
             let b_g1_aux = multiexp(
                 &worker,
                 b_g1_aux_source,
                 b_aux_density.clone(),
                 aux_assignment.clone(),
-                &mut multiexp_kern,
+                multiexp_kern.get(),
             );
 
             let (b_g2_inputs_source, b_g2_aux_source) =
@@ -400,14 +392,14 @@ where
                 b_g2_inputs_source,
                 b_input_density,
                 input_assignment.clone(),
-                &mut multiexp_kern,
+                multiexp_kern.get(),
             );
             let b_g2_aux = multiexp(
                 &worker,
                 b_g2_aux_source,
                 b_aux_density,
                 aux_assignment.clone(),
-                &mut multiexp_kern,
+                multiexp_kern.get(),
             );
 
             Ok((
@@ -424,7 +416,7 @@ where
     drop(multiexp_kern);
 
     #[cfg(feature = "gpu")]
-    gpu::unlock(lock);
+    drop(prio_lock);
 
     let proofs = h_s
         .into_iter()
@@ -483,19 +475,4 @@ where
         .collect::<Result<Vec<_>, SynthesisError>>()?;
 
     Ok(proofs)
-}
-
-pub fn create_proof<E, C, P: ParameterSource<E>>(
-    circuit: C,
-    params: P,
-    r: E::Fr,
-    s: E::Fr,
-) -> Result<Proof<E>, SynthesisError>
-where
-    E: Engine,
-    C: Circuit<E> + Send,
-{
-    let proofs = create_proof_batch::<E, C, P>(vec![circuit], params, vec![r], vec![s])?;
-
-    Ok(proofs.into_iter().next().unwrap())
 }

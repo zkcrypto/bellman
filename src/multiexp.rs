@@ -2,6 +2,7 @@ use bit_vec::{self, BitVec};
 use ff::{Field, PrimeField, PrimeFieldRepr, ScalarEngine};
 use futures::Future;
 use groupy::{CurveAffine, CurveProjective};
+use log::{info, warn};
 use std::io;
 use std::iter;
 use std::sync::Arc;
@@ -281,13 +282,15 @@ where
             }
         }
 
-        let (bss, skip) = bases.get();
-        let result = k.multiexp(pool, bss, Arc::new(exps), skip, n);
-
-        return Box::new(pool.compute(move || match result {
-            Ok(p) => Ok(p),
-            Err(e) => Err(SynthesisError::from(e)),
-        }));
+        let (bss, skip) = bases.clone().get();
+        match k.multiexp(pool, bss, Arc::new(exps.clone()), skip, n) {
+            Ok(p) => {
+                return Box::new(pool.compute(move || Ok(p)));
+            }
+            Err(e) => {
+                warn!("GPU Multiexp failed! Falling back to CPU... Error: {}", e);
+            }
+        }
     }
 
     let c = if exponents.len() < 32 {
@@ -303,7 +306,17 @@ where
         assert!(query_size == exponents.len());
     }
 
-    multiexp_inner(pool, bases, density_map, exponents, 0, c, true)
+    let future = multiexp_inner(pool, bases, density_map, exponents, 0, c, true);
+    #[cfg(feature = "gpu")]
+    {
+        // Do not give the control back to the caller till the
+        // multiexp is done. We may want to reacquire the GPU again
+        // between the multiexps.
+        let result = future.wait();
+        Box::new(pool.compute(move || result))
+    }
+    #[cfg(not(feature = "gpu"))]
+    future
 }
 
 #[cfg(feature = "pairing")]
@@ -354,7 +367,6 @@ pub fn create_multiexp_kernel<E>() -> Option<gpu::MultiexpKernel<E>>
 where
     E: paired::Engine,
 {
-    use log::{info, warn};
     match gpu::MultiexpKernel::<E>::create() {
         Ok(k) => {
             info!("GPU Multiexp kernel instantiated!");

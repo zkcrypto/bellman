@@ -1,6 +1,6 @@
 use crate::gpu::{
     error::{GPUError, GPUResult},
-    sources, structs, GPU_NVIDIA_DEVICES,
+    locks, sources, structs, GPU_NVIDIA_DEVICES,
 };
 use ff::Field;
 use log::info;
@@ -23,6 +23,7 @@ where
     fft_dst_buffer: Buffer<structs::PrimeFieldStruct<E::Fr>>,
     fft_pq_buffer: Buffer<structs::PrimeFieldStruct<E::Fr>>,
     fft_omg_buffer: Buffer<structs::PrimeFieldStruct<E::Fr>>,
+    _lock: locks::GPULock, // RFC 1857: struct fields are dropped in the same order as they are declared.
 }
 
 impl<E> FFTKernel<E>
@@ -30,6 +31,8 @@ where
     E: Engine,
 {
     pub fn create(n: u32) -> GPUResult<FFTKernel<E>> {
+        let lock = locks::GPULock::lock();
+
         let src = sources::kernel::<E>();
         let devices = &GPU_NVIDIA_DEVICES;
         if devices.is_empty() {
@@ -70,6 +73,7 @@ where
             fft_dst_buffer: dstbuff,
             fft_pq_buffer: pqbuff,
             fft_omg_buffer: omgbuff,
+            _lock: lock,
         })
     }
 

@@ -1,11 +1,9 @@
 use crate::gpu::error::{GPUError, GPUResult};
 use ocl::{Device, Platform};
 
-use fs2::FileExt;
 use log::info;
 use std::collections::HashMap;
-use std::fs::File;
-use std::{env, io};
+use std::env;
 
 pub const GPU_NVIDIA_PLATFORM_NAME: &str = "NVIDIA CUDA";
 // pub const CPU_INTEL_PLATFORM_NAME: &str = "Intel(R) CPU Runtime for OpenCL(TM) Applications";
@@ -84,24 +82,4 @@ pub fn get_memory(d: Device) -> GPUResult<u64> {
             msg: "Cannot extract GPU memory!".to_string(),
         }),
     }
-}
-
-#[derive(Debug)]
-pub struct LockedFile(File);
-
-pub const LOCK_NAME: &str = "/tmp/bellman.lock";
-
-pub fn lock() -> io::Result<LockedFile> {
-    info!("Creating GPU lock file");
-    let file = File::create(LOCK_NAME)?;
-
-    file.lock_exclusive()?;
-
-    info!("GPU lock file acquired");
-    Ok(LockedFile(file))
-}
-
-pub fn unlock(lock: LockedFile) {
-    drop(lock);
-    info!("GPU lock file released");
 }

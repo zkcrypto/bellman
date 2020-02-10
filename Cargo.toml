@@ -35,6 +35,7 @@ memmap = "0.7.0"
 hex-literal = "0.2"
 rand_xorshift = "0.2"
 sha2 = "0.8"
+env_logger = "0.7.1"
 
 [features]
 default = ["groth16", "multicore"]

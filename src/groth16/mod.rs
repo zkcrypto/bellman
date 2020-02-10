@@ -20,11 +20,13 @@ use std::sync::Arc;
 #[cfg(test)]
 mod tests;
 
+mod ext;
 mod generator;
 mod mapped_params;
 mod prover;
 mod verifier;
 
+pub use self::ext::*;
 pub use self::generator::*;
 pub use self::mapped_params::*;
 pub use self::prover::*;
