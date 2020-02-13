@@ -53,7 +53,7 @@ impl<E: Engine> ConstraintSystem<E> for TestAssembly<E> {
         let index = self.num_aux;
         self.aux_assingments.push(value);
 
-        println!("Allocated variable Aux({}) with value {}", index, value);
+        // println!("Allocated variable Aux({}) with value {}", index, value);
 
         Ok(Variable(Index::Aux(index)))
     }
@@ -96,7 +96,7 @@ impl<E: Engine> ConstraintSystem<E> for TestAssembly<E> {
         self.aux_gates.push(gate);
         self.n += 1;
 
-        // let satisfied = self.clone().is_satisfied();
+        // let satisfied = self.is_satisfied(true);
         // if !satisfied {
         //     return Err(SynthesisError::Unsatisfiable);
         // }
@@ -151,12 +151,33 @@ impl<E: Engine> TestAssembly<E> {
         tmp
     }
 
+    pub fn new_with_size_hints(num_inputs: usize, num_aux: usize) -> Self {
+        let tmp = Self {
+            n: 0,
+            m: 0,
+            input_gates: Vec::with_capacity(num_inputs),
+            aux_gates: Vec::with_capacity(num_aux),
+
+            num_inputs: 0,
+            num_aux: 0,
+
+            input_assingments: Vec::with_capacity(num_inputs),
+            aux_assingments: Vec::with_capacity(num_aux),
+
+            inputs_map: Vec::with_capacity(num_inputs),
+
+            is_finalized: false,
+        };
+
+        tmp
+    }
+
     // return variable that is not in a constraint formally, but has some value
     fn dummy_variable(&self) -> Variable {
         Variable(Index::Aux(0))
     }
 
-    pub fn is_satisfied(&self) -> bool {
+    pub fn is_satisfied(&self, in_a_middle: bool) -> bool {
         // expect a small number of inputs
         for (i, gate) in self.input_gates.iter().enumerate()
         {
@@ -249,7 +270,7 @@ impl<E: Engine> TestAssembly<E> {
             }
         }
 
-        {
+        if !in_a_middle {
             let i = self.aux_gates.len();
             let last_gate = *self.aux_gates.last().unwrap();
 
@@ -292,5 +313,9 @@ impl<E: Engine> TestAssembly<E> {
         }
 
         true
+    }
+
+    pub fn num_gates(&self) -> usize {
+        self.input_gates.len() + self.aux_gates.len()
     }
 }

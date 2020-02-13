@@ -112,11 +112,7 @@ fn evaluate_lc<E: Engine, CS: PlonkConstraintSystem<E>>(
         final_value.add_assign(&may_be_value);
     }
 
-    // if multiplier != E::Fr::one() {
-    //     final_value.mul_assign(&multiplier);
-    // }
-
-    final_value.sub_assign(&free_term_constant);
+    final_value.add_assign(&free_term_constant);
 
     Ok(final_value)
 }
@@ -134,11 +130,7 @@ fn evaluate_over_variables<E: Engine, CS: PlonkConstraintSystem<E>>(
         final_value.add_assign(&may_be_value);
     }
 
-    // if multiplier != E::Fr::one() {
-    //     final_value.mul_assign(&multiplier);
-    // }
-
-    final_value.sub_assign(&free_term_constant);
+    final_value.add_assign(&free_term_constant);
 
     Ok(final_value)
 }
@@ -181,22 +173,29 @@ fn enforce_lc_as_gates<E: Engine, CS: PlonkConstraintSystem<E, GateCoefficients 
 
     assert!(lc.0.len() > 0);
 
-    if lc.0.len() == 1 && free_term_constant.is_zero() {
-        assert!(collapse_into_single_variable);
+    if lc.0.len() == 1 {
+        if free_term_constant.is_zero() {
+            if collapse_into_single_variable {
+                // we try to make a multiplication gate
+                let (var, coeff) = lc.0[0];
 
-        let (var, coeff) = lc.0[0];
-
-        return (Some(convert_variable(var)), coeff, TranspilationVariant::LeaveAsSingleVariable);
+                return (Some(convert_variable(var)), coeff, TranspilationVariant::LeaveAsSingleVariable);
+            }
+        } 
     }
 
+    // everything else should be handled here by making a new variable
+
     // scale if necessary
-    if multiplier == E::Fr::zero() {
-        assert!(free_term_constant == E::Fr::zero());
+    if multiplier.is_zero() {
+        assert!(free_term_constant.is_zero());
         unreachable!();
         // it's a constraint 0 * LC = 0
     } else {
-        for (_, c) in lc.0.iter_mut() {
-            c.mul_assign(&multiplier);
+        if multiplier != one_fr {
+            for (_, c) in lc.0.iter_mut() {
+                c.mul_assign(&multiplier);
+            }
         }
     }
 
@@ -521,8 +520,12 @@ impl<E: Engine> crate::ConstraintSystem<E> for Transpiler<E>
         LB: FnOnce(crate::LinearCombination<E>) -> crate::LinearCombination<E>,
         LC: FnOnce(crate::LinearCombination<E>) -> crate::LinearCombination<E>,
     {
-        let ann: String = _ann().into();
-        println!("Enforce {}", ann);
+        // let ann: String = _ann().into();
+        // if ann.contains("y-coordinate lookup") {
+        //     // 
+        //     let _t = E::Fr::one();
+        // };
+        // println!("Enforce {}", ann);
 
         let zero_fr = E::Fr::zero();
         let one_fr = E::Fr::one();
@@ -544,15 +547,16 @@ impl<E: Engine> crate::ConstraintSystem<E> for Transpiler<E>
         let b_is_constant = b_has_constant & b_lc_is_empty;
         let c_is_constant = c_has_constant & c_lc_is_empty;
 
-        debug_assert!(a_has_constant || !a_lc_is_empty);
-        debug_assert!(b_has_constant || !b_lc_is_empty);
-        debug_assert!(c_has_constant || !c_lc_is_empty);
+        // debug_assert!(a_has_constant || !a_lc_is_empty);
+        // debug_assert!(b_has_constant || !b_lc_is_empty);
+        // debug_assert!(c_has_constant || !c_lc_is_empty);
 
         match (a_is_constant, b_is_constant, c_is_constant) {
             (true, true, true) => {
                 unreachable!("R1CS has a gate 1 * 1 = 1");
             },
             (true, false, true) | (false, true, true) => {
+                // println!("C * LC = C");
                 // we have something like c0 * LC = c1
                 let lc = if !a_is_constant {
                     a_lc
@@ -597,7 +601,7 @@ impl<E: Engine> crate::ConstraintSystem<E> for Transpiler<E>
 
             },
             (false, false, true) => {
-                                
+                // println!("LC * LC = C");    
                 // potential quadatic gate
                 let (is_quadratic_gate, _coeffs) = check_for_quadratic_gate::<E>(
                     &a_lc, 
@@ -648,7 +652,7 @@ impl<E: Engine> crate::ConstraintSystem<E> for Transpiler<E>
             },
             (true, false, false) | (false, true, false) => {
                 // LC * 1 = LC
-
+                // println!("C * LC = LC");
                 let multiplier = if a_is_constant {
                     a_constant_term
                 } else if b_is_constant {
@@ -726,6 +730,7 @@ impl<E: Engine> crate::ConstraintSystem<E> for Transpiler<E>
 
             },
             (true, true, false) => {
+                // println!("C * C = LC");
                 // A and B are some constants
                 let mut free_constant_term = a_constant_term;
                 free_constant_term.mul_assign(&b_constant_term);
@@ -748,6 +753,7 @@ impl<E: Engine> crate::ConstraintSystem<E> for Transpiler<E>
 
             },
             (false, false, false) => {
+                // println!("LC * LC = LC");
                 // potentially it can still be quadratic
                 let (is_quadratic_gate, _coeffs) = is_quadratic_gate::<E, Self>(
                     &a_lc, 
@@ -1344,6 +1350,8 @@ impl<'a, E: Engine, CS: PlonkConstraintSystem<E, GateCoefficients = [E::Fr; 6]> 
             self.get_next_hint() 
         };
 
+        let _hint = hint.clone();
+
         // we need to determine the type of transformation constraint
 
         // let's handle trivial cases first
@@ -1358,9 +1366,9 @@ impl<'a, E: Engine, CS: PlonkConstraintSystem<E, GateCoefficients = [E::Fr; 6]> 
         let b_is_constant = b_has_constant & b_lc_is_empty;
         let c_is_constant = c_has_constant & c_lc_is_empty;
 
-        debug_assert!(a_has_constant || !a_lc_is_empty);
-        debug_assert!(b_has_constant || !b_lc_is_empty);
-        debug_assert!(c_has_constant || !c_lc_is_empty);
+        // debug_assert!(a_has_constant || !a_lc_is_empty);
+        // debug_assert!(b_has_constant || !b_lc_is_empty);
+        // debug_assert!(c_has_constant || !c_lc_is_empty);
 
         // let ann : String = _ann().into();
         // println!("Enforcing {}", ann);
@@ -1413,9 +1421,14 @@ impl<'a, E: Engine, CS: PlonkConstraintSystem<E, GateCoefficients = [E::Fr; 6]> 
                 ).expect("must make a quadratic gate");
             },
             TranspilationVariant::IntoMultiplicationGate(boxed_hints) => {
+                // let ann: String = _ann().into();
+                // if ann.contains("(a - b) * x == r - 1") {
+                //     println!("{}", ann);
+                // }
+
                 let (t_a, t_b, t_c) = *boxed_hints;
                 let mut q_m = one_fr;
-                // let mut q_c = one_fr;
+                let mut q_c = one_fr;
                 let a_var = match t_a {
                     hint @ TranspilationVariant::IntoSingleAdditionGate |
                     hint @ TranspilationVariant::IntoMultipleAdditionGates => {
@@ -1452,7 +1465,7 @@ impl<'a, E: Engine, CS: PlonkConstraintSystem<E, GateCoefficients = [E::Fr; 6]> 
                             self.cs,
                             b_lc,
                             one_fr,
-                            zero_fr,
+                            b_constant_term,
                             true,
                         );
 
@@ -1474,7 +1487,7 @@ impl<'a, E: Engine, CS: PlonkConstraintSystem<E, GateCoefficients = [E::Fr; 6]> 
                     _ => {unreachable!("{:?}", t_b)}
                 };
 
-                let (c_is_just_a_constant, c_var, mut c_coeff) = match t_c {
+                let (c_is_just_a_constant, c_var) = match t_c {
                     hint @ TranspilationVariant::IntoSingleAdditionGate | 
                     hint @ TranspilationVariant::IntoMultipleAdditionGates => {
                         let (new_c_var, c_coeff, _variant) = enforce_lc_as_gates(
@@ -1487,50 +1500,117 @@ impl<'a, E: Engine, CS: PlonkConstraintSystem<E, GateCoefficients = [E::Fr; 6]> 
 
                         assert!(c_coeff == one_fr);
 
-                        // q_m.mul_assign(&c_coeff);
+                        // q_c.mul_assign(&c_coeff);
 
                         assert!(_variant == hint);
 
-                        (false, Some(new_c_var.expect("transpiler must create a new variable for LC C")), one_fr)
+                        (false, Some(new_c_var.expect("transpiler must create a new variable for LC C")))
                     },
                     TranspilationVariant::LeaveAsSingleVariable => {
                         assert!(!c_lc_is_empty);
                         let (var, coeff) = c_lc.0[0];
+                        q_c = coeff;
 
-                        (false, Some(convert_variable(var)), coeff)
+                        (false, Some(convert_variable(var)))
                     },
                     TranspilationVariant::IsConstant => {
                         assert!(c_lc_is_empty);
                         assert!(c_has_constant);
-                        (true, None, one_fr)
+
+                        (true, None)
                     },
                     _ => {unreachable!("{:?}", t_c)}
                 };
 
                 if c_is_just_a_constant {
                     let mut constant_term = c_constant_term;
-                    constant_term.negate();
+                    constant_term.negate(); // - C
 
                     // A*B == constant
-                    self.cs.new_gate(
+                    let t = self.cs.new_gate(
                         (a_var, b_var, dummy_var), 
                         [zero_fr, zero_fr, zero_fr, q_m, constant_term, zero_fr]
-                    ).expect("must make a multiplication gate with C being constant");
+                    ); //.expect("must make a multiplication gate with C being constant");
+                    if t.is_err() {
+                        // let ann: String = _ann().into();
+                        // println!("Enforcing {}", ann);
+                        println!("Hint = {:?}", _hint);
+                        panic!("Unsatisfied multiplication gate with C being constant");
+                    }
                 } else {
-                    c_coeff.negate();
+                    q_c.negate(); // - C
+
                     let c_var = c_var.expect("C must be a variable");
-                    self.cs.new_gate(
+                    let t = self.cs.new_gate(
                         (a_var, b_var, c_var), 
-                        [zero_fr, zero_fr, c_coeff, q_m, zero_fr, zero_fr]
-                    ).expect("must make a multiplication gate");
+                        [zero_fr, zero_fr, q_c, q_m, zero_fr, zero_fr]
+                    ); //.expect("must make a multiplication gate");
+
+                    if t.is_err() {
+                        // let ann: String = _ann().into();
+                        // println!("Enforcing {}", ann);
+                        println!("A constant term = {}", a_constant_term);
+                        println!("B constant term = {}", b_constant_term);
+                        println!("C constant term = {}", c_constant_term);
+                        println!("Hint = {:?}", _hint);
+                        panic!("Unsatisfied multiplication gate");
+                    }
                 }
             },
-            TranspilationVariant::IntoSingleAdditionGate |
-            TranspilationVariant::IntoMultipleAdditionGates => {
+            hint @ TranspilationVariant::IntoSingleAdditionGate |
+            hint @ TranspilationVariant::IntoMultipleAdditionGates => {
                 // let ann: String = _ann().into();
                 // println!("Enforcing {}", ann);
                 // println!("Hint is {:?}", hint);
-                unreachable!() 
+
+                // these are simple enforcements that are not a part of multiplication gate
+                // or merge of LCs
+
+                if c_is_constant {
+                    let lc = if !a_is_constant {
+                        a_lc
+                    } else if !b_is_constant {
+                        b_lc
+                    } else {
+                        unreachable!("Either A or B LCs are constant");
+                    };
+    
+                    let multiplier = if a_is_constant {
+                        a_constant_term
+                    } else if b_is_constant {
+                        b_constant_term
+                    } else {
+                        unreachable!("Must take multiplier from A or B");
+                    };
+    
+                    let mut free_constant_term = if a_is_constant {
+                        b_constant_term
+                    } else if b_is_constant {
+                        a_constant_term
+                    } else {
+                        unreachable!("Either A or B LCs are constant");
+                    };
+    
+                    free_constant_term.mul_assign(&multiplier);
+                    free_constant_term.sub_assign(&c_constant_term);
+    
+                    let (_, _, _variant) = enforce_lc_as_gates(
+                        self.cs,
+                        lc,
+                        multiplier,
+                        free_constant_term,
+                        false,
+                    );
+
+                    assert!(hint == _variant);
+                } else {
+                    // let ann: String = _ann().into();
+                    // println!("Enforcing {}", ann);
+                    // println!("Hint is {:?}", hint);
+
+                    // c is not a constant and it's handled by MergeLCs
+                    unreachable!();
+                }
             },
             TranspilationVariant::IsConstant => {
                 // let ann: String = _ann().into();
@@ -1542,6 +1622,9 @@ impl<'a, E: Engine, CS: PlonkConstraintSystem<E, GateCoefficients = [E::Fr; 6]> 
                 // let ann: String = _ann().into();
                 // println!("Enforcing {}", ann);
                 // println!("Hint is {:?}", hint);
+
+                // we may have encounted this if something like variable == 0
+                // but we use addition gate instead
                 unreachable!()
             },
             TranspilationVariant::MergeLinearCombinations(merge_variant, merge_hint) => {
@@ -1712,7 +1795,7 @@ impl<'a, E: Engine, C: crate::Circuit<E>> PlonkCircuit<E, [E::Fr; 6]> for Adapto
 }
 
 #[test]
-fn transpile_xor_using_adaptor() {
+fn transpile_xor_using_new_adaptor() {
     use crate::tests::XORDemo;
     use crate::cs::Circuit;
     use crate::pairing::bn256::Bn256;
@@ -1753,6 +1836,8 @@ fn transpile_xor_using_adaptor() {
     let mut assembly = TestAssembly::<Bn256>::new();
     adapted_curcuit.synthesize(&mut assembly).expect("sythesize of transpiled into CS must succeed");
     assert!(assembly.is_satisfied());
+    let num_gates = assembly.num_gates();
+    println!("Transpiled into {} gates", num_gates);
     // assembly.finalize();
 
     // for (i, g) in assembly.aux_gates.iter().enumerate() {
