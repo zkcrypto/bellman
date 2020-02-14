@@ -36,9 +36,7 @@ where
         let src = sources::kernel::<E>();
         let devices = &GPU_NVIDIA_DEVICES;
         if devices.is_empty() {
-            return Err(GPUError {
-                msg: "No working GPUs found!".to_string(),
-            });
+            return Err(GPUError::Simple("No working GPUs found!"));
         }
         let device = devices[0]; // Select the first device for FFT
         let pq = ProQue::builder().device(device).src(src).dims(n).build()?;

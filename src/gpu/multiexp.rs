@@ -258,9 +258,7 @@ where
             };
             self.g2_result_buffer.read(tres).enq()?;
         } else {
-            return Err(GPUError {
-                msg: "Only E::G1 and E::G2 are supported!".to_string(),
-            });
+            return Err(GPUError::Simple("Only E::G1 and E::G2 are supported!"));
         }
 
         // Using the algorithm below, we can calculate the final result by accumulating the results
@@ -305,9 +303,7 @@ where
             .map(|res| res.unwrap())
             .collect();
         if kernels.is_empty() {
-            return Err(GPUError {
-                msg: "No working GPUs found!".to_string(),
-            });
+            return Err(GPUError::Simple("No working GPUs found!"));
         }
         info!(
             "Multiexp: {} working device(s) selected. (CPU utilization: {})",

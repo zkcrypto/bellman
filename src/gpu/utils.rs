@@ -10,9 +10,7 @@ pub const GPU_NVIDIA_PLATFORM_NAME: &str = "NVIDIA CUDA";
 
 pub fn get_devices(platform_name: &str) -> GPUResult<Vec<Device>> {
     if env::var("BELLMAN_NO_GPU").is_ok() {
-        return Err(GPUError {
-            msg: "GPU accelerator is disabled!".to_string(),
-        });
+        return Err(GPUError::Simple("GPU accelerator is disabled!"));
     }
 
     let platform = Platform::list()?.into_iter().find(|&p| match p.name() {
@@ -21,9 +19,7 @@ pub fn get_devices(platform_name: &str) -> GPUResult<Vec<Device>> {
     });
     match platform {
         Some(p) => Ok(Device::list_all(p)?),
-        None => Err(GPUError {
-            msg: "GPU platform not found!".to_string(),
-        }),
+        None => Err(GPUError::Simple("GPU platform not found!")),
     }
 }
 
@@ -69,17 +65,13 @@ lazy_static::lazy_static! {
 pub fn get_core_count(d: Device) -> GPUResult<usize> {
     match CORE_COUNTS.get(&d.name()?[..]) {
         Some(&cores) => Ok(cores),
-        None => Err(GPUError {
-            msg: "Device unknown!".to_string(),
-        }),
+        None => Err(GPUError::Simple("Device unknown!")),
     }
 }
 
 pub fn get_memory(d: Device) -> GPUResult<u64> {
     match d.info(ocl::enums::DeviceInfo::GlobalMemSize)? {
         ocl::enums::DeviceInfoResult::GlobalMemSize(sz) => Ok(sz),
-        _ => Err(GPUError {
-            msg: "Cannot extract GPU memory!".to_string(),
-        }),
+        _ => Err(GPUError::Simple("Cannot extract GPU memory!")),
     }
 }

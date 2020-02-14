@@ -152,8 +152,6 @@ pub use gpu::GPU_NVIDIA_DEVICES;
 
 use ff::{Field, ScalarEngine};
 
-use std::error::Error;
-use std::fmt;
 use std::io;
 use std::marker::PhantomData;
 use std::ops::{Add, Sub};
@@ -303,70 +301,35 @@ impl<'a, E: ScalarEngine> Sub<(E::Fr, &'a LinearCombination<E>)> for LinearCombi
 
 /// This is an error that could occur during circuit synthesis contexts,
 /// such as CRS generation, proving or verification.
-#[derive(Debug)]
+#[derive(thiserror::Error, Debug)]
 pub enum SynthesisError {
     /// During synthesis, we lacked knowledge of a variable assignment.
+    #[error("an assignment for a variable could not be computed")]
     AssignmentMissing,
     /// During synthesis, we divided by zero.
+    #[error("division by zero")]
     DivisionByZero,
     /// During synthesis, we constructed an unsatisfiable constraint system.
+    #[error("unsatisfiable constraint system")]
     Unsatisfiable,
     /// During synthesis, our polynomials ended up being too high of degree
+    #[error("polynomial degree is too large")]
     PolynomialDegreeTooLarge,
     /// During proof generation, we encountered an identity in the CRS
+    #[error("encountered an identity element in the CRS")]
     UnexpectedIdentity,
     /// During proof generation, we encountered an I/O error with the CRS
-    IoError(io::Error),
+    #[error("encountered an I/O error: {0}")]
+    IoError(#[from] io::Error),
     /// During verification, our verifying key was malformed.
+    #[error("malformed verifying key")]
     MalformedVerifyingKey,
     /// During CRS generation, we observed an unconstrained auxiliary variable
+    #[error("auxiliary variable was unconstrained")]
     UnconstrainedVariable,
     /// During GPU multiexp/fft, some GPU related error happened
-    GPUError(gpu::GPUError),
-}
-
-impl From<gpu::GPUError> for SynthesisError {
-    fn from(e: gpu::GPUError) -> SynthesisError {
-        SynthesisError::GPUError(e)
-    }
-}
-
-impl From<io::Error> for SynthesisError {
-    fn from(e: io::Error) -> SynthesisError {
-        SynthesisError::IoError(e)
-    }
-}
-
-impl Error for SynthesisError {
-    fn description(&self) -> &str {
-        match *self {
-            SynthesisError::AssignmentMissing => {
-                "an assignment for a variable could not be computed"
-            }
-            SynthesisError::DivisionByZero => "division by zero",
-            SynthesisError::Unsatisfiable => "unsatisfiable constraint system",
-            SynthesisError::PolynomialDegreeTooLarge => "polynomial degree is too large",
-            SynthesisError::UnexpectedIdentity => "encountered an identity element in the CRS",
-            SynthesisError::IoError(_) => "encountered an I/O error",
-            SynthesisError::MalformedVerifyingKey => "malformed verifying key",
-            SynthesisError::UnconstrainedVariable => "auxiliary variable was unconstrained",
-            SynthesisError::GPUError(_) => "encountered a GPU error",
-        }
-    }
-}
-
-impl fmt::Display for SynthesisError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
-        if let SynthesisError::IoError(ref e) = *self {
-            write!(f, "I/O error: ")?;
-            e.fmt(f)
-        } else if let SynthesisError::GPUError(ref e) = *self {
-            write!(f, "GPU error: ")?;
-            e.fmt(f)
-        } else {
-            write!(f, "{}", self.to_string())
-        }
-    }
+    #[error("encountered a GPU error: {0}")]
+    GPUError(#[from] gpu::GPUError),
 }
 
 /// Represents a constraint system which can have new variables
