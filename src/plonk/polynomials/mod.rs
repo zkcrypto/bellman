@@ -123,6 +123,20 @@ impl<F: PrimeField, P: PolynomialForm> Polynomial<F, P> {
         });
     }
 
+    pub fn map<M: Fn(&mut F) -> () + Send + Copy>(&mut self, worker: &Worker, func: M)
+    {
+        worker.scope(self.coeffs.len(), |scope, chunk| {
+            for v in self.coeffs.chunks_mut(chunk) {
+                scope.spawn(move |_| {
+                    for v in v.iter_mut() {
+                        func(v);
+                        // v.negate();
+                    }
+                });
+            }
+        });
+    }
+
     pub fn pad_by_factor(&mut self, factor: usize) -> Result<(), SynthesisError> {
         debug_assert!(self.coeffs.len().is_power_of_two());
         

@@ -30,8 +30,13 @@ pub mod sonic;
 
 #[cfg(feature = "plonk")]
 pub mod plonk;
+
 #[macro_use]
+#[cfg(feature = "plonk")]
 extern crate lazy_static;
+
+#[cfg(feature = "marlin")]
+pub mod marlin;
 
 mod group;
 mod source;

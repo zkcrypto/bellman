@@ -1835,7 +1835,7 @@ fn transpile_xor_using_new_adaptor() {
 
     let mut assembly = TestAssembly::<Bn256>::new();
     adapted_curcuit.synthesize(&mut assembly).expect("sythesize of transpiled into CS must succeed");
-    assert!(assembly.is_satisfied());
+    assert!(assembly.is_satisfied(false));
     let num_gates = assembly.num_gates();
     println!("Transpiled into {} gates", num_gates);
     // assembly.finalize();
