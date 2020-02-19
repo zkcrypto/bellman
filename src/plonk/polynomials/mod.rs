@@ -1508,6 +1508,78 @@ impl<F: PrimeField> Polynomial<F, Values> {
         Polynomial::from_values_unpadded(result)
     }
 
+    pub fn calculate_sum(&self, worker: &Worker) -> Result<F, SynthesisError> {
+        let num_threads = worker.get_num_spawned_threads(self.coeffs.len());
+        let mut subresults = vec![F::zero(); num_threads as usize];
+
+        worker.scope(self.coeffs.len(), |scope, chunk| {
+            for (c, s) in self.coeffs.chunks(chunk)
+                        .zip(subresults.chunks_mut(1)) {
+                scope.spawn(move |_| {
+                    for c in c.iter() {
+                        s[0].add_assign(&c);
+                    }
+                });
+            }
+        });
+
+        let mut sum = F::zero();
+
+        for el in subresults.iter() {
+            sum.add_assign(&el);
+        }
+
+        Ok(sum)
+    }
+
+    pub fn calculate_grand_sum(&self, worker: &Worker) -> Result<(F, Polynomial<F, Values>), SynthesisError> {
+        let mut result = vec![F::zero(); self.coeffs.len()];
+
+        let num_threads = worker.get_num_spawned_threads(self.coeffs.len());
+        let mut subsums = vec![F::zero(); num_threads as usize];
+
+        worker.scope(self.coeffs.len(), |scope, chunk| {
+            for ((g, c), s) in result.chunks_mut(chunk)
+                        .zip(self.coeffs.chunks(chunk))
+                        .zip(subsums.chunks_mut(1)) {
+                scope.spawn(move |_| {
+                    for (g, c) in g.iter_mut()
+                                    .zip(c.iter()) {
+                        s[0].add_assign(&c);
+                        *g = s[0];
+                    }
+                });
+            }
+        });
+
+        // subsums are [a+b+c, d+e+f, x+y+z]
+
+        let mut tmp = F::zero();
+        for s in subsums.iter_mut() {
+            tmp.add_assign(&s);
+            *s = tmp;
+        }
+
+        // sum over the full domain is the last element
+        let domain_sum = subsums.pop().expect("has at least one value");
+
+        let chunk_len = worker.get_chunk_size(self.coeffs.len());
+
+        worker.scope(0, |scope, _| {
+            for (g, s) in result[chunk_len..].chunks_mut(chunk_len)
+                        .zip(subsums.chunks(1)) {
+                scope.spawn(move |_| {
+                    let c = s[0];
+                    for g in g.iter_mut() {
+                        g.add_assign(&c);
+                    }
+                });
+            }
+        });
+
+        Ok((domain_sum, Polynomial::from_values_unpadded(result)?))
+    }
+
     pub fn add_assign_scaled(&mut self, worker: &Worker, other: &Polynomial<F, Values>, scaling: &F) {
         assert_eq!(self.coeffs.len(), other.coeffs.len());
 

@@ -133,7 +133,7 @@ impl<E: Engine> KeypairAssembly<E> {
 
 use crate::plonk::domains::Domain;
 
-fn materialize_domain_elements<F: PrimeField>(domain: &Domain<F>, worker: &Worker) -> Vec<F> {
+pub(crate) fn materialize_domain_elements<F: PrimeField>(domain: &Domain<F>, worker: &Worker) -> Vec<F> {
     let mut values = vec![F::zero(); domain.size as usize];
     let generator = domain.generator;
 
@@ -193,14 +193,15 @@ pub(crate) fn eval_unnormalized_bivariate_lagrange_poly_over_diaginal<F: PrimeFi
 
 pub(crate) fn eval_unnormalized_bivariate_lagrange_poly_over_different_inputs<F: PrimeField>(
     x: F,
+    vanishing_poly_size: u64,
     evaluate_on_domain: &Domain<F>, 
     worker: &Worker
 ) -> Vec<F> {
-    let vanishing_at_x = evaluate_vanishing_for_size(&x, evaluate_on_domain.size);
+    let vanishing_at_x = evaluate_vanishing_for_size(&x, vanishing_poly_size);
     let inverses = materialize_domain_elements(evaluate_on_domain, &worker);
     let mut inverses = Polynomial::from_values(inverses).expect("must fit into the domain");
     inverses.map(&worker, |element| {
-        let mut tmp = vanishing_at_x;
+        let mut tmp = x;
         tmp.sub_assign(&*element);
 
         *element = tmp;
@@ -213,7 +214,7 @@ pub(crate) fn eval_unnormalized_bivariate_lagrange_poly_over_different_inputs<F:
     result.into_coeffs()
 }
 
-fn reindex_from_one_domain_to_another_assuming_natural_ordering<F: PrimeField>(
+pub(crate) fn reindex_from_one_domain_to_another_assuming_natural_ordering<F: PrimeField>(
     domain_0: &Domain<F>,
     domain_1: &Domain<F>,
     index: usize
@@ -455,7 +456,12 @@ pub fn generate_parameters<E, C>(
         domain_h: &Domain<F>,
         domain_k: &Domain<F>,
         worker: &Worker
-    ) -> Result<(Polynomial<F, Coefficients>, Polynomial<F, Coefficients>, Polynomial<F, Coefficients>), SynthesisError> {
+    ) -> Result<
+        (
+            usize,
+            [Polynomial<F, Coefficients>; 3],
+            [Vec<usize>; 2]
+        ), SynthesisError> {
         let mut row_vec = Vec::with_capacity(domain_k.size as usize);
         let mut col_vec = Vec::with_capacity(domain_k.size as usize);
         let mut val_vec = Vec::with_capacity(domain_k.size as usize);
@@ -469,10 +475,15 @@ pub fn generate_parameters<E, C>(
             &worker
         );
 
+        let mut row_indexes = Vec::with_capacity(domain_k.size as usize);
+        let mut col_indexes = Vec::with_capacity(domain_k.size as usize);
+
         for (row_index, row) in matrix.into_iter().enumerate() {
             for (col_index, coeff) in row {
                 let row_val = domain_h_elements[row_index];
-                let col_val = domain_h_elements[col_index]; // TODO: do something with inputs?
+                row_indexes.push(row_index);
+                let col_val = domain_h_elements[col_index];  // TODO: do something with inputs?
+                col_indexes.push(col_index);
 
                 row_vec.push(row_val);
                 col_vec.push(col_val);
@@ -496,6 +507,8 @@ pub fn generate_parameters<E, C>(
             }
         }
 
+        let num_non_zero = row_vec.len();
+
         let mut inverses_for_lagrange = Polynomial::from_values_unpadded(inverses_for_lagrange_polys)?;
         inverses_for_lagrange.batch_inversion(&worker)?;
         
@@ -508,6 +521,9 @@ pub fn generate_parameters<E, C>(
         // val_values.pad_to_domain()?;
 
         assert!(val_values.size() == domain_k.size as usize);
+        assert!(row_vec.len() <= domain_k.size as usize);
+        assert!(col_vec.len() <= domain_k.size as usize);
+
         row_vec.resize(val_values.size(), F::one());
         col_vec.resize(val_values.size(), F::one());
 
@@ -518,15 +534,19 @@ pub fn generate_parameters<E, C>(
         let row_poly = row_values.ifft(&worker);
         let col_poly = col_values.ifft(&worker);
 
+        // row_indexes.resize(domain_k.size as usize, 0);
 
-        Ok((row_poly, col_poly, val_poly))
+        Ok((num_non_zero, [row_poly, col_poly, val_poly], [row_indexes, col_indexes]))
     }
 
-    let (row_a, col_a, val_a) = interpolate_matrix(a_matrix, &domain_h, &domain_k, &worker)?;
-    let (row_b, col_b, val_b) = interpolate_matrix(b_matrix, &domain_h, &domain_k, &worker)?;
-    let (row_c, col_c, val_c) = interpolate_matrix(c_matrix, &domain_h, &domain_k, &worker)?;
+    let (a_num_non_zero, [row_a, col_a, val_a], [row_a_indexes, col_a_indexes]) = interpolate_matrix(a_matrix, &domain_h, &domain_k, &worker)?;
+    let (b_num_non_zero, [row_b, col_b, val_b], [row_b_indexes, col_b_indexes]) = interpolate_matrix(b_matrix, &domain_h, &domain_k, &worker)?;
+    let (c_num_non_zero, [row_c, col_c, val_c], [row_c_indexes, col_c_indexes]) = interpolate_matrix(c_matrix, &domain_h, &domain_k, &worker)?;
 
     Ok(IndexedSetup {
+        a_num_non_zero,
+        b_num_non_zero,
+        c_num_non_zero,
         domain_h_size,
         domain_k_size,
         a_matrix_poly: val_a,
@@ -538,6 +558,12 @@ pub fn generate_parameters<E, C>(
         a_col_poly: col_a,
         b_col_poly: col_b,
         c_col_poly: col_c,
+        a_row_indexes: row_a_indexes,
+        b_row_indexes: row_b_indexes,
+        c_row_indexes: row_c_indexes,
+        a_col_indexes: col_a_indexes,
+        b_col_indexes: col_b_indexes,
+        c_col_indexes: col_c_indexes,
     })
 }
 
@@ -592,7 +618,7 @@ fn evaluate_bivariate_lagrange_at_point_for_vanishing_y<F: PrimeField>(x: F, y: 
     Ok(num)
 } 
 
-fn evaluate_vanishing_for_size<F: PrimeField>(point: &F, vanishing_domain_size: u64) -> F {
+pub(crate) fn evaluate_vanishing_for_size<F: PrimeField>(point: &F, vanishing_domain_size: u64) -> F {
     let mut result = point.pow(&[vanishing_domain_size]);
     result.sub_assign(&F::one());
 
@@ -683,24 +709,17 @@ mod test {
     use super::*;
     use std::marker::PhantomData;
 
-    #[test]
-    fn test_interpolation_poly_1() {
-        use crate::pairing::bn256::{Bn256, Fr};
-
-        let c = XORDemo::<Bn256> {
-            a: None,
-            b: None,
-            _marker: PhantomData
-        };
-
-        let params = generate_parameters(c).unwrap();
+    fn test_over_engine_and_circuit<E: Engine, C: Circuit<E>>(
+        circuit: C
+    ) {
+        let params = generate_parameters(circuit).unwrap();
         let worker = Worker::new();
 
         println!("Params domain H size = {}", params.domain_h_size);
         println!("Params domain K size = {}", params.domain_k_size);
 
-        let domain_h = Domain::<Fr>::new_for_size(params.domain_h_size as u64).unwrap();
-        let domain_k = Domain::<Fr>::new_for_size(params.domain_k_size as u64).unwrap();
+        let domain_h = Domain::<E::Fr>::new_for_size(params.domain_h_size as u64).unwrap();
+        let domain_k = Domain::<E::Fr>::new_for_size(params.domain_k_size as u64).unwrap();
         let generator_h = domain_h.generator;
         let generator_k = domain_k.generator;
 
@@ -712,7 +731,7 @@ mod test {
             for j in 0..params.domain_h_size {
                 let y = generator_h.pow(&[j as u64]);
 
-                let mut sum = Fr::zero();
+                let mut sum = E::Fr::zero();
 
                 // sum
                 for k in 0..params.domain_k_size {
@@ -744,6 +763,21 @@ mod test {
         }
 
         println!("Indexed A matrix values are {:?}", a_matrix_values);
+        println!("A row indexes are {:?}", params.a_row_indexes);
+        println!("A column indexes are {:?}", params.a_col_indexes);
+    }
+
+    #[test]
+    fn test_interpolation_poly_1() {
+        use crate::pairing::bn256::{Bn256};
+
+        let c = XORDemo::<Bn256> {
+            a: None,
+            b: None,
+            _marker: PhantomData
+        };
+
+        test_over_engine_and_circuit(c);
     }
 
     #[test]
@@ -755,55 +789,6 @@ mod test {
             b: None,
         };
 
-        let params = generate_parameters(c).unwrap();
-        let worker = Worker::new();
-
-        println!("Params domain H size = {}", params.domain_h_size);
-        println!("Params domain K size = {}", params.domain_k_size);
-
-        let domain_h = Domain::<Fr>::new_for_size(params.domain_h_size as u64).unwrap();
-        let domain_k = Domain::<Fr>::new_for_size(params.domain_k_size as u64).unwrap();
-        let generator_k = domain_k.generator;
-
-        let mut a_matrix_values = vec![];
-
-        for i in 0..params.domain_k_size {
-            let x = generator_k.pow(&[i as u64]);
-            let mut row = vec![];
-            for j in 0..params.domain_k_size {
-                let y = generator_k.pow(&[j as u64]);
-
-                let mut sum = Fr::zero();
-
-                for k in 0..params.domain_k_size {
-                    // sum
-                    let k = generator_k.pow(&[k as u64]);
-                    let col_value = params.a_col_poly.evaluate_at(&worker, k);
-                    let row_value = params.a_row_poly.evaluate_at(&worker, k);
-
-                    let vanishing_at_col_value = evaluate_vanishing_for_size(&col_value, params.domain_h_size as u64);
-                    assert!(vanishing_at_col_value.is_zero());
-
-                    let vanishing_at_row_value = evaluate_vanishing_for_size(&row_value, params.domain_h_size as u64);
-                    assert!(vanishing_at_row_value.is_zero());
-
-                    let lag_x = evaluate_bivariate_lagrange_at_point_for_vanishing_y(x, row_value, params.domain_h_size as u64).unwrap();
-                    let lag_y = evaluate_bivariate_lagrange_at_point_for_vanishing_y(y, col_value, params.domain_h_size as u64).unwrap();
-                    let val = params.a_matrix_poly.evaluate_at(&worker, k);
-
-                    let mut result = lag_y;
-                    result.mul_assign(&lag_x);
-                    result.mul_assign(&val);
-
-                    sum.add_assign(&result);
-                }
-
-                row.push(sum);
-            }
-
-            a_matrix_values.push(row);
-        }
-
-        println!("Indexed A matrix values are {:?}", a_matrix_values);
+        test_over_engine_and_circuit(c);
     }
 }

@@ -18,6 +18,7 @@ use crate::{
     SynthesisError
 };
 
+#[derive(Clone)]
 pub(crate) struct XORDemo<E: Engine> {
     pub(crate) a: Option<bool>,
     pub(crate) b: Option<bool>,
