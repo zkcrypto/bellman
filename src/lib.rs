@@ -38,6 +38,9 @@ extern crate lazy_static;
 #[cfg(feature = "marlin")]
 pub mod marlin;
 
+#[cfg(any(feature = "marlin", feature = "plonk"))]
+pub mod kate_commitment;
+
 mod group;
 mod source;
 mod multiexp;

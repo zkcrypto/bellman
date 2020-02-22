@@ -1400,6 +1400,88 @@ impl<F: PrimeField> Polynomial<F, Values> {
         });
     }
 
+    pub fn sub_constant(&mut self, worker: &Worker, constant: &F) {
+        worker.scope(self.coeffs.len(), |scope, chunk| {
+            for a in self.coeffs.chunks_mut(chunk) {
+                scope.spawn(move |_| {
+                    for a in a.iter_mut() {
+                        a.sub_assign(&constant);
+                    }
+                });
+            }
+        });
+    }
+
+    pub fn barycentric_evaluate_at(&self, worker: &Worker, g: F) -> Result<F, SynthesisError> {
+        // use a barycentric formula
+
+        // L_i(X) = (omega^i / N) / (X - omega^i) * (X^N - 1)
+        // we'll have to pay more for batch inversion at some point, but 
+        // it's still useful
+        let domain_size = self.size() as u64;
+        assert!(domain_size.is_power_of_two());
+
+        let mut vanishing_at_g = g.pow(&[domain_size]);
+        vanishing_at_g.sub_assign(&F::one());
+
+        // now generate (X - omega^i)
+        let mut tmp = vec![g; domain_size as usize];
+
+        let generator = self.omega;
+        let generator_inv = self.omegainv;
+
+        let size_as_fe = F::from_str(&format!("{}", domain_size)).expect("domain size is a valid field element");
+
+        let mut constant_factor = size_as_fe;
+        let vanishing_at_g_inv = vanishing_at_g.inverse().ok_or(SynthesisError::DivisionByZero)?;
+        constant_factor.mul_assign(&vanishing_at_g_inv);
+
+        // constant factor = 1 / ( (1 / N) * (X^N - 1) ) = N / (X^N - 1)
+
+        worker.scope(tmp.len(), |scope, chunk| {
+            for (i, vals) in tmp.chunks_mut(chunk)
+                        .enumerate() {
+                scope.spawn(move |_| {
+                    // let mut one_over_omega_pow = generator_inv.pow([(i*chunk) as u64]);
+                    // one_over_omega_pow.mul_assign(&constant_factor);
+                    let mut omega_power = generator.pow([(i*chunk) as u64]);
+                    for val in vals.iter_mut() {
+                        val.sub_assign(&omega_power); // (X - omega^i)
+                        // val.mul_assign(&one_over_omega_pow); // (X - omega^i) * N / (X^N - 1) * omega^(-i), so when we inverse it's valid evaluation
+                        omega_power.mul_assign(&generator);
+                        // one_over_omega_pow.mul_assign(&generator_inv);
+                    }
+                });
+            }
+        });
+
+        let mut values = Polynomial::from_values(tmp)?;
+        values.batch_inversion(&worker)?;
+
+        // now multiply by omega^i / N * (X^N - 1) and value for L_i(X)
+
+        let mut constant_factor = vanishing_at_g;
+        constant_factor.mul_assign(&self.minv);
+
+        worker.scope(values.size(), |scope, chunk| {
+            for (i, (vals, coeffs)) in values.as_mut().chunks_mut(chunk)
+                            .zip(self.coeffs.chunks(chunk))
+                        .enumerate() {
+                scope.spawn(move |_| {
+                    let mut omega_power = generator.pow([(i*chunk) as u64]);
+                    omega_power.mul_assign(&constant_factor);
+                    for (val, coeff) in vals.iter_mut().zip(coeffs.iter()) {
+                        val.mul_assign(&omega_power);
+                        val.mul_assign(coeff);
+                        omega_power.mul_assign(&generator);
+                    }
+                });
+            }
+        });
+
+        values.calculate_sum(&worker)
+    }
+
     pub fn calculate_shifted_grand_product(&self, worker: &Worker) -> Result<Polynomial<F, Values>, SynthesisError> {
         let mut result = vec![F::zero(); self.coeffs.len() + 1];
         result[0] = F::one();
@@ -1408,7 +1490,7 @@ impl<F: PrimeField> Polynomial<F, Values> {
         let mut subproducts = vec![F::one(); num_threads as usize];
 
         worker.scope(self.coeffs.len(), |scope, chunk| {
-            for ((g, c), s) in result[0..].chunks_mut(chunk)
+            for ((g, c), s) in result[1..].chunks_mut(chunk)
                         .zip(self.coeffs.chunks(chunk))
                         .zip(subproducts.chunks_mut(1)) {
                 scope.spawn(move |_| {
@@ -1533,13 +1615,14 @@ impl<F: PrimeField> Polynomial<F, Values> {
     }
 
     pub fn calculate_grand_sum(&self, worker: &Worker) -> Result<(F, Polynomial<F, Values>), SynthesisError> {
-        let mut result = vec![F::zero(); self.coeffs.len()];
+        // first value is zero, then first element, then first + second, ...
+        let mut result = vec![F::zero(); self.coeffs.len() + 1];
 
         let num_threads = worker.get_num_spawned_threads(self.coeffs.len());
         let mut subsums = vec![F::zero(); num_threads as usize];
 
         worker.scope(self.coeffs.len(), |scope, chunk| {
-            for ((g, c), s) in result.chunks_mut(chunk)
+            for ((g, c), s) in result[1..].chunks_mut(chunk)
                         .zip(self.coeffs.chunks(chunk))
                         .zip(subsums.chunks_mut(1)) {
                 scope.spawn(move |_| {
@@ -1566,7 +1649,7 @@ impl<F: PrimeField> Polynomial<F, Values> {
         let chunk_len = worker.get_chunk_size(self.coeffs.len());
 
         worker.scope(0, |scope, _| {
-            for (g, s) in result[chunk_len..].chunks_mut(chunk_len)
+            for (g, s) in result[(chunk_len+1)..].chunks_mut(chunk_len)
                         .zip(subsums.chunks(1)) {
                 scope.spawn(move |_| {
                     let c = s[0];
@@ -1576,6 +1659,12 @@ impl<F: PrimeField> Polynomial<F, Values> {
                 });
             }
         });
+
+        // let result = result.drain(1..).collect();
+
+        let alt_total_sum = result.pop().expect("must pop the last element");
+
+        assert_eq!(alt_total_sum, domain_sum);
 
         Ok((domain_sum, Polynomial::from_values_unpadded(result)?))
     }

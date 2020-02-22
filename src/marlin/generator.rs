@@ -198,20 +198,20 @@ pub(crate) fn eval_unnormalized_bivariate_lagrange_poly_over_different_inputs<F:
     worker: &Worker
 ) -> Vec<F> {
     let vanishing_at_x = evaluate_vanishing_for_size(&x, vanishing_poly_size);
+    let inv_vanishing_at_x = vanishing_at_x.inverse().ok_or(SynthesisError::DivisionByZero).expect("should not vanish on random x");
     let inverses = materialize_domain_elements(evaluate_on_domain, &worker);
     let mut inverses = Polynomial::from_values(inverses).expect("must fit into the domain");
     inverses.map(&worker, |element| {
         let mut tmp = x;
         tmp.sub_assign(&*element);
+        tmp.mul_assign(&inv_vanishing_at_x);
 
         *element = tmp;
     });
 
     inverses.batch_inversion(&worker).expect("must inverse as there are no zeroes");
-    let mut result = Polynomial::from_values(vec![vanishing_at_x; evaluate_on_domain.size as usize]).expect("must fit into the domain");
-    result.mul_assign(&worker, &inverses);
 
-    result.into_coeffs()
+    inverses.into_coeffs()
 }
 
 pub(crate) fn reindex_from_one_domain_to_another_assuming_natural_ordering<F: PrimeField>(
@@ -624,7 +624,6 @@ pub(crate) fn evaluate_vanishing_for_size<F: PrimeField>(point: &F, vanishing_do
 
     result
 }
-
 
 #[derive(Clone)]
 pub(crate) struct IndexerTester<E: Engine> {
