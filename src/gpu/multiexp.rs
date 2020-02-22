@@ -55,6 +55,8 @@ where
 
     core_count: usize,
     n: usize,
+
+    priority: bool,
 }
 
 fn calc_num_groups(core_count: usize, num_windows: usize) -> usize {
@@ -107,7 +109,7 @@ impl<E> SingleMultiexpKernel<E>
 where
     E: Engine,
 {
-    pub fn create(d: Device) -> GPUResult<SingleMultiexpKernel<E>> {
+    pub fn create(d: Device, priority: bool) -> GPUResult<SingleMultiexpKernel<E>> {
         let src = sources::kernel::<E>();
         let pq = ProQue::builder().device(d).src(src).dims(1).build()?;
 
@@ -172,6 +174,7 @@ where
             exp_buffer: expbuff,
             core_count: core_count,
             n,
+            priority,
         })
     }
 
@@ -184,6 +187,10 @@ where
     where
         G: CurveAffine,
     {
+        if locks::PriorityLock::should_break(self.priority) {
+            return Err(GPUError::GPUTaken);
+        }
+
         let exp_bits = std::mem::size_of::<E::Fr>() * 8;
         let window_size = calc_window_size(n as usize, exp_bits, self.core_count);
         let num_windows = ((exp_bits as f64) / (window_size as f64)).ceil() as usize;
@@ -293,12 +300,12 @@ impl<E> MultiexpKernel<E>
 where
     E: Engine,
 {
-    pub fn create() -> GPUResult<MultiexpKernel<E>> {
+    pub fn create(priority: bool) -> GPUResult<MultiexpKernel<E>> {
         let lock = locks::GPULock::lock();
 
         let kernels: Vec<_> = GPU_NVIDIA_DEVICES
             .iter()
-            .map(|d| SingleMultiexpKernel::<E>::create(*d))
+            .map(|d| SingleMultiexpKernel::<E>::create(*d, priority))
             .filter(|res| res.is_ok())
             .map(|res| res.unwrap())
             .collect();

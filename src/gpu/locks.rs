@@ -43,11 +43,12 @@ impl PriorityLock {
         debug!("Priority lock acquired!");
         PriorityLock(f)
     }
-    pub fn is_locked() -> bool {
-        File::create(tmp_path(PRIORITY_LOCK_NAME))
-            .unwrap()
-            .try_lock_exclusive()
-            .is_err()
+    pub fn should_break(priority: bool) -> bool {
+        !priority
+            && File::create(tmp_path(PRIORITY_LOCK_NAME))
+                .unwrap()
+                .try_lock_exclusive()
+                .is_err()
     }
 }
 impl Drop for PriorityLock {
@@ -56,35 +57,79 @@ impl Drop for PriorityLock {
     }
 }
 
-pub struct LockedKernel<K, F>
-where
-    F: Fn() -> Option<K>,
-{
-    priority: bool,
-    _f: F,
-    kernel: Option<K>,
+use super::error::{GPUError, GPUResult};
+use super::fft::FFTKernel;
+use super::multiexp::MultiexpKernel;
+use crate::domain::create_fft_kernel;
+use crate::multiexp::create_multiexp_kernel;
+use paired::Engine;
+
+macro_rules! locked_kernel {
+    ($class:ident, $kern:ident, $func:ident, $name:expr) => {
+        pub struct $class<E>
+        where
+            E: Engine,
+        {
+            log_d: usize,
+            priority: bool,
+            kernel: Option<$kern<E>>,
+        }
+
+        impl<E> $class<E>
+        where
+            E: Engine,
+        {
+            pub fn new(log_d: usize, priority: bool) -> $class<E> {
+                $class::<E> {
+                    log_d,
+                    priority,
+                    kernel: None,
+                }
+            }
+
+            fn free(&mut self) {
+                if let Some(_kernel) = self.kernel.take() {
+                    warn!(
+                        "GPU acquired by a high priority process! Freeing up {} kernels...",
+                        $name
+                    );
+                }
+            }
+
+            pub fn with<F, R>(&mut self, f: F) -> GPUResult<R>
+            where
+                F: FnOnce(&mut $kern<E>) -> GPUResult<R>,
+            {
+                if PriorityLock::should_break(self.priority) {
+                    self.free();
+                } else if self.kernel.is_none() {
+                    info!("GPU is available for {}!", $name);
+                    self.kernel = $func::<E>(self.log_d, self.priority);
+                }
+
+                if let Some(ref mut k) = self.kernel {
+                    match f(k) {
+                        Err(e) => {
+                            if let GPUError::GPUTaken = e {
+                                self.free();
+                            }
+                            warn!("GPU {} failed! Falling back to CPU... Error: {}", $name, e);
+                            Err(e)
+                        }
+                        Ok(v) => Ok(v),
+                    }
+                } else {
+                    Err(GPUError::KernelUninitialized)
+                }
+            }
+        }
+    };
 }
 
-impl<K, F> LockedKernel<K, F>
-where
-    F: Fn() -> Option<K>,
-{
-    pub fn new(f: F, priority: bool) -> LockedKernel<K, F> {
-        LockedKernel::<K, F> {
-            priority,
-            _f: f,
-            kernel: None,
-        }
-    }
-    pub fn get(&mut self) -> &mut Option<K> {
-        if !self.priority && PriorityLock::is_locked() {
-            if let Some(_kernel) = self.kernel.take() {
-                warn!("GPU acquired by a high priority process! Freeing up kernels...");
-            }
-        } else if self.kernel.is_none() {
-            info!("GPU is available!");
-            self.kernel = (self._f)();
-        }
-        &mut self.kernel
-    }
-}
+locked_kernel!(LockedFFTKernel, FFTKernel, create_fft_kernel, "FFT");
+locked_kernel!(
+    LockedMultiexpKernel,
+    MultiexpKernel,
+    create_multiexp_kernel,
+    "Multiexp"
+);

@@ -87,7 +87,7 @@ impl<E: Engine, G: Group<E>> EvaluationDomain<E, G> {
     pub fn fft(
         &mut self,
         worker: &Worker,
-        kern: &mut Option<gpu::FFTKernel<E>>,
+        kern: &mut Option<gpu::LockedFFTKernel<E>>,
     ) -> gpu::GPUResult<()> {
         best_fft(kern, &mut self.coeffs, worker, &self.omega, self.exp)?;
         Ok(())
@@ -96,7 +96,7 @@ impl<E: Engine, G: Group<E>> EvaluationDomain<E, G> {
     pub fn ifft(
         &mut self,
         worker: &Worker,
-        kern: &mut Option<gpu::FFTKernel<E>>,
+        kern: &mut Option<gpu::LockedFFTKernel<E>>,
     ) -> gpu::GPUResult<()> {
         best_fft(kern, &mut self.coeffs, worker, &self.omegainv, self.exp)?;
 
@@ -132,7 +132,7 @@ impl<E: Engine, G: Group<E>> EvaluationDomain<E, G> {
     pub fn coset_fft(
         &mut self,
         worker: &Worker,
-        kern: &mut Option<gpu::FFTKernel<E>>,
+        kern: &mut Option<gpu::LockedFFTKernel<E>>,
     ) -> gpu::GPUResult<()> {
         self.distribute_powers(worker, E::Fr::multiplicative_generator());
         self.fft(worker, kern)?;
@@ -142,7 +142,7 @@ impl<E: Engine, G: Group<E>> EvaluationDomain<E, G> {
     pub fn icoset_fft(
         &mut self,
         worker: &Worker,
-        kern: &mut Option<gpu::FFTKernel<E>>,
+        kern: &mut Option<gpu::LockedFFTKernel<E>>,
     ) -> gpu::GPUResult<()> {
         let geninv = self.geninv;
         self.ifft(worker, kern)?;
@@ -288,20 +288,18 @@ impl<E: ScalarEngine> Group<E> for Scalar<E> {
 }
 
 fn best_fft<E: Engine, T: Group<E>>(
-    kern: &mut Option<gpu::FFTKernel<E>>,
+    kern: &mut Option<gpu::LockedFFTKernel<E>>,
     a: &mut [T],
     worker: &Worker,
     omega: &E::Fr,
     log_n: u32,
 ) -> gpu::GPUResult<()> {
-    if let Some(ref mut k) = kern {
-        match gpu_fft(k, a, omega, log_n) {
-            Ok(_) => {
-                return Ok(());
-            }
-            Err(e) => {
-                warn!("GPU FFT failed! Falling back to CPU... Error: {}", e);
-            }
+    if let Some(ref mut kern) = kern {
+        if kern
+            .with(|k: &mut gpu::FFTKernel<E>| gpu_fft(k, a, omega, log_n))
+            .is_ok()
+        {
+            return Ok(());
         }
     }
 
@@ -561,11 +559,11 @@ fn parallel_fft_consistency() {
     test_consistency::<Bls12, _>(rng);
 }
 
-pub fn create_fft_kernel<E>(log_d: u32) -> Option<gpu::FFTKernel<E>>
+pub fn create_fft_kernel<E>(log_d: usize, priority: bool) -> Option<gpu::FFTKernel<E>>
 where
     E: Engine,
 {
-    match gpu::FFTKernel::create(1 << log_d) {
+    match gpu::FFTKernel::create(1 << log_d, priority) {
         Ok(k) => {
             info!("GPU FFT kernel instantiated!");
             Some(k)
@@ -586,7 +584,7 @@ pub fn gpu_fft_consistency() {
 
     let worker = Worker::new();
     let log_cpus = worker.log_num_cpus();
-    let mut kern = gpu::FFTKernel::create(1 << 24).expect("Cannot initialize kernel!");
+    let mut kern = gpu::FFTKernel::create(1 << 24, false).expect("Cannot initialize kernel!");
 
     for log_d in 1..25 {
         let d = 1 << log_d;

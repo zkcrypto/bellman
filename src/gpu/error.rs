@@ -5,6 +5,12 @@ pub enum GPUError {
     #[cfg(feature = "gpu")]
     #[error("Ocl Error: {0}")]
     Ocl(ocl::Error),
+    #[cfg(feature = "gpu")]
+    #[error("GPU taken by a high priority process!")]
+    GPUTaken,
+    #[cfg(feature = "gpu")]
+    #[error("No kernel is initialized!")]
+    KernelUninitialized,
 }
 
 pub type GPUResult<T> = std::result::Result<T, GPUError>;
