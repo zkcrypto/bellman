@@ -38,9 +38,38 @@ use bellman_ce::groth16::{
     verify_proof,
 };
 
-const MIMC_ROUNDS: usize = 322;
+// const MIMC_ROUNDS: usize = 322;
 
-// const MIMC_ROUNDS: usize = 1000000;
+const MIMC_ROUNDS: usize = 1000000;
+
+
+#[cfg(feature = "marlin")]
+#[test]
+fn test_bench_marlin_prover() {
+    use bellman_ce::pairing::bn256::{Bn256};
+    use bellman_ce::marlin::prover::test_over_engine_and_circuit;
+    {
+        // This may not be cryptographically safe, use
+        // `OsRng` (for example) in production software.
+        let rng = &mut thread_rng();
+
+        // Generate the MiMC round constants
+        let constants = (0..MIMC_ROUNDS).map(|_| rng.gen()).collect::<Vec<_>>();
+
+        let xl = rng.gen();
+        let xr = rng.gen();
+
+        // Create an instance of our circuit (with the
+        // witness)
+        let circuit = MiMCDemo {
+            xl: Some(xl),
+            xr: Some(xr),
+            constants: &constants
+        };
+
+        test_over_engine_and_circuit::<Bn256, _>(circuit);
+    }
+}
 
 /// This is an implementation of MiMC, specifically a
 /// variant named `LongsightF322p3` for BLS12-381.
@@ -284,7 +313,8 @@ fn test_mimc_bn256() {
     println!("Creating proofs...");
 
     // Let's benchmark stuff!
-    const SAMPLES: u32 = 50;
+    // const SAMPLES: u32 = 50;
+    const SAMPLES: u32 = 1;
     let mut total_proving = Duration::new(0, 0);
     let mut total_verifying = Duration::new(0, 0);
 

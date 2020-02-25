@@ -39,6 +39,8 @@ use crate::plonk::domains::*;
 
 use super::generator::*;
 
+use crate::kate_commitment::*;
+
 fn eval<E: Engine>(
     lc: LinearCombination<E>,
     input_assignment: &[E::Fr],
@@ -119,34 +121,197 @@ pub fn prepare_prover<E, C>(
     return Ok(prepared)
 }
 
+
+pub struct IndexPrecomputations<E: Engine> {
+    // values on 2K size coset for the last check
+    pub a_row_over_2k_coset: Polynomial<E::Fr, Values>,
+    pub b_row_over_2k_coset: Polynomial<E::Fr, Values>,
+    pub c_row_over_2k_coset: Polynomial<E::Fr, Values>,
+    pub a_col_over_2k_coset: Polynomial<E::Fr, Values>,
+    pub b_col_over_2k_coset: Polynomial<E::Fr, Values>,
+    pub c_col_over_2k_coset: Polynomial<E::Fr, Values>,
+    pub a_val_over_2k_coset: Polynomial<E::Fr, Values>,
+    pub b_val_over_2k_coset: Polynomial<E::Fr, Values>,
+    pub c_val_over_2k_coset: Polynomial<E::Fr, Values>,
+
+    // values on K size for sumchecks
+    pub a_row_over_k: Polynomial<E::Fr, Values>,
+    pub b_row_over_k: Polynomial<E::Fr, Values>,
+    pub c_row_over_k: Polynomial<E::Fr, Values>,
+    pub a_col_over_k: Polynomial<E::Fr, Values>,
+    pub b_col_over_k: Polynomial<E::Fr, Values>,
+    pub c_col_over_k: Polynomial<E::Fr, Values>,
+    pub a_val_over_k: Polynomial<E::Fr, Values>,
+    pub b_val_over_k: Polynomial<E::Fr, Values>,
+    pub c_val_over_k: Polynomial<E::Fr, Values>,
+
+    // r(x, x) on H
+    pub r_x_x_values_over_h: Polynomial<E::Fr, Values>,
+}
+
+impl<E: Engine> IndexPrecomputations<E> {
+    pub fn new(params: &IndexedSetup<E>, worker: &Worker) -> Result<Self, SynthesisError> {
+        let lde_factor_from_h_to_k = params.domain_k_size / params.domain_h_size;
+        assert!(lde_factor_from_h_to_k.is_power_of_two());
+
+        let domain_h = Domain::<E::Fr>::new_for_size(params.domain_h_size as u64)?;
+
+        let r_x_x_values_over_h = eval_unnormalized_bivariate_lagrange_poly_over_diaginal(domain_h.size, &domain_h, &worker);
+        let r_x_x_values_over_h = Polynomial::from_values(r_x_x_values_over_h)?;
+
+        let a_row_over_2k_coset: Polynomial<E::Fr, Values> = params.a_row_poly.clone().coset_lde(&worker, 2)?;
+        let b_row_over_2k_coset: Polynomial<E::Fr, Values> = params.b_row_poly.clone().coset_lde(&worker, 2)?;
+        let c_row_over_2k_coset: Polynomial<E::Fr, Values> = params.c_row_poly.clone().coset_lde(&worker, 2)?;
+        let a_col_over_2k_coset: Polynomial<E::Fr, Values> = params.a_col_poly.clone().coset_lde(&worker, 2)?;
+        let b_col_over_2k_coset: Polynomial<E::Fr, Values> = params.b_col_poly.clone().coset_lde(&worker, 2)?;
+        let c_col_over_2k_coset: Polynomial<E::Fr, Values> = params.c_col_poly.clone().coset_lde(&worker, 2)?;
+        let a_val_over_2k_coset: Polynomial<E::Fr, Values> = params.a_matrix_poly.clone().coset_lde(&worker, 2)?;
+        let b_val_over_2k_coset: Polynomial<E::Fr, Values> = params.b_matrix_poly.clone().coset_lde(&worker, 2)?;
+        let c_val_over_2k_coset: Polynomial<E::Fr, Values> = params.c_matrix_poly.clone().coset_lde(&worker, 2)?;
+        let a_row_over_k: Polynomial<E::Fr, Values> = params.a_row_poly.clone().fft(&worker);
+        let b_row_over_k: Polynomial<E::Fr, Values> = params.b_row_poly.clone().fft(&worker);
+        let c_row_over_k: Polynomial<E::Fr, Values> = params.c_row_poly.clone().fft(&worker);
+        let a_col_over_k: Polynomial<E::Fr, Values> = params.a_col_poly.clone().fft(&worker);
+        let b_col_over_k: Polynomial<E::Fr, Values> = params.b_col_poly.clone().fft(&worker);
+        let c_col_over_k: Polynomial<E::Fr, Values> = params.c_col_poly.clone().fft(&worker);
+        let a_val_over_k: Polynomial<E::Fr, Values> = params.a_matrix_poly.clone().fft(&worker);
+        let b_val_over_k: Polynomial<E::Fr, Values> = params.b_matrix_poly.clone().fft(&worker);
+        let c_val_over_k: Polynomial<E::Fr, Values> = params.c_matrix_poly.clone().fft(&worker);
+
+        let new = IndexPrecomputations::<E> {
+            a_row_over_2k_coset,
+            b_row_over_2k_coset,
+            c_row_over_2k_coset,
+            a_col_over_2k_coset,
+            b_col_over_2k_coset,
+            c_col_over_2k_coset,
+            a_val_over_2k_coset,
+            b_val_over_2k_coset,
+            c_val_over_2k_coset,
+            a_row_over_k,
+            b_row_over_k,
+            c_row_over_k,
+            a_col_over_k,
+            b_col_over_k,
+            c_col_over_k,
+            a_val_over_k,
+            b_val_over_k,
+            c_val_over_k,
+            r_x_x_values_over_h,
+        };
+
+        Ok(new)
+
+    }
+}
+pub struct PrecomputedBases<E: Engine> {
+    pub crs_values_on_h: Crs::<E, CrsForLagrangeForm>,
+    pub crs_values_on_k: Crs::<E, CrsForLagrangeForm>,
+    // pub crs_values_on_h_coset: Crs::<E, CrsForLagrangeFormOnCoset>
+}
+
+impl<E: Engine> PrecomputedBases<E> {
+    pub fn new_42_for_index(params: &IndexedSetup<E>, worker: &Worker) -> Self {
+        println!("Making CRS");
+
+        let monomial = Crs::<E, CrsForMonomialForm>::crs_42(params.domain_k_size, &worker);
+
+        println!("Done making power series");
+
+        // TODO: use subslicing here
+        let crs_values_on_h = Crs::<E, CrsForLagrangeForm>::from_powers(&monomial, params.domain_h_size, &worker);
+        println!("Done making lagrange bases on H");
+
+        let crs_values_on_k = Crs::<E, CrsForLagrangeForm>::from_powers(&monomial, params.domain_k_size, &worker);
+        // let crs_values_on_h_coset = Crs::<E, CrsForLagrangeFormOnCoset>::from_powers(&monomial, params.domain_h_size, &worker);
+
+        println!("Done making CRS");
+
+        Self {
+            crs_values_on_h,
+            crs_values_on_k,
+            // crs_values_on_h_coset,
+        }
+    }
+}
+
 impl<E:Engine> PreparedProver<E> {
     pub fn create_proof(
         self,
         params: &IndexedSetup<E>,
+        crs: &PrecomputedBases<E>,
+        precomputations: &IndexPrecomputations<E>,
     ) -> Result<(), SynthesisError>
     {
-        use crate::kate_commitment::*;
+        // this prover performs the following:
+        // - commit to the witness vector `w` and to the results of application of the A/B/C matrixes
+        // to it as `z_a`, `z_b`, `z_c` (we may ommit commitment to `z_c` and just claim it's value)
+        // - commit to the quotient (z_a * z_b - z_c)/vanishing_on_H
+        // - perform a first sumcheck using random challenge `alpha` and linear combination challenges
+        // `eta_a`, `eta_b`, `eta_c`. Those prove that over the domain H (matrix size):
+        // sum of the r(alpha, x) * z_m(x) - r_m(alpha, x) * w(x) is equal to zero where M \in {A, B, C}
+        // and r_m(alpha, x) = \sum_{k \in H} r(alpha, k) * M(k, x)
+        // at this step we claim commit to eta_a * r_a(alpha, x) + eta_b * r_b(alpha, x) + eta_c * r_c(alpha, x)
+        // without individual contributions r_a(alpha, x), r_b(alpha, x), r_c(alpha, x)
+        // - perform the second sumcheck to prove that \sum_{k \in H} r(alpha, k) * M(k, x) is evaluated correctly
+        // in a batched way: define q_2(x) = r(alpha, x) \sum_{m \in M}  * M(x, beta_1)
+        // if we avaluate previous batched commitment to eta_a * r_a(alpha, x) + eta_b * r_b(alpha, x) + eta_c * r_c(alpha, x)
+        // at the point beta_1 then it must be equal to \sum_{H} q_2(x)
+        // - perform a third sumcheck to claim that q_2(x) was evaluated correctly:
+        // we later check that q_2(beta_2) = r(alpha, beta_2) * \sum_{m \in M}  * M(beta_2, beta_1)
+        // for this purpose we need to prove correctness of M(beta_2, beta_1) relatively to the initial indexing
+        // for this we define individual polynomials over domain K f_m = M(x, beta_1, beta_2) = Func(indexing, beta_1, beta_2) such that 
+        // after summing out over x we'll get the value M(beta_2, beta_1). To achieve this we perform a sumcheck
 
         let worker = Worker::new();
 
-        let crs_monomial = Crs::<E, CrsForMonomialForm>::dummy_crs(params.domain_k_size);
-        let crs_values_on_h = Crs::<E, CrsForLagrangeForm>::dummy_crs(params.domain_h_size, &worker);
-        let crs_values_on_k = Crs::<E, CrsForLagrangeForm>::dummy_crs(params.domain_k_size, &worker);
-        let crs_values_on_h_coset = Crs::<E, CrsForLagrangeFormOnCoset>::dummy_crs(params.domain_h_size, &worker);
-        let crs_values_on_k_coset = Crs::<E, CrsForLagrangeFormOnCoset>::dummy_crs(params.domain_k_size, &worker);
-        let crs_values_on_2k_coset = Crs::<E, CrsForLagrangeFormOnCoset>::dummy_crs(params.domain_k_size * 2, &worker);
+        let domain_h = Domain::<E::Fr>::new_for_size(params.domain_h_size as u64)?;
+        let domain_k = Domain::<E::Fr>::new_for_size(params.domain_k_size as u64)?;
 
         let prover = self.assignment;
 
+        println!("Start prover work");
         let stopwatch = Stopwatch::new();
 
         let a_values_on_h = Polynomial::from_values(prover.a)?;
         let b_values_on_h = Polynomial::from_values(prover.b)?;
         let c_values_on_h = Polynomial::from_values(prover.c)?;
 
-        let a_commitment = commit_using_values(&a_values_on_h, &crs_values_on_h, &worker)?;
-        let b_commitment = commit_using_values(&b_values_on_h, &crs_values_on_h, &worker)?;
-        let c_commitment = commit_using_values(&c_values_on_h, &crs_values_on_h, &worker)?;
+        println!("Committing z_a, z_b, z_c");
+        let a_commitment = commit_using_values(&a_values_on_h, &crs.crs_values_on_h, &worker)?;
+        let b_commitment = commit_using_values(&b_values_on_h, &crs.crs_values_on_h, &worker)?;
+        let c_commitment = commit_using_values(&c_values_on_h, &crs.crs_values_on_h, &worker)?;
+
+        let h_poly_values_on_coset = {
+            elog_verbose!("H size is {}", a_values_on_h.size());
+
+            let a_poly = a_values_on_h.clone().ifft(&worker);
+            let b_poly = b_values_on_h.clone().ifft(&worker);
+            let c_poly = c_values_on_h.clone().ifft(&worker);
+
+            let mut a = a_poly.coset_fft(&worker);
+            let b = b_poly.coset_fft(&worker);
+            let c = c_poly.coset_fft(&worker);
+
+            a.mul_assign(&worker, &b);
+            drop(b);
+            a.sub_assign(&worker, &c);
+            drop(c);
+
+            let z_in_coset = evaluate_vanishing_for_size(&E::Fr::multiplicative_generator(), domain_h.size);
+            let z_in_coset_inv = z_in_coset.inverse().ok_or(SynthesisError::DivisionByZero)?;
+
+            a.scale(&worker, z_in_coset_inv); // divide
+
+            let h = a.icoset_fft(&worker);
+
+            let h_values = h.fft(&worker);
+
+            h_values
+        };
+
+        println!("Committing h");
+        let h_commitment = commit_using_values(&h_poly_values_on_coset, &crs.crs_values_on_h, &worker)?;
 
         // TODO: later split this up: use witness poly for proving, but commit to the one contatining
         // zeroes instead of inputs
@@ -158,40 +323,18 @@ impl<E:Engine> PreparedProver<E> {
 
         let witness_values_on_h = Polynomial::from_values(witness_values_on_h)?;
 
-        let witness_commitment = commit_using_values(&witness_values_on_h, &crs_values_on_h, &worker)?;
+        println!("Committing w");
+        let witness_commitment = commit_using_values(&witness_values_on_h, &crs.crs_values_on_h, &worker)?;
 
-        let (a_poly_coeffs, b_poly_coeffs, c_poly_coeffs, h_poly_values_on_coset) = {
-            elog_verbose!("H size is {}", a_values_on_h.size());
+        // now start the lincheck
 
-            let a_poly = a_values_on_h.clone().ifft(&worker);
-            let b_poly = b_values_on_h.clone().ifft(&worker);
-            let c_poly = c_values_on_h.clone().ifft(&worker);
+        let alpha = E::Fr::from_str("5").unwrap();
+        let eta_a = E::Fr::from_str("7").unwrap();
+        let eta_b = E::Fr::from_str("11").unwrap();
+        let eta_c = E::Fr::from_str("42").unwrap();
 
-            let mut a = a_poly.clone().coset_fft(&worker);
-            let b = b_poly.clone().coset_fft(&worker);
-            let c = c_poly.clone().coset_fft(&worker);
+        // We have not committed to witness values and values of application of A/B/C matrixes on witness
 
-            a.mul_assign(&worker, &b);
-            drop(b);
-            a.sub_assign(&worker, &c);
-            drop(c);
-
-            let mut z_in_coset = E::Fr::multiplicative_generator().pow(&[a.size() as u64]);
-            z_in_coset.sub_assign(&E::Fr::one());
-
-            a.scale(&worker, z_in_coset);
-
-            let h = a.icoset_fft(&worker);
-
-            assert!(h.size() == params.domain_h_size);
-
-            (a_poly, b_poly, c_poly, h)
-        };
-
-        elog_verbose!("{} seconds for prover for H evaluation (FFT)", stopwatch.elapsed());
-
-        let domain_h = Domain::<E::Fr>::new_for_size(params.domain_h_size as u64)?;
-        let domain_k = Domain::<E::Fr>::new_for_size(params.domain_k_size as u64)?;
         // also no masking for now
 
         let mut repr = <E::Fr as PrimeField>::Repr::default();
@@ -203,11 +346,6 @@ impl<E:Engine> PreparedProver<E> {
         let size_k_as_fe = E::Fr::from_repr(repr).expect("must convert domain size into field element");
 
         // By this moment we should have oracles to all the witness polynomials, as well as Af, Bf, Cf
-
-        let alpha = E::Fr::from_str("5").unwrap();
-        let eta_a = E::Fr::from_str("7").unwrap();
-        let eta_b = E::Fr::from_str("11").unwrap();
-        let eta_c = E::Fr::from_str("42").unwrap();
 
         // first sumcheck is for the polynomial 
         // Q_1(X) = r(alpha, X) * F_1(X) + r_m(alpha, X) * F_2(X)
@@ -227,26 +365,20 @@ impl<E:Engine> PreparedProver<E> {
 
         let r_alpha_x_values_over_h = Polynomial::from_values(r_alpha_x_values)?;
 
-        // R(alpha, X)
-        // let r_alpha_x_poly = r_alpha_x_values_over_h.clone().ifft(&worker);
-
         // now do the same for A/B/C matrixes
 
         // R(X, X)
-        let r_x_x_over_h = eval_unnormalized_bivariate_lagrange_poly_over_diaginal(domain_h.size, &domain_h, &worker);
-        let r_x_x_values_over_h = Polynomial::from_values(r_x_x_over_h)?;
+        // let r_x_x_over_h = eval_unnormalized_bivariate_lagrange_poly_over_diaginal(domain_h.size, &domain_h, &worker);
+        // let r_x_x_values_over_h = Polynomial::from_values(r_x_x_over_h)?;
 
         // now compute r_M(alpha, X) = \sum_{H} r(alpha, X) M(X, Y) (sum is over X \in H)
 
         let lde_factor_from_h_to_k = domain_k.size / domain_h.size;
         assert!(lde_factor_from_h_to_k.is_power_of_two());
 
-        let a_matrix_at_k = params.a_matrix_poly.clone().fft(&worker);
-        let b_matrix_at_k = params.b_matrix_poly.clone().fft(&worker);
-        let c_matrix_at_k = params.c_matrix_poly.clone().fft(&worker);
-
-        // let a_row_at_h = params.a_row_poly.clone().fft(&worker);
-        // let a_col_at_h = params.a_col_poly.clone().fft(&worker);
+        // let a_matrix_at_k = params.a_matrix_poly.clone().fft(&worker);
+        // let b_matrix_at_k = params.b_matrix_poly.clone().fft(&worker);
+        // let c_matrix_at_k = params.c_matrix_poly.clone().fft(&worker);
 
         // let domain_h_elements = materialize_domain_elements(&domain_h, &worker);
 
@@ -320,8 +452,8 @@ impl<E:Engine> PreparedProver<E> {
         }
 
         let r_a_alpha_x = construct_r_m_from_matrix(
-            &a_matrix_at_k,
-            &r_x_x_values_over_h,
+            &precomputations.a_val_over_k,
+            &precomputations.r_x_x_values_over_h,
             &r_alpha_x_values_over_h,
             &params.a_row_indexes,
             &params.a_col_indexes,
@@ -330,8 +462,8 @@ impl<E:Engine> PreparedProver<E> {
         )?;
 
         let r_b_alpha_x = construct_r_m_from_matrix(
-            &b_matrix_at_k,
-            &r_x_x_values_over_h,
+            &precomputations.b_val_over_k,
+            &precomputations.r_x_x_values_over_h,
             &r_alpha_x_values_over_h,
             &params.b_row_indexes,
             &params.b_col_indexes,
@@ -340,8 +472,8 @@ impl<E:Engine> PreparedProver<E> {
         )?;
 
         let r_c_alpha_x = construct_r_m_from_matrix(
-            &c_matrix_at_k,
-            &r_x_x_values_over_h,
+            &precomputations.c_val_over_k,
+            &precomputations.r_x_x_values_over_h,
             &r_alpha_x_values_over_h,
             &params.c_row_indexes,
             &params.c_col_indexes,
@@ -378,96 +510,59 @@ impl<E:Engine> PreparedProver<E> {
 
         let (q_1_sum_over_h, q_1_grand_sum_poly_values_over_h) = q_1_poly_values_over_h.calculate_grand_sum(&worker)?;
 
-        let q_1_commitment = commit_using_values(&q_1_poly_values_over_h, &crs_values_on_h, &worker)?;
-        let q_1_grand_sum_commitment = commit_using_values(&q_1_poly_values_over_h, &crs_values_on_h, &worker)?;
-
-        let q_1_poly_coeffs = q_1_poly_values_over_h.ifft(&worker);
-        let q_1_grand_sum_poly_coeffs = q_1_grand_sum_poly_values_over_h.ifft(&worker);
-
         assert!(q_1_sum_over_h.is_zero());
 
-        let q_1_grand_sum_poly_values_over_h_coset = q_1_grand_sum_poly_coeffs.clone().coset_fft(&worker);
-        let q_1_poly_values_over_h_coset = q_1_poly_coeffs.clone().coset_fft(&worker);
+        println!("Committing Q1 and it's sumcheck poly");
 
-        fn output_grand_sum_quotient_polynomial<F: PrimeField>(
-            elements_polynomial_over_coset: &Polynomial<F, Values>,
-            grand_sum_polynomial_over_coset: &Polynomial<F, Values>,
-            domain: &Domain<F>,
-            worker: &Worker,
-        ) -> Result<Polynomial<F, Values>, SynthesisError> {
-            assert!(domain.size == elements_polynomial_over_coset.size() as u64);
-            assert!(domain.size == grand_sum_polynomial_over_coset.size() as u64);
-            let mut sumcheck_quotient_over_coset = vec![F::zero(); domain.size as usize];
+        let q_1_commitment = commit_using_values(&q_1_poly_values_over_h, &crs.crs_values_on_h, &worker)?;
+        let q_1_sum_commitment = commit_using_values(&q_1_grand_sum_poly_values_over_h, &crs.crs_values_on_h, &worker)?;
 
-            let work_size = sumcheck_quotient_over_coset.len() - 1;
+        // Now we've completed the first part of the lincheck by incorporating alpha into M(X, Y)
 
-            let sum_ref = grand_sum_polynomial_over_coset.as_ref();
-            let elements_ref = elements_polynomial_over_coset.as_ref();
+        // {
+        //     let z = E::Fr::from_str("10000").unwrap();
 
-            worker.scope(work_size, |scope, chunk_size| {
-                for (chunk_id, q) in sumcheck_quotient_over_coset[0..work_size].chunks_mut(chunk_size).enumerate() {
-                    scope.spawn(move |_| {
-                        // we need to place grand_sum(x) + value(x) - grand_sum(x*omega)
-                        let start = chunk_id * chunk_size;
-                        for (j, el) in q.iter_mut().enumerate() {
-                            let idx = start + j;
-                            *el = sum_ref[idx];
-                            el.sub_assign(&sum_ref[idx+1]);
-                            el.add_assign(&elements_ref[idx]);
-                        }
-                    });
-                }
-            });
-
-            // do the last element
-            let idx = sumcheck_quotient_over_coset.len() - 1;
-            sumcheck_quotient_over_coset[idx] = sum_ref[idx];
-            sumcheck_quotient_over_coset[idx].sub_assign(&sum_ref[0]);
-            sumcheck_quotient_over_coset[idx].add_assign(&elements_ref[idx]);
-
-            let mut sumcheck_quotient_over_coset = Polynomial::from_values(sumcheck_quotient_over_coset)?;
-
-            let vanishing_on_domain_over_the_coset = evaluate_vanishing_for_size(&F::multiplicative_generator(), domain.size);
-            let vanishing_on_domain_over_the_coset_inv = vanishing_on_domain_over_the_coset.inverse().ok_or(SynthesisError::DivisionByZero)?;
-            sumcheck_quotient_over_coset.scale(&worker, vanishing_on_domain_over_the_coset_inv);
-
-            Ok(sumcheck_quotient_over_coset)
-        }
-
-        let q_1_values_over_h_coset = output_grand_sum_quotient_polynomial(
-            &q_1_poly_values_over_h_coset,
-            &q_1_grand_sum_poly_values_over_h_coset,
-            &domain_h,
-            &worker
-        )?;
-
-        let q_1_sumcheck_quotient_over_h_coeffs = q_1_values_over_h_coset.icoset_fft(&worker); // this proves sumcheck for q_1
-
-        {
-            let z = E::Fr::from_str("10000").unwrap();
-
-            let mut z_omega = z;
-            z_omega.mul_assign(&domain_h.generator);
+        //     let mut z_omega = z;
+        //     z_omega.mul_assign(&domain_h.generator);
     
-            let grand_sum_at_z = q_1_grand_sum_poly_coeffs.evaluate_at(&worker, z);
-            let grand_sum_at_z_omega = q_1_grand_sum_poly_coeffs.evaluate_at(&worker, z_omega);
-            let el_at_z = q_1_poly_coeffs.evaluate_at(&worker, z);
-            let vanishing_at_z = evaluate_vanishing_for_size(&z, domain_h.size);
-            let quotient_at_z = q_1_sumcheck_quotient_over_h_coeffs.evaluate_at(&worker, z);
+        //     let grand_sum_at_z = q_1_grand_sum_poly_coeffs.evaluate_at(&worker, z);
+        //     let grand_sum_at_z_omega = q_1_grand_sum_poly_coeffs.evaluate_at(&worker, z_omega);
+        //     let el_at_z = q_1_poly_coeffs.evaluate_at(&worker, z);
+        //     let vanishing_at_z = evaluate_vanishing_for_size(&z, domain_h.size);
+        //     let quotient_at_z = q_1_sumcheck_quotient_over_h_coeffs.evaluate_at(&worker, z);
     
-            let mut lhs = grand_sum_at_z;
-            lhs.sub_assign(&grand_sum_at_z_omega);
-            lhs.add_assign(&el_at_z);
+        //     let mut lhs = grand_sum_at_z;
+        //     lhs.sub_assign(&grand_sum_at_z_omega);
+        //     lhs.add_assign(&el_at_z);
     
-            let mut rhs = vanishing_at_z;
-            rhs.mul_assign(&quotient_at_z);
+        //     let mut rhs = vanishing_at_z;
+        //     rhs.mul_assign(&quotient_at_z);
     
-            assert_eq!(lhs, rhs, "q_1 sumcheck must pass");
-        }
+        //     assert_eq!(lhs, rhs, "q_1 sumcheck must pass");
+        // }
 
         // we would later need to evaluate q_1(z) and q_1_sum(z) and q_1_sum(z*omega)
 
+
         let beta_1 = E::Fr::from_str("137").unwrap();
+
+        // claim values of z_a, z_b, z_c and h at beta_1
+
+        let a_at_beta_1 = a_values_on_h.barycentric_evaluate_at(&worker, beta_1)?;
+        let b_at_beta_1 = b_values_on_h.barycentric_evaluate_at(&worker, beta_1)?;
+        let c_at_beta_1 = c_values_on_h.barycentric_evaluate_at(&worker, beta_1)?;
+        let h_at_beta_1 = h_poly_values_on_coset.barycentric_evaluate_at(&worker, beta_1)?;
+
+        let vanishing_at_beta_1 = evaluate_vanishing_for_size(&beta_1, domain_h.size);
+
+        let mut lhs = a_at_beta_1;
+        lhs.mul_assign(&b_at_beta_1);
+        lhs.sub_assign(&c_at_beta_1);
+
+        let mut rhs = h_at_beta_1;
+        rhs.mul_assign(&vanishing_at_beta_1);
+
+        assert!(lhs == rhs, "ab - c == h * z_H");
 
         // now we need to make q_2 = r(alpha, X) M(X, beta)
 
@@ -548,8 +643,8 @@ impl<E:Engine> PreparedProver<E> {
         }
 
         let r_a_x_beta_on_h = materialize_m_x_beta(
-            &a_matrix_at_k,
-            &r_x_x_values_over_h,
+            &precomputations.a_val_over_k,
+            &precomputations.r_x_x_values_over_h,
             &r_beta_1_x_values_over_h,
             &params.a_row_indexes,
             &params.a_col_indexes,
@@ -558,8 +653,8 @@ impl<E:Engine> PreparedProver<E> {
         )?;
 
         let r_b_x_beta_on_h = materialize_m_x_beta(
-            &b_matrix_at_k,
-            &r_x_x_values_over_h,
+            &precomputations.b_val_over_k,
+            &precomputations.r_x_x_values_over_h,
             &r_beta_1_x_values_over_h,
             &params.a_row_indexes,
             &params.a_col_indexes,
@@ -568,8 +663,8 @@ impl<E:Engine> PreparedProver<E> {
         )?;
 
         let r_c_x_beta_on_h = materialize_m_x_beta(
-            &c_matrix_at_k,
-            &r_x_x_values_over_h,
+            &precomputations.c_val_over_k,
+            &precomputations.r_x_x_values_over_h,
             &r_beta_1_x_values_over_h,
             &params.a_row_indexes,
             &params.a_col_indexes,
@@ -585,30 +680,24 @@ impl<E:Engine> PreparedProver<E> {
         let mut q_2_poly_values_on_h = r_m_beta_sum;
         q_2_poly_values_on_h.mul_assign(&worker, &r_alpha_x_values_over_h);
 
-        let (q_2_sum_value, q_2_grand_sum_over_h) = q_2_poly_values_on_h.calculate_grand_sum(&worker)?;
+        let q_2_sum_value = q_2_poly_values_on_h.calculate_sum(&worker)?;
 
         let sigma_2 = q_2_sum_value;
 
-        let mut q_2_poly_coeffs = q_2_poly_values_on_h.ifft(&worker);
-        let mut q_2_grand_sum_coeffs = q_2_grand_sum_over_h.ifft(&worker);
-        // normalize over the sum over |H|
-        let mut tmp = size_h_as_fe.inverse().ok_or(SynthesisError::DivisionByZero)?;
-        tmp.mul_assign(&sigma_2);
+        let one_over_h_size = size_h_as_fe.inverse().ok_or(SynthesisError::DivisionByZero)?;
 
-        q_2_poly_coeffs.as_mut()[0].sub_assign(&tmp);
-        q_2_grand_sum_coeffs.as_mut()[0].sub_assign(&tmp);
+        let mut tmp = sigma_2;
+        tmp.mul_assign(&one_over_h_size);
 
-        let q_2_grand_sum_poly_values_over_h_coset = q_2_grand_sum_coeffs.clone().coset_fft(&worker);
-        let q_2_poly_values_over_h_coset = q_2_poly_coeffs.clone().coset_fft(&worker);
+        q_2_poly_values_on_h.sub_constant(&worker, &tmp);
 
-        let q_2_values_over_h_coset = output_grand_sum_quotient_polynomial(
-            &q_2_poly_values_over_h_coset,
-            &q_2_grand_sum_poly_values_over_h_coset,
-            &domain_h,
-            &worker
-        )?;
+        let (tmp, q_2_grand_sum_over_h) = q_2_poly_values_on_h.calculate_grand_sum(&worker)?;
 
-        let q_2_sumcheck_quotient_over_h_coeffs = q_2_values_over_h_coset.icoset_fft(&worker); // this proves sumcheck for q_2
+        assert!(tmp.is_zero());
+
+        println!("Committing Q2 and it's sumcheck poly");
+        let q_2_commitment = commit_using_values(&q_2_poly_values_on_h, &crs.crs_values_on_h, &worker)?;
+        let q_2_sum_commitment = commit_using_values(&q_2_grand_sum_over_h, &crs.crs_values_on_h, &worker)?;
 
         // TODO: check if it's better to reduce it to the single poly of degree 6K then to 
         // three independent ones of degree 2k
@@ -711,31 +800,20 @@ impl<E:Engine> PreparedProver<E> {
         )?;
 
         // do multiplication over K
-        let mut f_3_a_values_over_k_by_eta_a = a_matrix_at_k.clone();
+        let mut f_3_a_values_over_k_by_eta_a = precomputations.a_val_over_k.clone();
         f_3_a_values_over_k_by_eta_a.scale(&worker, eta_a);
         f_3_a_values_over_k_by_eta_a.mul_assign(&worker, &r_beta_2_row_a_values_over_k);
         f_3_a_values_over_k_by_eta_a.mul_assign(&worker, &r_beta_1_col_a_values_over_k);
 
-        let mut f_3_b_values_over_k_by_eta_b = b_matrix_at_k.clone();
+        let mut f_3_b_values_over_k_by_eta_b = precomputations.b_val_over_k.clone();
         f_3_b_values_over_k_by_eta_b.scale(&worker, eta_b);
         f_3_b_values_over_k_by_eta_b.mul_assign(&worker, &r_beta_2_row_b_values_over_k);
         f_3_b_values_over_k_by_eta_b.mul_assign(&worker, &r_beta_1_col_b_values_over_k);
 
-        let mut f_3_c_values_over_k_by_eta_c = c_matrix_at_k.clone();
+        let mut f_3_c_values_over_k_by_eta_c = precomputations.c_val_over_k.clone();
         f_3_c_values_over_k_by_eta_c.scale(&worker, eta_c);
         f_3_c_values_over_k_by_eta_c.mul_assign(&worker, &r_beta_2_row_c_values_over_k);
         f_3_c_values_over_k_by_eta_c.mul_assign(&worker, &r_beta_1_col_c_values_over_k);
-
-        // let mut f_3_values_over_k = f_3_a_values_over_k.clone();
-        // f_3_values_over_k.add_assign(&worker, &f_3_b_values_over_k);
-        // f_3_values_over_k.add_assign(&worker, &f_3_c_values_over_k);
-
-        // let mut vals_m_sum = a_matrix_at_k.clone();
-        // vals_m_sum.scale(&worker, eta_a);
-        // vals_m_sum.add_assign_scaled(&worker, &b_matrix_at_k, &eta_b);
-        // vals_m_sum.add_assign_scaled(&worker, &c_matrix_at_k, &eta_c);
-
-        // f_3_values_over_k.mul_assign(&worker, &vals_m_sum);
 
         // now we need to prove the following two statements
         // - f_3 sums to sigma_3 over K
@@ -747,9 +825,9 @@ impl<E:Engine> PreparedProver<E> {
         let q_3_b_by_eta_b_sum_value = f_3_b_values_over_k_by_eta_b.calculate_sum(&worker)?;
         let q_3_c_by_eta_c_sum_value = f_3_c_values_over_k_by_eta_c.calculate_sum(&worker)?;
 
-        let mut q_3_a_by_eta_a_poly_coeffs = f_3_a_values_over_k_by_eta_a.clone().ifft(&worker);
-        let mut q_3_b_by_eta_b_poly_coeffs = f_3_b_values_over_k_by_eta_b.clone().ifft(&worker);
-        let mut q_3_c_by_eta_c_poly_coeffs = f_3_c_values_over_k_by_eta_c.clone().ifft(&worker);
+        let q_3_a_by_eta_a_poly_coeffs = f_3_a_values_over_k_by_eta_a.clone().ifft(&worker);
+        let q_3_b_by_eta_b_poly_coeffs = f_3_b_values_over_k_by_eta_b.clone().ifft(&worker);
+        let q_3_c_by_eta_c_poly_coeffs = f_3_c_values_over_k_by_eta_c.clone().ifft(&worker);
 
         let sigma_3_a = q_3_a_by_eta_a_sum_value;
         let sigma_3_b = q_3_b_by_eta_b_sum_value;
@@ -782,80 +860,17 @@ impl<E:Engine> PreparedProver<E> {
         assert!(t_b.is_zero());
         assert!(t_c.is_zero());
 
-        fn perform_sumcheck_from_values<F: PrimeField>(
-            poly_coeffs: &Polynomial<F, Coefficients>,
-            grand_sum_values: Polynomial<F, Values>,
-            sum: &F,
-            domain_size_as_fe: &F,
-            domain: &Domain<F>,
-            worker: &Worker
-        ) -> Result<
-            (Polynomial<F, Coefficients>, Polynomial<F, Coefficients>),
-            SynthesisError
-        > {
-            // commit to it later
-            let grand_sum_coeffs = grand_sum_values.ifft(&worker);
-            // normalize over the sum over |K|
-            // let one_over_size = domain_size_as_fe.inverse().ok_or(SynthesisError::DivisionByZero)?;
-            // let mut tmp = one_over_size;
-            // tmp.mul_assign(&sum);
-            // poly_coeffs.as_mut()[0].sub_assign(&tmp);
-            // grand_sum_coeffs.as_mut()[0].sub_assign(&tmp);
+        println!("Committing Q3_A and it's sumcheck poly");
+        let q_3_a_by_eta_a_commitment = commit_using_values(&f_3_a_values_over_k_by_eta_a, &crs.crs_values_on_k, &worker)?;
+        let q_3_a_by_eta_a_sum_commitment = commit_using_values(&q_3_a_by_eta_a_grand_sum_over_k, &crs.crs_values_on_k, &worker)?;
 
-            let grand_sum_poly_values_over_k_coset = grand_sum_coeffs.clone().coset_fft(&worker);
-            let poly_values_over_k_coset = poly_coeffs.clone().coset_fft(&worker);
+        println!("Committing Q3_B and it's sumcheck poly");
+        let q_3_b_by_eta_b_commitment = commit_using_values(&f_3_b_values_over_k_by_eta_b, &crs.crs_values_on_k, &worker)?;
+        let q_3_b_by_eta_b_sum_commitment = commit_using_values(&q_3_b_by_eta_b_grand_sum_over_k, &crs.crs_values_on_k, &worker)?;
 
-            let values_over_k_coset = output_grand_sum_quotient_polynomial(
-                &poly_values_over_k_coset,
-                &grand_sum_poly_values_over_k_coset,
-                &domain,
-                &worker
-            )?;
-
-            // poly_coeffs.as_mut()[0].add_assign(&tmp);
-
-            let sumcheck_quotient_coeffs = values_over_k_coset.icoset_fft(&worker);
-
-            Ok((grand_sum_coeffs, sumcheck_quotient_coeffs))
-        }
-
-        // do the virtual subtraction of the sum
-        q_3_a_by_eta_a_poly_coeffs.as_mut()[0] = E::Fr::zero();
-        q_3_b_by_eta_b_poly_coeffs.as_mut()[0] = E::Fr::zero();
-        q_3_c_by_eta_c_poly_coeffs.as_mut()[0] = E::Fr::zero();
-
-         // this proves sumcheck for q_3_a
-        let (q_3_a_grand_sum_poly_coeffs, _) = perform_sumcheck_from_values(
-            &q_3_a_by_eta_a_poly_coeffs,
-            q_3_a_by_eta_a_grand_sum_over_k,
-            &sigma_3_a,
-            &size_k_as_fe,
-            &domain_k,
-            &worker
-        )?;
-
-        let (q_3_b_grand_sum_poly_coeffs, _) = perform_sumcheck_from_values(
-            &q_3_b_by_eta_b_poly_coeffs,
-            q_3_b_by_eta_b_grand_sum_over_k,
-            &sigma_3_b,
-            &size_k_as_fe,
-            &domain_k,
-            &worker
-        )?;
-
-        let (q_3_c_grand_sum_poly_coeffs, _) = perform_sumcheck_from_values(
-            &q_3_c_by_eta_c_poly_coeffs,
-            q_3_c_by_eta_c_grand_sum_over_k,
-            &sigma_3_c,
-            &size_k_as_fe,
-            &domain_k,
-            &worker
-        )?;
-
-        // when sumcheck magic is done - fix it back for the final check
-        q_3_a_by_eta_a_poly_coeffs.as_mut()[0] = tmp_a;
-        q_3_b_by_eta_b_poly_coeffs.as_mut()[0] = tmp_b;
-        q_3_c_by_eta_c_poly_coeffs.as_mut()[0] = tmp_c;
+        println!("Committing Q3_C and it's sumcheck poly");
+        let q_3_c_by_eta_c_commitment = commit_using_values(&f_3_c_values_over_k_by_eta_c, &crs.crs_values_on_k, &worker)?;
+        let q_3_c_by_eta_c_sum_commitment = commit_using_values(&q_3_c_by_eta_c_grand_sum_over_k, &crs.crs_values_on_k, &worker)?;
 
         // add the sum back to calculate for correspondance with vals
 
@@ -870,7 +885,6 @@ impl<E:Engine> PreparedProver<E> {
 
         // now proof that f_3 is a correct derivative of vals
 
-        let vanishing_at_beta_1 = evaluate_vanishing_for_size(&beta_1, domain_h.size);
         let vanishing_at_beta_2 = evaluate_vanishing_for_size(&beta_2, domain_h.size);
 
         let mut vanishing_on_beta_1_by_vanishing_on_beta_2 = vanishing_at_beta_1;
@@ -879,34 +893,52 @@ impl<E:Engine> PreparedProver<E> {
         let lde_factor_vals = (params.domain_k_size as usize) * lde_factor_for_q_3_check_over_k / params.a_matrix_poly.size();
         assert!(lde_factor_vals.is_power_of_two());
 
-        let a_matrixes_values_over_2k_coset = params.a_matrix_poly.clone().coset_lde(&worker, lde_factor_vals)?;
-        let b_matrixes_values_over_2k_coset = params.b_matrix_poly.clone().coset_lde(&worker, lde_factor_vals)?;
-        let c_matrixes_values_over_2k_coset = params.c_matrix_poly.clone().coset_lde(&worker, lde_factor_vals)?;
+        // let a_matrixes_values_over_2k_coset = params.a_matrix_poly.clone().coset_lde(&worker, lde_factor_vals)?;
+        // let b_matrixes_values_over_2k_coset = params.b_matrix_poly.clone().coset_lde(&worker, lde_factor_vals)?;
+        // let c_matrixes_values_over_2k_coset = params.c_matrix_poly.clone().coset_lde(&worker, lde_factor_vals)?;
 
         let lde_factor_row_col = (params.domain_k_size as usize) * lde_factor_for_q_3_check_over_k / params.a_row_poly.size();
         assert!(lde_factor_row_col.is_power_of_two());
 
-        let mut a_row_poly = params.a_row_poly.clone();
-        a_row_poly.as_mut()[0].sub_assign(&beta_2);
-        let mut b_row_poly = params.b_row_poly.clone();
-        b_row_poly.as_mut()[0].sub_assign(&beta_2);
-        let mut c_row_poly = params.c_row_poly.clone();
-        c_row_poly.as_mut()[0].sub_assign(&beta_2);
+        // let mut a_row_poly = params.a_row_poly.clone();
+        // a_row_poly.as_mut()[0].sub_assign(&beta_2);
+        // let mut b_row_poly = params.b_row_poly.clone();
+        // b_row_poly.as_mut()[0].sub_assign(&beta_2);
+        // let mut c_row_poly = params.c_row_poly.clone();
+        // c_row_poly.as_mut()[0].sub_assign(&beta_2);
 
-        let a_row_minus_beta_2_over_2k_coset = a_row_poly.coset_lde(&worker, lde_factor_row_col)?;
-        let b_row_minus_beta_2_over_2k_coset = b_row_poly.coset_lde(&worker, lde_factor_row_col)?;
-        let c_row_minus_beta_2_over_2k_coset = c_row_poly.coset_lde(&worker, lde_factor_row_col)?;
+        // let a_row_minus_beta_2_over_2k_coset = a_row_poly.coset_lde(&worker, lde_factor_row_col)?;
+        // let b_row_minus_beta_2_over_2k_coset = b_row_poly.coset_lde(&worker, lde_factor_row_col)?;
+        // let c_row_minus_beta_2_over_2k_coset = c_row_poly.coset_lde(&worker, lde_factor_row_col)?;
 
-        let mut a_col_poly = params.a_col_poly.clone();
-        a_col_poly.as_mut()[0].sub_assign(&beta_1);
-        let mut b_col_poly = params.b_col_poly.clone();
-        b_col_poly.as_mut()[0].sub_assign(&beta_1);
-        let mut c_col_poly = params.c_col_poly.clone();
-        c_col_poly.as_mut()[0].sub_assign(&beta_1);
+        // let mut a_col_poly = params.a_col_poly.clone();
+        // a_col_poly.as_mut()[0].sub_assign(&beta_1);
+        // let mut b_col_poly = params.b_col_poly.clone();
+        // b_col_poly.as_mut()[0].sub_assign(&beta_1);
+        // let mut c_col_poly = params.c_col_poly.clone();
+        // c_col_poly.as_mut()[0].sub_assign(&beta_1);
 
-        let a_col_minus_beta_1_over_2k_coset = a_col_poly.coset_lde(&worker, lde_factor_row_col)?;
-        let b_col_minus_beta_1_over_2k_coset = b_col_poly.coset_lde(&worker, lde_factor_row_col)?;
-        let c_col_minus_beta_1_over_2k_coset = c_col_poly.coset_lde(&worker, lde_factor_row_col)?;
+        // let a_col_minus_beta_1_over_2k_coset = a_col_poly.coset_lde(&worker, lde_factor_row_col)?;
+        // let b_col_minus_beta_1_over_2k_coset = b_col_poly.coset_lde(&worker, lde_factor_row_col)?;
+        // let c_col_minus_beta_1_over_2k_coset = c_col_poly.coset_lde(&worker, lde_factor_row_col)?;
+
+        let mut a_row_minus_beta_2_over_2k_coset = precomputations.a_row_over_2k_coset.clone();
+        a_row_minus_beta_2_over_2k_coset.sub_constant(&worker, &beta_2);
+
+        let mut b_row_minus_beta_2_over_2k_coset = precomputations.b_row_over_2k_coset.clone();
+        b_row_minus_beta_2_over_2k_coset.sub_constant(&worker, &beta_2);
+
+        let mut c_row_minus_beta_2_over_2k_coset = precomputations.c_row_over_2k_coset.clone();
+        c_row_minus_beta_2_over_2k_coset.sub_constant(&worker, &beta_2);
+
+        let mut a_col_minus_beta_1_over_2k_coset = precomputations.a_col_over_2k_coset.clone();
+        a_col_minus_beta_1_over_2k_coset.sub_constant(&worker, &beta_1);
+
+        let mut b_col_minus_beta_1_over_2k_coset = precomputations.b_col_over_2k_coset.clone();
+        b_col_minus_beta_1_over_2k_coset.sub_constant(&worker, &beta_1);
+
+        let mut c_col_minus_beta_1_over_2k_coset = precomputations.c_col_over_2k_coset.clone();
+        c_col_minus_beta_1_over_2k_coset.sub_constant(&worker, &beta_1);
 
         // for each of the metrixes A/B/C you need to make sure that
         // van(beta_1) * van(beta_2) * val(x) - (row(x) - beta_2)(col(x) - beta(1))*f_3_m(x) == 0 at K
@@ -935,10 +967,10 @@ impl<E:Engine> PreparedProver<E> {
         val_c_total_coeffs.mul_assign(&linearization_challenge);
 
         // eta_a * vanishing(beta_1) * vanishing(beta_2) * linearization_challenge prefactor over val_a(k)
-        let mut f_3_well_formedness_poly_values_over_2k_coset = a_matrixes_values_over_2k_coset;
+        let mut f_3_well_formedness_poly_values_over_2k_coset = precomputations.a_val_over_2k_coset.clone();
         f_3_well_formedness_poly_values_over_2k_coset.scale(&worker, val_a_total_coeffs);
-        f_3_well_formedness_poly_values_over_2k_coset.add_assign_scaled(&worker, &b_matrixes_values_over_2k_coset, &val_b_total_coeffs);
-        f_3_well_formedness_poly_values_over_2k_coset.add_assign_scaled(&worker, &c_matrixes_values_over_2k_coset, &val_c_total_coeffs);
+        f_3_well_formedness_poly_values_over_2k_coset.add_assign_scaled(&worker, &precomputations.b_val_over_2k_coset, &val_b_total_coeffs);
+        f_3_well_formedness_poly_values_over_2k_coset.add_assign_scaled(&worker, &precomputations.c_val_over_2k_coset, &val_c_total_coeffs);
 
         let mut linearization_challenge = E::Fr::one();
 
@@ -1052,123 +1084,210 @@ impl<E:Engine> PreparedProver<E> {
             }
         });
 
-        let f_3_well_formedness_poly_coeffs = f_3_well_formedness_poly_values_over_2k_coset.icoset_fft(&worker);
+        // let beta_3 = E::Fr::from_str("12345678890").unwrap();
+
+        // let f_3_well_formedness_baryc_at_beta_3 = f_3_well_formedness_poly_values_over_2k_coset.barycentric_over_coset_evaluate_at(
+        //     &worker,
+        //     beta_3,
+        //     &E::Fr::multiplicative_generator()
+        // )?;
+
+        let (f_3_even_values_on_k, f_3_odd_values_on_k) = f_3_well_formedness_poly_values_over_2k_coset.split_into_even_and_odd_assuming_natural_ordering(
+            &worker,
+            &E::Fr::multiplicative_generator()
+        )?;
+
+        // TODO: commit to the linear combination using some other linearization challenge
+
+        let f_3_even_commitment = commit_using_values(&f_3_even_values_on_k, &crs.crs_values_on_k, &worker)?;
+        let f_3_odd_commitment = commit_using_values(&f_3_odd_values_on_k, &crs.crs_values_on_k, &worker)?;
 
         elog_verbose!("{} seconds for all the commitments", stopwatch.elapsed());
 
-        // -------------------------------------------
+        // println!("Committing matrix evaluation proof poly");
+        // let f_3_well_formedness_poly_commitment = commit_using_values_on_coset(&f_3_well_formedness_poly_values_over_2k_coset, &crs_values_on_2k_coset, &worker)?;
 
-        // sanity checks
+        // elog_verbose!("{} seconds for all the commitments", stopwatch.elapsed());
 
 
-        let z = E::Fr::from_str("12345678890").unwrap();
 
-        let f_3_well_formedness_poly_at_z = f_3_well_formedness_poly_coeffs.evaluate_at(&worker, z);
+        // let f_3_wellformedness_opening_proof = open_from_values_on_coset(
+        //     &f_3_well_formedness_poly_values_over_2k_coset, 
+        //     E::Fr::multiplicative_generator(), 
+        //     beta_3, 
+        //     f_3_well_formedness_baryc_at_beta_3, 
+        //     &crs_values_on_2k_coset, 
+        //     &worker
+        // )?;
 
-        let q_3_a_by_eta_a_at_z = q_3_a_by_eta_a_poly_coeffs.evaluate_at(&worker, z);
-        let q_3_b_by_eta_b_at_z = q_3_b_by_eta_b_poly_coeffs.evaluate_at(&worker, z);
-        let q_3_c_by_eta_c_at_z = q_3_c_by_eta_c_poly_coeffs.evaluate_at(&worker, z);
-        let val_a_at_z = params.a_matrix_poly.evaluate_at(&worker, z);
-        let val_b_at_z = params.b_matrix_poly.evaluate_at(&worker, z);
-        let val_c_at_z = params.c_matrix_poly.evaluate_at(&worker, z);
-        let row_a_at_z = params.a_row_poly.evaluate_at(&worker, z);
-        let row_b_at_z = params.b_row_poly.evaluate_at(&worker, z);
-        let row_c_at_z = params.c_row_poly.evaluate_at(&worker, z);
-        let col_a_at_z = params.a_col_poly.evaluate_at(&worker, z);
-        let col_b_at_z = params.b_col_poly.evaluate_at(&worker, z);
-        let col_c_at_z = params.c_col_poly.evaluate_at(&worker, z);
-        let vanishing_at_z = evaluate_vanishing_for_size(&z, domain_k.size);
+        // let valid = is_valid_opening::<E>(
+        //     f_3_well_formedness_poly_commitment, 
+        //     beta_3,
+        //     f_3_well_formedness_baryc_at_beta_3, 
+        //     f_3_wellformedness_opening_proof, 
+        //     crs_values_on_2k_coset.g2_monomial_bases[1]
+        // );
 
-        // vanishing(beta_1) * vanishing(beta_2) * val_m(z) - (beta_2 - row_m(z))(beta_1 - col_m(z)) q_3_m(z) = wellformedness(z)*vanishing(z)
+        // let (f_3_even_values_on_k_on_coset, f_3_odd_values_on_k) = f_3_well_formedness_poly_values_over_2k_coset.split_into_even_and_odd_assuming_natural_ordering(
+        //     &worker,
+        //     &E::Fr::multiplicative_generator()
+        // )?;
 
-        let mut lhs = E::Fr::zero();
-        let mut linearization_challenge = E::Fr::one();
+        let beta_3 = E::Fr::from_str("12345678890").unwrap();
 
-        let mut tmp = vanishing_on_beta_1_by_vanishing_on_beta_2;
-        tmp.mul_assign(&val_a_at_z);
-        tmp.mul_assign(&eta_a);
+        let mut beta_3_squared = beta_3;
+        beta_3_squared.square();
+
+        let coset_offset_inv = E::Fr::multiplicative_generator().inverse().ok_or(SynthesisError::DivisionByZero)?;
+
+        let mut beta_3_squared_by_coset_factor_squared = beta_3_squared;
+        beta_3_squared_by_coset_factor_squared.mul_assign(&coset_offset_inv);
+        beta_3_squared_by_coset_factor_squared.mul_assign(&coset_offset_inv);
+
+        let f_3_even_eval = f_3_even_values_on_k.barycentric_evaluate_at(&worker, beta_3_squared_by_coset_factor_squared)?;
+        let f_3_odd_eval = f_3_odd_values_on_k.barycentric_evaluate_at(&worker, beta_3_squared_by_coset_factor_squared)?;
+
+        // let mut lhs = f_3_odd_eval;
+        // lhs.mul_assign(&beta_3);
+        // lhs.add_assign(&f_3_even_eval);
+
+        // assert!(lhs == f_3_well_formedness_baryc_at_beta_3);
+
+        // assert!(valid, "f_3 wellformedness");
+
+        // now we need to perform all the openings
+
+        // For domain K: 
+        // - val_a_at_z, val_b_at_z, val_c_at_z
+        // - row_a_at_z, row_b_at_z, row_c_at_z
+        // - col_a_at_z, col_b_at_z, col_c_at_z
+        // - q_3_a_by_eta_a_commitment at z,
+        // - q_3_a_by_eta_a_sum_commitment at z and at z*omega
+        // - q_3_b_by_eta_a_commitment at z,
+        // - q_3_b_by_eta_a_sum_commitment at z and at z*omega
+        // - q_3_c_by_eta_a_commitment at z,
+        // - q_3_c_by_eta_a_sum_commitment at z and at z*omega
+
+        // For domain 2K (and we can move it into two openings on K): 
+        // - f_3_well_formedness_poly_at_z
+
+        // for domain H:
+        // - z_a_at_z, z_b_at_z, z_c_at_z, h_at_z
+        // - q_1_at_z, q_1_sum_at_z, q_1_sum_at_z_omega
+        // - q_2_at_z, q_2_sum_at_z, q_2_sum_at_z_omega
+
+
+
+        // // -------------------------------------------
+
+        // // sanity checks
+
+
+
+        // let q_3_a_by_eta_a_at_z = q_3_a_by_eta_a_poly_coeffs.evaluate_at(&worker, z);
+        // let q_3_b_by_eta_b_at_z = q_3_b_by_eta_b_poly_coeffs.evaluate_at(&worker, z);
+        // let q_3_c_by_eta_c_at_z = q_3_c_by_eta_c_poly_coeffs.evaluate_at(&worker, z);
+        // let val_a_at_z = params.a_matrix_poly.evaluate_at(&worker, z);
+        // let val_b_at_z = params.b_matrix_poly.evaluate_at(&worker, z);
+        // let val_c_at_z = params.c_matrix_poly.evaluate_at(&worker, z);
+        // let row_a_at_z = params.a_row_poly.evaluate_at(&worker, z);
+        // let row_b_at_z = params.b_row_poly.evaluate_at(&worker, z);
+        // let row_c_at_z = params.c_row_poly.evaluate_at(&worker, z);
+        // let col_a_at_z = params.a_col_poly.evaluate_at(&worker, z);
+        // let col_b_at_z = params.b_col_poly.evaluate_at(&worker, z);
+        // let col_c_at_z = params.c_col_poly.evaluate_at(&worker, z);
+        // let vanishing_at_z = evaluate_vanishing_for_size(&z, domain_k.size);
+
+        // // vanishing(beta_1) * vanishing(beta_2) * val_m(z) - (beta_2 - row_m(z))(beta_1 - col_m(z)) q_3_m(z) = wellformedness(z)*vanishing(z)
+
+        // let mut lhs = E::Fr::zero();
+        // let mut linearization_challenge = E::Fr::one();
+
+        // let mut tmp = vanishing_on_beta_1_by_vanishing_on_beta_2;
+        // tmp.mul_assign(&val_a_at_z);
+        // tmp.mul_assign(&eta_a);
         
-        let mut t_row = beta_2;
-        t_row.sub_assign(&row_a_at_z);
+        // let mut t_row = beta_2;
+        // t_row.sub_assign(&row_a_at_z);
 
-        let mut t_col = beta_1;
-        t_col.sub_assign(&col_a_at_z);
+        // let mut t_col = beta_1;
+        // t_col.sub_assign(&col_a_at_z);
 
-        t_row.mul_assign(&t_col);
-        t_row.mul_assign(&q_3_a_by_eta_a_at_z);
-        tmp.sub_assign(&t_row);
-        tmp.mul_assign(&linearization_challenge);
+        // t_row.mul_assign(&t_col);
+        // t_row.mul_assign(&q_3_a_by_eta_a_at_z);
+        // tmp.sub_assign(&t_row);
+        // tmp.mul_assign(&linearization_challenge);
 
-        lhs.add_assign(&tmp);
+        // lhs.add_assign(&tmp);
 
-        linearization_challenge.mul_assign(&rational_check_linearization_challenge);
+        // linearization_challenge.mul_assign(&rational_check_linearization_challenge);
 
-        let mut tmp = vanishing_on_beta_1_by_vanishing_on_beta_2;
-        tmp.mul_assign(&val_b_at_z);
-        tmp.mul_assign(&eta_b);
+        // let mut tmp = vanishing_on_beta_1_by_vanishing_on_beta_2;
+        // tmp.mul_assign(&val_b_at_z);
+        // tmp.mul_assign(&eta_b);
         
-        let mut t_row = beta_2;
-        t_row.sub_assign(&row_b_at_z);
+        // let mut t_row = beta_2;
+        // t_row.sub_assign(&row_b_at_z);
 
-        let mut t_col = beta_1;
-        t_col.sub_assign(&col_b_at_z);
+        // let mut t_col = beta_1;
+        // t_col.sub_assign(&col_b_at_z);
 
-        t_row.mul_assign(&t_col);
-        t_row.mul_assign(&q_3_b_by_eta_b_at_z);
-        tmp.sub_assign(&t_row);
-        tmp.mul_assign(&linearization_challenge);
+        // t_row.mul_assign(&t_col);
+        // t_row.mul_assign(&q_3_b_by_eta_b_at_z);
+        // tmp.sub_assign(&t_row);
+        // tmp.mul_assign(&linearization_challenge);
 
-        lhs.add_assign(&tmp);
+        // lhs.add_assign(&tmp);
 
-        linearization_challenge.mul_assign(&rational_check_linearization_challenge);
+        // linearization_challenge.mul_assign(&rational_check_linearization_challenge);
 
-        let mut tmp = vanishing_on_beta_1_by_vanishing_on_beta_2;
-        tmp.mul_assign(&val_c_at_z);
-        tmp.mul_assign(&eta_c);
+        // let mut tmp = vanishing_on_beta_1_by_vanishing_on_beta_2;
+        // tmp.mul_assign(&val_c_at_z);
+        // tmp.mul_assign(&eta_c);
         
-        let mut t_row = beta_2;
-        t_row.sub_assign(&row_c_at_z);
+        // let mut t_row = beta_2;
+        // t_row.sub_assign(&row_c_at_z);
 
-        let mut t_col = beta_1;
-        t_col.sub_assign(&col_c_at_z);
+        // let mut t_col = beta_1;
+        // t_col.sub_assign(&col_c_at_z);
 
-        t_row.mul_assign(&t_col);
-        t_row.mul_assign(&q_3_c_by_eta_c_at_z);
-        tmp.sub_assign(&t_row);
-        tmp.mul_assign(&linearization_challenge);
+        // t_row.mul_assign(&t_col);
+        // t_row.mul_assign(&q_3_c_by_eta_c_at_z);
+        // tmp.sub_assign(&t_row);
+        // tmp.mul_assign(&linearization_challenge);
 
-        lhs.add_assign(&tmp);
+        // lhs.add_assign(&tmp);
 
-        let mut rhs = vanishing_at_z;
-        rhs.mul_assign(&f_3_well_formedness_poly_at_z);
+        // let mut rhs = vanishing_at_z;
+        // rhs.mul_assign(&f_3_well_formedness_poly_at_z);
 
-        assert_eq!(lhs, rhs);
+        // assert_eq!(lhs, rhs);
 
-        let mut z_by_omega_k = z;
-        z_by_omega_k.mul_assign(&domain_k.generator);
+        // let mut z_by_omega_k = z;
+        // z_by_omega_k.mul_assign(&domain_k.generator);
 
-        let q_3_a_by_eta_a_grand_sum_poly_at_z = q_3_a_grand_sum_poly_coeffs.evaluate_at(&worker, z);
-        let q_3_a_by_eta_a_grand_sum_poly_at_z_omega = q_3_a_grand_sum_poly_coeffs.evaluate_at(&worker, z_by_omega_k);
-        let q_3_a_by_eta_a_values_poly_at_z = q_3_a_by_eta_a_poly_coeffs.evaluate_at(&worker, z);
-        let q_3_a_sumcheck_poly_at_z = E::Fr::zero();
+        // let q_3_a_by_eta_a_grand_sum_poly_at_z = q_3_a_grand_sum_poly_coeffs.evaluate_at(&worker, z);
+        // let q_3_a_by_eta_a_grand_sum_poly_at_z_omega = q_3_a_grand_sum_poly_coeffs.evaluate_at(&worker, z_by_omega_k);
+        // let q_3_a_by_eta_a_values_poly_at_z = q_3_a_by_eta_a_poly_coeffs.evaluate_at(&worker, z);
+        // let q_3_a_sumcheck_poly_at_z = E::Fr::zero();
 
-        // sum(z*omega) = sum(z) + el(z) everywhere on k
-        // el(z) is actually el(z) - sigma_3/Domain_size
+        // // sum(z*omega) = sum(z) + el(z) everywhere on k
+        // // el(z) is actually el(z) - sigma_3/Domain_size
 
-        // sum(z*omega) - sum(z) - (el(z) - sum_over_k(el)) = vanishing(z) * quotient(z)
+        // // sum(z*omega) - sum(z) - (el(z) - sum_over_k(el)) = vanishing(z) * quotient(z)
 
-        let mut sigma_3_a_over_size_of_k = one_over_k;
-        sigma_3_a_over_size_of_k.mul_assign(&sigma_3_a);
+        // let mut sigma_3_a_over_size_of_k = one_over_k;
+        // sigma_3_a_over_size_of_k.mul_assign(&sigma_3_a);
 
-        let mut lhs = q_3_a_by_eta_a_grand_sum_poly_at_z;
-        lhs.sub_assign(&q_3_a_by_eta_a_grand_sum_poly_at_z_omega);
-        lhs.add_assign(&q_3_a_by_eta_a_values_poly_at_z);
-        lhs.sub_assign(&sigma_3_a_over_size_of_k);
+        // let mut lhs = q_3_a_by_eta_a_grand_sum_poly_at_z;
+        // lhs.sub_assign(&q_3_a_by_eta_a_grand_sum_poly_at_z_omega);
+        // lhs.add_assign(&q_3_a_by_eta_a_values_poly_at_z);
+        // lhs.sub_assign(&sigma_3_a_over_size_of_k);
 
-        let mut rhs = vanishing_at_z;
-        rhs.mul_assign(&q_3_a_sumcheck_poly_at_z);
+        // let mut rhs = vanishing_at_z;
+        // rhs.mul_assign(&q_3_a_sumcheck_poly_at_z);
 
-        assert_eq!(lhs, rhs);
+        // assert_eq!(lhs, rhs);
 
         Ok(())
     }
@@ -1270,9 +1389,23 @@ pub fn create_proof<E, C>(
 ) -> Result<(), SynthesisError>
     where E: Engine, C: Circuit<E>
 {
+    let worker = Worker::new();
+    let bases = PrecomputedBases::new_42_for_index(&params, &worker);
+    let precomputations = IndexPrecomputations::new(&params, &worker).expect("must precompute");
     let prover = prepare_prover(circuit)?;
 
-    prover.create_proof(params)
+    prover.create_proof(params, &bases, &precomputations)
+}
+
+pub fn test_over_engine_and_circuit<E: Engine, C: Circuit<E> + Clone>(
+    circuit: C
+) {
+    let params = generate_parameters(circuit.clone()).unwrap();
+
+    println!("Params domain H size = {}", params.domain_h_size);
+    println!("Params domain K size = {}", params.domain_k_size);
+
+    let _ = create_proof(circuit, &params).unwrap();
 }
 
 #[cfg(test)]
@@ -1283,18 +1416,6 @@ mod test {
     use super::*;
     use std::marker::PhantomData;
     use super::super::generator::*;
-
-    fn test_over_engine_and_circuit<E: Engine, C: Circuit<E> + Clone>(
-        circuit: C
-    ) {
-        let params = generate_parameters(circuit.clone()).unwrap();
-        let worker = Worker::new();
-
-        println!("Params domain H size = {}", params.domain_h_size);
-        println!("Params domain K size = {}", params.domain_k_size);
-
-        let _ = create_proof(circuit, &params).unwrap();
-    }
 
     #[test]
     fn test_proving_1() {

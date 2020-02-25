@@ -1428,13 +1428,6 @@ impl<F: PrimeField> Polynomial<F, Values> {
         let mut tmp = vec![g; domain_size as usize];
 
         let generator = self.omega;
-        let generator_inv = self.omegainv;
-
-        let size_as_fe = F::from_str(&format!("{}", domain_size)).expect("domain size is a valid field element");
-
-        let mut constant_factor = size_as_fe;
-        let vanishing_at_g_inv = vanishing_at_g.inverse().ok_or(SynthesisError::DivisionByZero)?;
-        constant_factor.mul_assign(&vanishing_at_g_inv);
 
         // constant factor = 1 / ( (1 / N) * (X^N - 1) ) = N / (X^N - 1)
 
@@ -1480,6 +1473,221 @@ impl<F: PrimeField> Polynomial<F, Values> {
         });
 
         values.calculate_sum(&worker)
+    }
+
+    pub fn barycentric_over_coset_evaluate_at(&self, worker: &Worker, x: F, coset_factor: &F) -> Result<F, SynthesisError> {
+        // use a barycentric formula
+        // L_i(x) = \prod_{i != j} (X - x_j) / \prod_{i != j} (x_i - x_j)
+        // that for a case when x_j = g*omega^j is simplified 
+
+        // \prod_{i != j} (X - x_j) = (X^N - g^N) / (X - g * omega^i) 
+
+        // \prod_{i != j} (x_i - x_j) = g * (omega)^i / N
+
+        // L_i(X) = (g*(omega)^i / N) / (X - g*(omega)^i) * (X^N - g^N)
+        // we'll have to pay more for batch inversion at some point, but 
+        // it's still useful
+        let domain_size = self.size() as u64;
+        assert!(domain_size.is_power_of_two());
+
+        // let normalization_factor = ..pow(&[domain_size]);
+
+        let offset = coset_factor.pow(&[domain_size]);
+
+        let normalization_factor = offset.inverse().ok_or(SynthesisError::DivisionByZero)?;
+
+        let mut vanishing_at_x = x.pow(&[domain_size]);
+        vanishing_at_x.sub_assign(&offset);
+
+        // now generate (X - g*omega^i)
+        let mut tmp = vec![x; domain_size as usize];
+
+        let generator = self.omega;
+
+        // constant factor = 1 / ( (1 / N) * (X^N - g^N) ) = N / (X^N - g^N)
+
+        worker.scope(tmp.len(), |scope, chunk| {
+            for (i, vals) in tmp.chunks_mut(chunk)
+                        .enumerate() {
+                scope.spawn(move |_| {
+                    let mut omega_power = generator.pow([(i*chunk) as u64]);
+                    omega_power.mul_assign(&coset_factor);
+                    for val in vals.iter_mut() {
+                        val.sub_assign(&omega_power); // (X - omega^i)
+                        omega_power.mul_assign(&generator);
+                    }
+                });
+            }
+        });
+
+        let mut values = Polynomial::from_values(tmp)?;
+        values.batch_inversion(&worker)?;
+
+        // now multiply by g*omega^i / N * (X^N - g^N) and value for L_i(X)
+
+        let mut constant_factor = vanishing_at_x;
+        constant_factor.mul_assign(&self.minv);
+        constant_factor.mul_assign(&coset_factor);
+        constant_factor.mul_assign(&normalization_factor);
+
+        worker.scope(values.size(), |scope, chunk| {
+            for (i, (vals, coeffs)) in values.as_mut().chunks_mut(chunk)
+                            .zip(self.coeffs.chunks(chunk))
+                        .enumerate() {
+                scope.spawn(move |_| {
+                    let mut omega_power = generator.pow([(i*chunk) as u64]);
+                    omega_power.mul_assign(&constant_factor);
+                    for (val, coeff) in vals.iter_mut().zip(coeffs.iter()) {
+                        val.mul_assign(&omega_power);
+                        val.mul_assign(coeff);
+                        omega_power.mul_assign(&generator);
+                    }
+                });
+            }
+        });
+
+        values.calculate_sum(&worker)
+    }
+
+    // pub fn split_into_even_and_odd_assuming_natural_ordering(
+    //     self, 
+    //     worker: &Worker,
+    // ) -> Result<(Polynomial::<F, Values>, Polynomial::<F, Values>), SynthesisError> {
+    //     // Classical trick: f(x) = f_even(X^2) + x * f_odd(X^2)
+    //     assert!(self.coeffs.len().is_power_of_two());
+    //     assert!(self.coeffs.len() > 1);
+
+    //     let result_len = self.coeffs.len() / 2;
+
+    //     let mut coeffs = self.coeffs;
+
+    //     let mut second: Vec<_> = coeffs.drain(result_len..(2*result_len)).collect();
+    //     let mut first = coeffs;
+
+    //     // f_even(X^2) = (f(x) + f(-x))/ 2
+    //     // f_odd(X^2) = (f(x) - f(-x))/ 2x
+
+    //     worker.scope(first.len(), |scope, chunk| {
+    //         for (i, (first, second)) in first.chunks_mut(chunk)
+    //                     .zip(second.chunks_mut(chunk))
+    //                     .enumerate() {
+    //             scope.spawn(move |_| {
+    //                 let mut divisor = generator_inv.pow([(i*chunk) as u64]);
+    //                 divisor.mul_assign(&constant_factor);
+    //                 for (f, s) in first.iter_mut().zip(second.iter_mut()) {
+    //                     let f_at_x = *f;
+    //                     let f_at_minus_x = *s;
+
+    //                     let mut even = f_at_x;
+    //                     even.add_assign(&f_at_minus_x);
+    //                     even.mul_assign(&two_inv);
+
+    //                     let mut odd = f_at_x;
+    //                     odd.sub_assign(&f_at_minus_x);
+    //                     odd.mul_assign(&divisor);
+
+    //                     *f = even;
+    //                     *s = odd;
+
+    //                     divisor.mul_assign(&generator_inv);
+    //                 }
+    //             });
+    //         }
+    //     });
+
+    //     let even = Polynomial::from_values(first)?;
+    //     let odd = Polynomial::from_values(second)?;
+
+    //     Ok((even, odd))
+    // }
+
+    pub fn split_into_even_and_odd_assuming_natural_ordering(
+        self, 
+        worker: &Worker, 
+        coset_offset: &F
+    ) -> Result<(Polynomial::<F, Values>, Polynomial::<F, Values>), SynthesisError> {
+        // Classical trick: f(x) = f_even(X^2) + x * f_odd(X^2)
+
+        // f(g) = c_0 + c_1 * g + c_2 * g + c_3 * g
+        // f(-g) = c_0 - c_1 * g + c_2 * g - c_3 * g
+        // f_even(g) = c_0 + c_2 * g + ...
+        // f_odd(g) = c_1 * g + c_3 * g + ...
+
+        // f(g*Omega) = c_0 + c_1 * g * Omega + c_2 * g * Omega^2 + c_3 * g * Omega^3
+        // f(-g*Omega) = c_0 - c_1 * g * Omega + c_2 * g * Omega^2 - c_3 * g * Omega^3
+
+        // what should be
+        // f_even(g*Omega^2) = c_0 + c_2 * g*Omega^2 + ...
+        // f_odd(g*Omega^2/g) * g*Omega = c_1 * g * Omega + c_3 * g * Omega^3 + ...
+
+        // (f(g*Omega) + f(-g*Omega))/2 = c_0 + c_2 * g*Omega^2 + ... - those are values of the even coefficient polynomial at X^2/g
+        // (f(g*Omega) - f(-g*Omega))/2 / (g * Omega) = c_1 + c_3 * Omega^2 + ... - those are values of the even coefficient polynomial at X^2/g^2
+
+
+        // to make it homogenius (cause we don't care about particular coefficients)
+        // we make it as 
+        // (f(g*Omega) + f(-g*Omega))/2 / g = c_0/g + c_2 * Omega^2 - values for some polynomial over (X^2 / g^2)
+        // (f(g*Omega) - f(-g*Omega))/2 / (g * Omega) = c_1 + c_3 * Omega^2 - values for some polynomial over (X^2 / g^2)
+        assert!(self.coeffs.len().is_power_of_two());
+        assert!(self.coeffs.len() > 1);
+
+        let result_len = self.coeffs.len() / 2;
+
+        let mut coeffs = self.coeffs;
+
+        let mut second: Vec<_> = coeffs.drain(result_len..(2*result_len)).collect();
+        let mut first = coeffs;
+
+        let generator_inv = self.omegainv;
+
+        let mut two = F::one();
+        two.double();
+
+        let coset_offset_inv = coset_offset.inverse().ok_or(SynthesisError::DivisionByZero)?;
+
+        let two_inv = two.inverse().ok_or(SynthesisError::DivisionByZero)?;
+
+        let mut constant_factor = two_inv;
+        constant_factor.mul_assign(&coset_offset_inv);
+
+        let divisor_even = two_inv;
+        // let divisor_even = constant_factor;
+
+        // f_even(X^2) = (f(x) + f(-x))/ 2
+        // f_odd(X^2) = (f(x) - f(-x))/ 2x
+
+        worker.scope(first.len(), |scope, chunk| {
+            for (i, (first, second)) in first.chunks_mut(chunk)
+                        .zip(second.chunks_mut(chunk))
+                        .enumerate() {
+                scope.spawn(move |_| {
+                    let mut divisor_odd = generator_inv.pow([(i*chunk) as u64]);
+                    divisor_odd.mul_assign(&constant_factor);
+                    for (f, s) in first.iter_mut().zip(second.iter_mut()) {
+                        let f_at_x = *f;
+                        let f_at_minus_x = *s;
+
+                        let mut even = f_at_x;
+                        even.add_assign(&f_at_minus_x);
+                        even.mul_assign(&divisor_even);
+
+                        let mut odd = f_at_x;
+                        odd.sub_assign(&f_at_minus_x);
+                        odd.mul_assign(&divisor_odd);
+
+                        *f = even;
+                        *s = odd;
+
+                        divisor_odd.mul_assign(&generator_inv);
+                    }
+                });
+            }
+        });
+
+        let even = Polynomial::from_values(first)?;
+        let odd = Polynomial::from_values(second)?;
+
+        Ok((even, odd))
     }
 
     pub fn calculate_shifted_grand_product(&self, worker: &Worker) -> Result<Polynomial<F, Values>, SynthesisError> {

@@ -202,6 +202,28 @@ impl<E: Engine, G: Group<E>> EvaluationDomain<E, G> {
         self.distribute_powers(worker, geninv);
     }
 
+    pub fn transform_powers_of_tau_into_lagrange_basis(&mut self, worker: &Worker) {
+        self.ifft(&worker);
+    }
+
+    pub fn transform_powers_of_tau_into_lagrange_basis_on_coset(&mut self, worker: &Worker)
+    {
+        let geninv = self.geninv;
+        self.distribute_powers(worker, geninv);
+
+        // worker.scope(self.coeffs.len(), |scope, chunk| {
+        //     for v in self.coeffs.chunks_mut(chunk) {
+        //         scope.spawn(move |_| {
+        //             for v in v.iter_mut() {
+        //                 v.group_mul_assign(&geninv);
+        //             }
+        //         });
+        //     }
+        // });
+
+        self.ifft(worker);
+    }
+
     /// This evaluates t(tau) for this domain, which is
     /// tau^m - 1 for these radix-2 domains.
     pub fn z(&self, tau: &E::Fr) -> E::Fr {
