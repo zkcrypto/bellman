@@ -5,21 +5,7 @@ use crate::{SynthesisError};
 use std::marker::PhantomData;
 
 use super::cs::*;
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub struct Gate<F: PrimeField> {
-    variables: [Variable; 3],
-    coefficients: [F; 6],
-}
-
-impl<F: PrimeField> Gate<F> {
-    pub fn new_gate(variables:(Variable, Variable, Variable), coeffs: [F; 6]) -> Self {
-        Self {
-            variables: [variables.0, variables.1, variables.2],
-            coefficients: coeffs
-        }
-    }
-}
+use super::gates::*;
 
 #[derive(Debug, Clone)]
 pub struct TestAssembly<E: Engine> {
@@ -33,15 +19,10 @@ pub struct TestAssembly<E: Engine> {
 
     input_assingments: Vec<E::Fr>,
     aux_assingments: Vec<E::Fr>,
-
-    inputs_map: Vec<usize>,
-
     is_finalized: bool
 }
 
 impl<E: Engine> ConstraintSystem<E> for TestAssembly<E> {
-    type GateCoefficients = [E::Fr; 6];
-
     // allocate a variable
     fn alloc<F>(&mut self, value: F) -> Result<Variable, SynthesisError>
     where
@@ -73,7 +54,7 @@ impl<E: Engine> ConstraintSystem<E> for TestAssembly<E> {
 
         let zero = E::Fr::zero();
 
-        let gate_coeffs = [E::Fr::one(), zero, zero, zero, zero, zero];
+        let gate_coeffs = (E::Fr::one(), zero, zero, zero, zero, zero);
 
         let dummy = self.get_dummy_variable();
 
@@ -89,17 +70,12 @@ impl<E: Engine> ConstraintSystem<E> for TestAssembly<E> {
 
     // allocate an abstract gate
     fn new_gate(&mut self, variables: (Variable, Variable, Variable), 
-        coeffs: Self::GateCoefficients) -> Result<(), SynthesisError>
+        coeffs: (E::Fr, E::Fr, E::Fr, E::Fr, E::Fr, E::Fr)) -> Result<(), SynthesisError>
     {
         let gate = Gate::<E::Fr>::new_gate(variables, coeffs);
         // println!("Enforced new gate number {}: {:?}", self.n, gate);
         self.aux_gates.push(gate);
         self.n += 1;
-
-        // let satisfied = self.is_satisfied(true);
-        // if !satisfied {
-        //     return Err(SynthesisError::Unsatisfiable);
-        // }
 
         Ok(())
     }
@@ -143,8 +119,6 @@ impl<E: Engine> TestAssembly<E> {
             input_assingments: vec![],
             aux_assingments: vec![],
 
-            inputs_map: vec![],
-
             is_finalized: false,
         };
 
@@ -163,8 +137,6 @@ impl<E: Engine> TestAssembly<E> {
 
             input_assingments: Vec::with_capacity(num_inputs),
             aux_assingments: Vec::with_capacity(num_aux),
-
-            inputs_map: Vec::with_capacity(num_inputs),
 
             is_finalized: false,
         };

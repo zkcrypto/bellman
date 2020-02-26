@@ -3,7 +3,6 @@ use crate::pairing::{Engine};
 
 use crate::SynthesisError;
 
-use super::test_assembly::Gate;
 use crate::plonk::cs::gates::Variable as PlonkVariable;
 use crate::plonk::cs::gates::Index as PlonkIndex;
 
@@ -80,18 +79,18 @@ pub struct Transpiler<E: Engine> {
     _marker: std::marker::PhantomData<E>
 }
 
-fn allocate_single_linear_combination<E: Engine, CS: PlonkConstraintSystem<E, GateCoefficients = [E::Fr; 6]>> (
+fn allocate_single_linear_combination<E: Engine, CS: PlonkConstraintSystem<E>> (
     cs: &mut CS,
     needs_next_step: bool,
     variables: (PlonkVariable, PlonkVariable, PlonkVariable),
     next_step_variable: Option<Variable>,
-    coefficients: [E::Fr; 6]
+    coefficients: (E::Fr, E::Fr, E::Fr, E::Fr, E::Fr, E::Fr)
 ) -> Result<Option<Variable>, SynthesisError> {
     if needs_next_step {
         assert!(next_step_variable.is_some());
     } else {
         assert!(next_step_variable.is_none());
-        assert!(coefficients[5].is_zero());
+        assert!(coefficients.5.is_zero());
     }
 
     cs.new_gate(variables, coefficients)?;
@@ -148,16 +147,12 @@ fn evaluate_over_plonk_variables<E: Engine, CS: PlonkConstraintSystem<E>>(
         final_value.add_assign(&may_be_value);
     }
 
-    // if multiplier != E::Fr::one() {
-    //     final_value.mul_assign(&multiplier);
-    // }
-
     final_value.sub_assign(&free_term_constant);
 
     Ok(final_value)
 }
 
-fn enforce_lc_as_gates<E: Engine, CS: PlonkConstraintSystem<E, GateCoefficients = [E::Fr; 6]>>(
+fn enforce_lc_as_gates<E: Engine, CS: PlonkConstraintSystem<E>>(
     cs: &mut CS, 
     mut lc: LinearCombination<E>,  
     multiplier: E::Fr, 
@@ -267,7 +262,8 @@ fn enforce_lc_as_gates<E: Engine, CS: PlonkConstraintSystem<E, GateCoefficients 
         // free_term_constant.negate();
 
 
-        cs.new_gate((a_var, b_var, c_var), [a_coeff, b_coeff, c_coeff, zero_fr, free_term_constant, zero_fr]).expect("must make a gate to form an LC");
+        cs.new_gate((a_var, b_var, c_var), 
+            (a_coeff, b_coeff, c_coeff, zero_fr, free_term_constant, zero_fr)).expect("must make a gate to form an LC");
 
         let hint = TranspilationVariant::IntoSingleAdditionGate;
 
@@ -295,7 +291,8 @@ fn enforce_lc_as_gates<E: Engine, CS: PlonkConstraintSystem<E, GateCoefficients 
             let b_var = convert_variable(v1);
             let c_var = convert_variable(v2);
 
-            cs.new_gate((a_var, b_var, c_var), [c0, c1, c2, zero_fr, free_term_constant, minus_one_fr]).expect("must make a gate to form an LC");
+            cs.new_gate((a_var, b_var, c_var), 
+                (c0, c1, c2, zero_fr, free_term_constant, minus_one_fr)).expect("must make a gate to form an LC");
 
             new_intermediate_var
         };
@@ -332,7 +329,7 @@ fn enforce_lc_as_gates<E: Engine, CS: PlonkConstraintSystem<E, GateCoefficients 
 
             cs.new_gate(
                 (a_var, b_var, c_var), 
-                [a_coeff, b_coeff, one_fr, zero_fr, zero_fr, minus_one_fr]
+                (a_coeff, b_coeff, one_fr, zero_fr, zero_fr, minus_one_fr)
             ).expect("must make a gate to form an LC");
 
             c_var = new_intermediate_var
@@ -361,7 +358,7 @@ fn enforce_lc_as_gates<E: Engine, CS: PlonkConstraintSystem<E, GateCoefficients 
 
             cs.new_gate(
                 (a_var, b_var, c_var), 
-                [a_coeff, b_coeff, one_fr, zero_fr, zero_fr, zero_fr]
+                (a_coeff, b_coeff, one_fr, zero_fr, zero_fr, zero_fr)
             ).expect("must make a final gate to form an LC");
         }
 
@@ -399,7 +396,6 @@ impl<E: Engine> Transpiler<E> {
 }
 
 impl<E: Engine> PlonkConstraintSystem<E> for Transpiler<E> {
-    type GateCoefficients = [E::Fr; 6];
 
     fn alloc<F>(&mut self, value: F) -> Result<PlonkVariable, SynthesisError>
     where
@@ -427,7 +423,7 @@ impl<E: Engine> PlonkConstraintSystem<E> for Transpiler<E> {
 
     fn new_gate(&mut self, 
         _variables: (PlonkVariable, PlonkVariable, PlonkVariable), 
-        _coeffs: Self::GateCoefficients
+        _coeffs: (E::Fr, E::Fr, E::Fr, E::Fr, E::Fr, E::Fr)
     ) -> Result<(), SynthesisError> 
     {
         Ok(())
@@ -439,7 +435,6 @@ impl<E: Engine> PlonkConstraintSystem<E> for Transpiler<E> {
 }
 
 impl<'a, E: Engine> PlonkConstraintSystem<E> for &'a mut Transpiler<E> {
-    type GateCoefficients = [E::Fr; 6];
 
     fn alloc<F>(&mut self, value: F) -> Result<PlonkVariable, SynthesisError>
     where
@@ -467,7 +462,7 @@ impl<'a, E: Engine> PlonkConstraintSystem<E> for &'a mut Transpiler<E> {
 
     fn new_gate(&mut self, 
         _variables: (PlonkVariable, PlonkVariable, PlonkVariable), 
-        _coeffs: Self::GateCoefficients
+        _coeffs: (E::Fr, E::Fr, E::Fr, E::Fr, E::Fr, E::Fr)
     ) -> Result<(), SynthesisError> 
     {
         Ok(())
@@ -1247,7 +1242,7 @@ fn split_constant_term<E: Engine, CS: ConstraintSystem<E>>(
 }
 
 
-pub struct Adaptor<'a, E: Engine, CS: PlonkConstraintSystem<E, GateCoefficients = [E::Fr; 6]> + 'a> {
+pub struct Adaptor<'a, E: Engine, CS: PlonkConstraintSystem<E> + 'a> {
     cs: &'a mut CS,
     hints: &'a Vec<(usize, TranspilationVariant)>,
     current_constraint_index: usize,
@@ -1258,20 +1253,7 @@ pub struct Adaptor<'a, E: Engine, CS: PlonkConstraintSystem<E, GateCoefficients 
     _marker: std::marker::PhantomData<E>
 }
 
-impl<'a, E: Engine, CS: PlonkConstraintSystem<E, GateCoefficients = [E::Fr; 6]> + 'a> Adaptor<'a, E, CS> {
-    // fn get_next_hint(&mut self) -> &(usize, TranspilationVariant<E>) {
-    //     let current_hint_index = self.current_hint_index;
-    //     let expected_constraint_index = self.current_constraint_index;
-
-    //     let next_hint = &self.hints[current_hint_index];
-
-    //     assert!(next_hint.0 == expected_constraint_index);
-
-    //     self.current_hint_index += 1;
-    //     self.current_constraint_index += 1;
-
-    //     next_hint
-    // }
+impl<'a, E: Engine, CS: PlonkConstraintSystem<E> + 'a> Adaptor<'a, E, CS> {
 
     fn get_next_hint(&mut self) -> (usize, TranspilationVariant) {
         let current_hint_index = self.current_hint_index;
@@ -1288,7 +1270,7 @@ impl<'a, E: Engine, CS: PlonkConstraintSystem<E, GateCoefficients = [E::Fr; 6]> 
     }
 }
 
-impl<'a, E: Engine, CS: PlonkConstraintSystem<E, GateCoefficients = [E::Fr; 6]> + 'a> crate::ConstraintSystem<E>
+impl<'a, E: Engine, CS: PlonkConstraintSystem<E> + 'a> crate::ConstraintSystem<E>
     for Adaptor<'a, E, CS>
 {
     type Root = Self;
@@ -1417,7 +1399,7 @@ impl<'a, E: Engine, CS: PlonkConstraintSystem<E, GateCoefficients = [E::Fr; 6]> 
 
                 self.cs.new_gate(
                     (var, var, dummy_var),
-                    [c1, zero_fr, zero_fr, c2, c0, zero_fr]
+                    (c1, zero_fr, zero_fr, c2, c0, zero_fr)
                 ).expect("must make a quadratic gate");
             },
             TranspilationVariant::IntoMultiplicationGate(boxed_hints) => {
@@ -1529,7 +1511,7 @@ impl<'a, E: Engine, CS: PlonkConstraintSystem<E, GateCoefficients = [E::Fr; 6]> 
                     // A*B == constant
                     let t = self.cs.new_gate(
                         (a_var, b_var, dummy_var), 
-                        [zero_fr, zero_fr, zero_fr, q_m, constant_term, zero_fr]
+                        (zero_fr, zero_fr, zero_fr, q_m, constant_term, zero_fr)
                     ); //.expect("must make a multiplication gate with C being constant");
                     if t.is_err() {
                         // let ann: String = _ann().into();
@@ -1543,7 +1525,7 @@ impl<'a, E: Engine, CS: PlonkConstraintSystem<E, GateCoefficients = [E::Fr; 6]> 
                     let c_var = c_var.expect("C must be a variable");
                     let t = self.cs.new_gate(
                         (a_var, b_var, c_var), 
-                        [zero_fr, zero_fr, q_c, q_m, zero_fr, zero_fr]
+                        (zero_fr, zero_fr, q_c, q_m, zero_fr, zero_fr)
                     ); //.expect("must make a multiplication gate");
 
                     if t.is_err() {
@@ -1771,8 +1753,8 @@ impl<'a, E:Engine, C: crate::Circuit<E>> AdaptorCircuit<'a, E, C> {
     }
 }
 
-impl<'a, E: Engine, C: crate::Circuit<E>> PlonkCircuit<E, [E::Fr; 6]> for AdaptorCircuit<'a, E, C> {
-    fn synthesize<CS: PlonkConstraintSystem<E, GateCoefficients = [E::Fr; 6]>>(&self, cs: &mut CS) -> Result<(), SynthesisError> {
+impl<'a, E: Engine, C: crate::Circuit<E>> PlonkCircuit<E> for AdaptorCircuit<'a, E, C> {
+    fn synthesize<CS: PlonkConstraintSystem<E>>(&self, cs: &mut CS) -> Result<(), SynthesisError> {
         let mut adaptor = Adaptor::<E, CS> {
             cs: cs,
             hints: self.hints,
