@@ -59,6 +59,20 @@ pub struct RedshiftSetupPrecomputation<F: PrimeField, I: IopInstance<F>>{
     pub sigma_3_aux: SinglePolySetupData<F, I>,
 }
 
+pub struct WitnessOpeningRequest<'a, F: PrimeField> {
+    pub polynomials: Vec<&'a Polynomial<F, Values>>,
+    pub opening_point: F,
+    pub opening_values: Vec<F>
+}
+
+pub struct SetupOpeningRequest<'a, F: PrimeField> {
+    pub polynomials: Vec<&'a Polynomial<F, Values>>,
+    pub setup_point: F,
+    pub setup_values: Vec<F>,
+    pub opening_point: F,
+    pub opening_values: Vec<F>
+}
+
 pub(crate) fn commit_single_poly<E: Engine, CP: CTPrecomputations<E::Fr>>(
         poly: &Polynomial<E::Fr, Coefficients>, 
         omegas_bitreversed: &CP,
@@ -66,22 +80,26 @@ pub(crate) fn commit_single_poly<E: Engine, CP: CTPrecomputations<E::Fr>>(
         worker: &Worker
     ) -> Result<SinglePolyCommitmentData<E::Fr, FriSpecificBlake2sTree<E::Fr>>, SynthesisError> 
 where E::Fr : PartialTwoBitReductionField {
-        let lde = poly.clone().bitreversed_lde_using_bitreversed_ntt_with_partial_reduction(
-            worker, 
-            params.lde_factor, 
-            omegas_bitreversed, 
-            &E::Fr::multiplicative_generator()
-        )?;
+    let lde = poly.clone().bitreversed_lde_using_bitreversed_ntt_with_partial_reduction(
+        worker, 
+        params.lde_factor, 
+        omegas_bitreversed, 
+        &E::Fr::multiplicative_generator()
+    )?;
 
-        let oracle_params = FriSpecificBlake2sTreeParams {
-            values_per_leaf: (1 << params.coset_params.cosets_schedule[0])
-        };
+    let oracle_params = FriSpecificBlake2sTreeParams {
+        values_per_leaf: (1 << params.coset_params.cosets_schedule[0])
+    };
 
-        let oracle = FriSpecificBlake2sTree::create(&lde.as_ref(), &oracle_params);
+    let oracle = FriSpecificBlake2sTree::create(&lde.as_ref(), &oracle_params);
 
-        Ok(SinglePolyCommitmentData::<E::Fr, _> {
-            poly: lde,
-            oracle: oracle
-        })
-    }
+    Ok(SinglePolyCommitmentData::<E::Fr, _> {
+        poly: lde,
+        oracle: oracle
+    })
+}
+
+    
+    
+
   

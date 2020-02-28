@@ -8,7 +8,6 @@ use crate::multicore::*;
 
 use crate::plonk::polynomials::*;
 use crate::plonk::domains::*;
-use crate::plonk::utils::*;
 use crate::plonk::fft::cooley_tukey_ntt::CTPrecomputations;
 use crate::plonk::commitments::transcript::*;
 use crate::plonk::commitments::transparent::iop_compiler::coset_combining_blake2s_tree::*;
@@ -17,6 +16,7 @@ use crate::plonk::transparent_engine::PartialTwoBitReductionField;
 
 use super::gates::*;
 use super::data_structures::*;
+use super::utils::*;
 
 #[derive(Debug)]
 struct GeneratorAssembly<E: Engine> {
@@ -131,259 +131,24 @@ impl<E: Engine> GeneratorAssembly<E> {
         // <Self as ConstraintSystem<E>>::ZERO
         Variable(Index::Aux(1))
     }
-
-    pub(crate) fn make_circuit_description_polynomials(&self, worker: &Worker) -> Result<(
-        Polynomial::<E::Fr, Values>, Polynomial::<E::Fr, Values>, Polynomial::<E::Fr, Values>,
-        Polynomial::<E::Fr, Values>, Polynomial::<E::Fr, Values>, Polynomial::<E::Fr, Values>
-    ), SynthesisError> {
-        assert!(self.is_finalized);
-        let total_num_gates = self.input_gates.len() + self.aux_gates.len();
-        let mut q_l = vec![E::Fr::zero(); total_num_gates];
-        let mut q_r = vec![E::Fr::zero(); total_num_gates];
-        let mut q_o = vec![E::Fr::zero(); total_num_gates];
-        let mut q_m = vec![E::Fr::zero(); total_num_gates];
-        let mut q_c = vec![E::Fr::zero(); total_num_gates];
-        //short from additonal selector
-        let mut q_add_sel = vec![E::Fr::zero(); total_num_gates];
-
-        // expect a small number of inputs
-        for ((((((gate, q_l), q_r), q_o), q_m), q_c), q_add_sel) in self.input_gates.iter()
-                                            .zip(q_l.iter_mut())
-                                            .zip(q_r.iter_mut())
-                                            .zip(q_o.iter_mut())
-                                            .zip(q_m.iter_mut())
-                                            .zip(q_c.iter_mut())
-                                            .zip(q_add_sel.iter_mut())
-        {
-            *q_l = gate.q_l().unpack();
-            *q_r = gate.q_r().unpack();
-            *q_o = gate.q_o().unpack();
-            *q_m = gate.q_m().unpack();
-            *q_c = gate.q_c().unpack();
-            *q_add_sel = gate.q_add_sel().unpack();
-        }
-
-
-        let num_input_gates = self.input_gates.len();
-        let q_l_aux = &mut q_l[num_input_gates..];
-        let q_r_aux = &mut q_r[num_input_gates..];
-        let q_o_aux = &mut q_o[num_input_gates..];
-        let q_m_aux = &mut q_m[num_input_gates..];
-        let q_c_aux = &mut q_c[num_input_gates..];
-        let q_add_sel_aux = &mut q_add_sel[num_input_gates..];
-
-        debug_assert!(self.aux_gates.len() == q_l_aux.len());
-
-        worker.scope(self.aux_gates.len(), |scope, chunk| {
-            for ((((((gate, q_l), q_r), q_o), q_m), q_c), q_add_sel) in self.aux_gates.chunks(chunk)
-                                                            .zip(q_l_aux.chunks_mut(chunk))
-                                                            .zip(q_r_aux.chunks_mut(chunk))
-                                                            .zip(q_o_aux.chunks_mut(chunk))
-                                                            .zip(q_m_aux.chunks_mut(chunk))
-                                                            .zip(q_c_aux.chunks_mut(chunk))
-                                                            .zip(q_add_sel_aux.chunks_mut(chunk))
-            {
-                scope.spawn(move |_| {
-                    for ((((((gate, q_l), q_r), q_o), q_m), q_c), q_add_sel) in gate.iter()
-                                                            .zip(q_l.iter_mut())
-                                                            .zip(q_r.iter_mut())
-                                                            .zip(q_o.iter_mut())
-                                                            .zip(q_m.iter_mut())
-                                                            .zip(q_c.iter_mut())
-                                                            .zip(q_add_sel.iter_mut())
-                        {
-                            *q_l = gate.q_l().unpack();
-                            *q_r = gate.q_r().unpack();
-                            *q_o = gate.q_o().unpack();
-                            *q_m = gate.q_m().unpack();
-                            *q_c = gate.q_c().unpack();
-                            *q_add_sel = gate.q_add_sel().unpack();
-                        }
-                });
-            }
-        });
-
-        let q_l = Polynomial::from_values(q_l)?;
-        let q_r = Polynomial::from_values(q_r)?;
-        let q_o = Polynomial::from_values(q_o)?;
-        let q_m = Polynomial::from_values(q_m)?;
-        let q_c = Polynomial::from_values(q_c)?;
-        let q_add_sel = Polynomial::from_values(q_add_sel)?;
-
-        Ok((q_l, q_r, q_o, q_m, q_c, q_add_sel))
-    }
-
-    pub(crate) fn calculate_permutations_as_in_a_paper(&self) -> (Vec<usize>, Vec<usize>, Vec<usize>) {
-        assert!(self.is_finalized);
-
-        let num_gates = self.input_gates.len() + self.aux_gates.len();
-        let num_partitions = self.num_inputs + self.num_aux;
-        let num_inputs = self.num_inputs;
-        // in the partition number i there is a set of indexes in V = (a, b, c) such that V_j = i
-        let mut partitions = vec![vec![]; num_partitions + 1];
-
-        for (j, gate) in self.input_gates.iter().chain(&self.aux_gates).enumerate()
-        {
-            match gate.a_wire() {
-                Variable(Index::Input(index)) => {
-                    let i = *index;
-                    partitions[i].push(j+1);
-                },
-                Variable(Index::Aux(index)) => {
-                    if *index != 0 {
-                        let i = index + num_inputs;
-                        partitions[i].push(j+1);
-                    }
-                },
-            }
-
-            match gate.b_wire() {
-                Variable(Index::Input(index)) => {
-                    let i = *index;
-                    partitions[i].push(j + 1 + num_gates);
-                },
-                Variable(Index::Aux(index)) => {
-                    if *index != 0 {
-                        let i = index + num_inputs;
-                        partitions[i].push(j + 1 + num_gates);
-                    }
-                },
-            }
-
-            match gate.c_wire() {
-                Variable(Index::Input(index)) => {
-                    let i = *index;
-                    partitions[i].push(j + 1 + 2*num_gates);
-                },
-                Variable(Index::Aux(index)) => {
-                    if *index != 0 {
-                        let i = index + num_inputs;
-                        partitions[i].push(j + 1 + 2*num_gates);
-                    }
-                },
-            }
-        }
-
-        let mut sigma_1: Vec<_> = (1..=num_gates).collect();
-        let mut sigma_2: Vec<_> = ((num_gates+1)..=(2*num_gates)).collect();
-        let mut sigma_3: Vec<_> = ((2*num_gates + 1)..=(3*num_gates)).collect();
-
-        let mut permutations = vec![vec![]; num_partitions + 1];
-
-        fn rotate(mut vec: Vec<usize>) -> Vec<usize> {
-            if vec.len() > 0 {
-                let els: Vec<_> = vec.drain(0..1).collect();
-                vec.push(els[0]);
-            }
-
-            vec
-        }
-
-        for (i, partition) in partitions.into_iter().enumerate().skip(1) {
-            // copy-permutation should have a cycle around the partition
-
-            let permutation = rotate(partition.clone());
-            permutations[i] = permutation.clone();
-
-            for (original, new) in partition.into_iter()
-                                    .zip(permutation.into_iter()) 
-            {
-                if original <= num_gates {
-                    debug_assert!(sigma_1[original - 1] == original);
-                    sigma_1[original - 1] = new;
-                } else if original <= 2*num_gates {
-                    debug_assert!(sigma_2[original - num_gates - 1] == original);
-                    sigma_2[original - num_gates - 1] = new;
-                } else {
-                    debug_assert!(sigma_3[original - 2*num_gates - 1] == original);
-                    sigma_3[original - 2*num_gates - 1] = new;
-                }
-            }
-        }
-
-        (sigma_1, sigma_2, sigma_3)
-    }
-
-    fn make_s_id(&self) -> Vec<usize> {
-        assert!(self.is_finalized);
-
-        let size = self.input_gates.len() + self.aux_gates.len();
-        let result: Vec<_> = (1..=size).collect();
-
-        result
-    }
-
-    pub(crate) fn output_setup_polynomials(&self, worker: &Worker) -> Result<
-    (
-        Polynomial::<E::Fr, Coefficients>, // q_l
-        Polynomial::<E::Fr, Coefficients>, // q_r
-        Polynomial::<E::Fr, Coefficients>, // q_o
-        Polynomial::<E::Fr, Coefficients>, // q_m
-        Polynomial::<E::Fr, Coefficients>, // q_c
-        Polynomial::<E::Fr, Coefficients>, // q_add_sel
-        Polynomial::<E::Fr, Coefficients>, // s_id
-        Polynomial::<E::Fr, Coefficients>, // sigma_1
-        Polynomial::<E::Fr, Coefficients>, // sigma_2
-        Polynomial::<E::Fr, Coefficients>, // sigma_3
-    ), SynthesisError> 
-    {
-        assert!(self.is_finalized);
-
-        let s_id = self.make_s_id();
-        let (sigma_1, sigma_2, sigma_3) = self.calculate_permutations_as_in_a_paper();
-
-        let s_id = convert_to_field_elements::<E::Fr>(&s_id, &worker);
-        let sigma_1 = convert_to_field_elements::<E::Fr>(&sigma_1, &worker);
-        let sigma_2 = convert_to_field_elements::<E::Fr>(&sigma_2, &worker);
-        let sigma_3 = convert_to_field_elements::<E::Fr>(&sigma_3, &worker);
-
-        let s_id = Polynomial::from_values(s_id)?;
-        let sigma_1 = Polynomial::from_values(sigma_1)?;
-        let sigma_2 = Polynomial::from_values(sigma_2)?;
-        let sigma_3 = Polynomial::from_values(sigma_3)?;
-
-        let (q_l, q_r, q_o, q_m, q_c, q_add_sel) = self.make_circuit_description_polynomials(&worker)?;
-
-        let s_id = s_id.ifft(&worker);
-        let sigma_1 = sigma_1.ifft(&worker);
-        let sigma_2 = sigma_2.ifft(&worker);
-        let sigma_3 = sigma_3.ifft(&worker);
-
-        let q_l = q_l.ifft(&worker);
-        let q_r = q_r.ifft(&worker);
-        let q_o = q_o.ifft(&worker);
-        let q_m = q_m.ifft(&worker);
-        let q_c = q_c.ifft(&worker);
-        let q_add_sel = q_add_sel.ifft(&worker);
-
-        Ok((q_l, q_r, q_o, q_m, q_c, q_add_sel, s_id, sigma_1, sigma_2, sigma_3))
-    }
-
+   
     pub(crate) fn num_gates(&self) -> usize {
         self.input_gates.len() + self.aux_gates.len()
     }
-
-    fn finalize(&mut self) {
-        if self.is_finalized {
-            return;
-        }
-
-        let n = self.input_gates.len() + self.aux_gates.len();
-        if (n+1).is_power_of_two() {
+   
+    fn finalize(&mut self) ->(&Vec<Gate<E::Fr>>, &Vec<Gate<E::Fr>>, usize, usize) {
+        if !self.is_finalized {
+            let n = self.input_gates.len() + self.aux_gates.len();
+            if !(n+1).is_power_of_two() {
+                let empty_gate = Gate::<E::Fr>::new_empty_gate(self.dummy_variable());
+                let new_aux_len = (n+1).next_power_of_two() - 1 - self.input_gates.len();
+                self.aux_gates.resize(new_aux_len, empty_gate);
+                let n = self.input_gates.len() + self.aux_gates.len();
+                assert!((n+1).is_power_of_two());
+            }       
             self.is_finalized = true;
-            return;
         }
-
-        let empty_gate = Gate::<E::Fr>::new_empty_gate(self.dummy_variable());
-
-        let new_aux_len = (n+1).next_power_of_two() - 1 - self.input_gates.len();
-
-        self.aux_gates.resize(new_aux_len, empty_gate);
-
-        let n = self.input_gates.len() + self.aux_gates.len();
-        assert!((n+1).is_power_of_two());
-
-        self.is_finalized = true;
+        (&self.input_gates, &self.aux_gates, self.num_inputs, self.num_aux)
     }
 }
 
@@ -397,7 +162,7 @@ pub fn setup_with_precomputations<E: Engine, C: Circuit<E>, CP: CTPrecomputation
 {
     let mut assembly = GeneratorAssembly::<E>::new();
     circuit.synthesize(&mut assembly)?;
-    assembly.finalize();
+    let (input_gates, aux_gates, num_inputs, num_aux) = assembly.finalize();
     
     let n = assembly.num_gates();
 
@@ -405,7 +170,8 @@ pub fn setup_with_precomputations<E: Engine, C: Circuit<E>, CP: CTPrecomputation
 
     let mut transcript = T::new();
 
-    let (q_l, q_r, q_o, q_m, q_c, q_add_sel, s_id, sigma_1, sigma_2, sigma_3) = assembly.output_setup_polynomials(&worker)?;
+    let (q_l, q_r, q_o, q_m, q_c, q_add_sel, s_id, sigma_1, sigma_2, sigma_3) = 
+        output_setup_polynomials::<E>(input_gates, aux_gates, num_inputs, num_aux, &worker)?;
 
     let q_l_commitment_data = commit_single_poly::<E, CP>(&q_l, omegas_bitreversed, &params, &worker)?;
     let q_r_commitment_data = commit_single_poly::<E, CP>(&q_r, omegas_bitreversed, &params, &worker)?;
