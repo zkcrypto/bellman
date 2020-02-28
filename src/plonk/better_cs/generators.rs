@@ -136,7 +136,7 @@ impl<E: Engine> GeneratorAssembly<E> {
         self.input_gates.len() + self.aux_gates.len()
     }
    
-    fn finalize(&mut self) ->(&Vec<Gate<E::Fr>>, &Vec<Gate<E::Fr>>, usize, usize) {
+    fn finalize(&mut self) {
         if !self.is_finalized {
             let n = self.input_gates.len() + self.aux_gates.len();
             if !(n+1).is_power_of_two() {
@@ -147,8 +147,11 @@ impl<E: Engine> GeneratorAssembly<E> {
                 assert!((n+1).is_power_of_two());
             }       
             self.is_finalized = true;
-        }
-        (&self.input_gates, &self.aux_gates, self.num_inputs, self.num_aux)
+        }     
+    }
+
+    fn get_data(&self) -> (&Vec<Gate<E::Fr>>, &Vec<Gate<E::Fr>>, &usize, &usize) {
+        (&self.input_gates, &self.aux_gates, &self.num_inputs, &self.num_aux)
     }
 }
 
@@ -162,10 +165,11 @@ pub fn setup_with_precomputations<E: Engine, C: Circuit<E>, CP: CTPrecomputation
 {
     let mut assembly = GeneratorAssembly::<E>::new();
     circuit.synthesize(&mut assembly)?;
-    let (input_gates, aux_gates, num_inputs, num_aux) = assembly.finalize();
     
-    let n = assembly.num_gates();
-
+    assembly.finalize();
+    let (input_gates, aux_gates, num_inputs, num_aux) = assembly.get_data();
+    let n = input_gates.len() + aux_gates.len();
+    
     let worker = Worker::new();
 
     let mut transcript = T::new();

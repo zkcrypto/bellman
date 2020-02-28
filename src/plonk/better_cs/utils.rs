@@ -11,6 +11,11 @@ use crate::plonk::fft::cooley_tukey_ntt::*;
 use crate::multicore::*;
 use super::gates::*;
 
+use crate::plonk::commitments::transparent::fri::coset_combining_fri::*;
+use crate::plonk::commitments::transparent::fri::coset_combining_fri::fri::*;
+use crate::plonk::commitments::transcript::*;
+use crate::plonk::domains::*;
+
 pub(crate) fn convert_to_field_elements<F: PrimeField>(indexes: &[usize], worker: &Worker) -> Vec<F> {
     let mut result = vec![F::zero(); indexes.len()];
     
@@ -293,4 +298,235 @@ pub(crate) fn output_setup_polynomials<E: Engine>(
     let q_add_sel = q_add_sel.ifft(&worker);
 
     Ok((q_l, q_r, q_o, q_m, q_c, q_add_sel, s_id, sigma_1, sigma_2, sigma_3))
+}
+
+pub(crate) fn multiopening<E: Engine, P: FriPrecomputations<E::Fr>, T: Transcript<E::Fr, Input = <FriSpecificBlake2sTree<E::Fr> as IopInstance<E::Fr>> :: Commitment> >
+    ( 
+        witness_opening_requests: Vec<WitnessOpeningRequest<E::Fr>>,
+        setup_opening_requests: Vec<SetupOpeningRequest<E::Fr>>,
+        omegas_inv_bitreversed: &P,
+        params: &RedshiftParameters<E::Fr>,
+        worker: &Worker,
+        transcript: &mut T
+    ) -> Result<(), SynthesisError> 
+where E::Fr : PartialTwoBitReductionField
+{
+    let required_divisor_size = witness_opening_requests[0].polynomials[0].size();
+
+    let mut final_aggregate = Polynomial::from_values(vec![E::Fr::zero(); required_divisor_size])?;
+
+    let mut precomputed_bitreversed_coset_divisor = Polynomial::from_values(vec![E::Fr::one(); required_divisor_size])?;
+    precomputed_bitreversed_coset_divisor.distribute_powers(&worker, precomputed_bitreversed_coset_divisor.omega);
+    precomputed_bitreversed_coset_divisor.scale(&worker, E::Fr::multiplicative_generator());
+    precomputed_bitreversed_coset_divisor.bitreverse_enumeration(&worker);
+
+    let mut scratch_space_numerator = final_aggregate.clone();
+    let mut scratch_space_denominator = final_aggregate.clone();
+
+    let aggregation_challenge = transcript.get_challenge();
+
+    let mut alpha = E::Fr::one();
+
+    for witness_request in witness_opening_requests.iter() {
+        let z = witness_request.opening_point;
+        let mut minus_z = z;
+        minus_z.negate();
+        scratch_space_denominator.reuse_allocation(&precomputed_bitreversed_coset_divisor);
+        scratch_space_denominator.add_constant(&worker, &minus_z);
+        scratch_space_denominator.batch_inversion(&worker)?;
+        for (poly, value) in witness_request.polynomials.iter().zip(witness_request.opening_values.iter()) {
+            scratch_space_numerator.reuse_allocation(&poly);
+            let mut v = *value;
+            v.negate();
+            scratch_space_numerator.add_constant(&worker, &v);
+            scratch_space_numerator.mul_assign(&worker, &scratch_space_denominator);
+            if aggregation_challenge != E::Fr::one() {
+                scratch_space_numerator.scale(&worker, alpha);
+            }
+
+            final_aggregate.add_assign(&worker, &scratch_space_numerator);
+
+            alpha.mul_assign(&aggregation_challenge);
+        }
+    }
+
+    for setup_request in setup_opening_requests.iter() {
+        // for now assume a single setup point per poly and setup point is the same for all polys
+        // (omega - y)(omega - z) = omega^2 - (z+y)*omega + zy
+        
+        let setup_point = setup_request.setup_point;
+        let opening_point = setup_request.opening_point;
+
+        let mut t0 = setup_point;
+        t0.add_assign(&opening_point);
+        t0.negate();
+
+        let mut t1 = setup_point;
+        t1.mul_assign(&opening_point);
+
+        scratch_space_denominator.reuse_allocation(&precomputed_bitreversed_coset_divisor);
+        worker.scope(scratch_space_denominator.as_ref().len(), |scope, chunk| {
+            for den in scratch_space_denominator.as_mut().chunks_mut(chunk) {
+                scope.spawn(move |_| {
+                    for d in den.iter_mut() {
+                        let mut result = *d;
+                        result.square();
+                        result.add_assign(&t1);
+
+                        let mut tmp = t0;
+                        tmp.mul_assign(&d);
+
+                        result.add_assign(&tmp);
+
+                        *d = result;
+                    }
+                });
+            }
+        });
+
+        scratch_space_denominator.batch_inversion(&worker)?;
+
+        // each numerator must have a value removed of the polynomial that interpolates the following points:
+        // (setup_x, setup_y)
+        // (opening_x, opening_y)
+        // such polynomial is linear and has a form e.g setup_y + (X - setup_x) * (witness_y - setup_y) / (witness_x - setup_x)
+
+        for ((poly, value), setup_value) in setup_request.polynomials.iter().zip(setup_request.opening_values.iter()).zip(setup_request.setup_values.iter()) {
+            scratch_space_numerator.reuse_allocation(&poly);
+
+            let intercept = setup_value;
+            let mut t0 = opening_point;
+            t0.sub_assign(&setup_point);
+
+            let mut slope = t0.inverse().expect("must exist");
+            
+            let mut t1 = *value;
+            t1.sub_assign(&setup_value);
+
+            slope.mul_assign(&t1);
+
+            worker.scope(scratch_space_numerator.as_ref().len(), |scope, chunk| {
+                for (num, omega) in scratch_space_numerator.as_mut().chunks_mut(chunk).
+                            zip(precomputed_bitreversed_coset_divisor.as_ref().chunks(chunk)) {
+                    scope.spawn(move |_| {
+                        for (n, omega) in num.iter_mut().zip(omega.iter()) {
+                            let mut result = *omega;
+                            result.sub_assign(&setup_point);
+                            result.mul_assign(&slope);
+                            result.add_assign(&intercept);
+
+                            n.sub_assign(&result);
+                        }
+                    });
+                }
+            });
+
+            scratch_space_numerator.mul_assign(&worker, &scratch_space_denominator);
+            if aggregation_challenge != E::Fr::one() {
+                scratch_space_numerator.scale(&worker, alpha);
+            }
+
+            final_aggregate.add_assign(&worker, &scratch_space_numerator);
+
+            alpha.mul_assign(&aggregation_challenge);
+        }
+    }
+
+    let fri_proto = CosetCombiningFriIop::proof_from_lde(
+        &final_aggregate,
+        params.lde_factor,
+        params.output_coeffs_at_degree_plus_one,
+        omegas_inv_bitreversed,
+        &worker,
+        transcript,
+        &params.coset_params
+    )?;
+
+    Ok(())
+}
+
+pub(crate) fn calculate_inverse_vanishing_polynomial_in_a_coset<E: Engine>(
+    worker: &Worker, 
+    poly_size:usize, 
+    vahisning_size: usize
+    ) -> Result<Polynomial::<E::Fr, Values>, SynthesisError> 
+{
+    assert!(poly_size.is_power_of_two());
+    assert!(vahisning_size.is_power_of_two());
+
+    // update from the paper - it should not hold for the last generator, omega^(n) in original notations
+
+    // Z(X) = (X^(n+1) - 1) / (X - omega^(n)) => Z^{-1}(X) = (X - omega^(n)) / (X^(n+1) - 1)
+
+    let domain = Domain::<E::Fr>::new_for_size(vahisning_size as u64)?;
+    let n_domain_omega = domain.generator;
+    let mut root = n_domain_omega.pow([(vahisning_size - 1) as u64]);
+    root.negate();
+
+    let multiplicative_generator = E::Fr::multiplicative_generator();
+
+    let mut negative_one = E::Fr::one();
+    negative_one.negate();
+
+    let mut numerator = Polynomial::<E::Fr, Values>::from_values(vec![multiplicative_generator; poly_size])?;
+    // evaluate X in linear time
+
+    numerator.distribute_powers(&worker, numerator.omega);
+    numerator.add_constant(&worker, &root);
+
+    // numerator.add_constant(&worker, &negative_one);
+    // now it's a series of values in a coset
+
+    // now we should evaluate X^(n+1) - 1 in a linear time
+
+    let shift = multiplicative_generator.pow([vahisning_size as u64]);
+    
+    let mut denominator = Polynomial::<E::Fr, Values>::from_values(vec![shift; poly_size])?;
+
+    // elements are h^size - 1, (hg)^size - 1, (hg^2)^size - 1, ...
+
+    denominator.distribute_powers(&worker, denominator.omega.pow([vahisning_size as u64]));
+    denominator.add_constant(&worker, &negative_one);
+
+    denominator.batch_inversion(&worker)?;
+
+    numerator.mul_assign(&worker, &denominator);
+
+    Ok(numerator)
+}
+
+pub(crate) fn evaluate_inverse_vanishing_poly<E: Engine>(vahisning_size: usize, point: E::Fr) -> E::Fr {
+    assert!(vahisning_size.is_power_of_two());
+
+    // update from the paper - it should not hold for the last generator, omega^(n) in original notations
+
+    // Z(X) = (X^(n+1) - 1) / (X - omega^(n)) => Z^{-1}(X) = (X - omega^(n)) / (X^(n+1) - 1)
+
+    let domain = Domain::<E::Fr>::new_for_size(vahisning_size as u64).expect("should fit");
+    let n_domain_omega = domain.generator;
+    let root = n_domain_omega.pow([(vahisning_size - 1) as u64]);
+
+    let mut numerator = point;
+    numerator.sub_assign(&root);
+
+    let mut denominator = point.pow([vahisning_size as u64]);
+    denominator.sub_assign(&E::Fr::one());
+
+    let denominator = denominator.inverse().expect("must exist");
+
+    numerator.mul_assign(&denominator);
+
+    numerator
+}
+
+pub(crate) fn calculate_lagrange_poly<E: Engine>(worker: &Worker, poly_size:usize, poly_number: usize) 
+    -> Result<Polynomial::<E::Fr, Coefficients>, SynthesisError> {
+    assert!(poly_size.is_power_of_two());
+    assert!(poly_number < poly_size);
+
+    let mut poly = Polynomial::<E::Fr, Values>::from_values(vec![E::Fr::zero(); poly_size])?;
+
+    poly.as_mut()[poly_number] = E::Fr::one();
+
+    Ok(poly.ifft(&worker))
 }
