@@ -9,6 +9,11 @@ use crate::multicore::*;
 use crate::plonk::polynomials::*;
 use crate::plonk::domains::*;
 use crate::plonk::utils::*;
+use crate::plonk::fft::cooley_tukey_ntt::CTPrecomputations;
+use crate::plonk::commitments::transcript::*;
+use crate::plonk::commitments::transparent::iop_compiler::coset_combining_blake2s_tree::*;
+use crate::plonk::commitments::transparent::iop_compiler::*;
+use crate::plonk::transparent_engine::PartialTwoBitReductionField;
 
 use super::gates::*;
 use super::data_structures::*;
@@ -141,26 +146,6 @@ impl<E: Engine> GeneratorAssembly<E> {
         //short from additonal selector
         let mut q_add_sel = vec![E::Fr::zero(); total_num_gates];
 
-        fn coeff_into_field_element<F: PrimeField>(coeff: &Coeff<F>) -> F {
-            match coeff {
-                Coeff::Zero => {
-                    F::zero()
-                },
-                Coeff::One => {
-                    F::one()
-                },
-                Coeff::NegativeOne => {
-                    let mut tmp = F::one();
-                    tmp.negate();
-
-                    tmp
-                },
-                Coeff::Full(c) => {
-                    *c
-                },
-            }
-        }
-
         // expect a small number of inputs
         for ((((((gate, q_l), q_r), q_o), q_m), q_c), q_add_sel) in self.input_gates.iter()
                                             .zip(q_l.iter_mut())
@@ -170,12 +155,12 @@ impl<E: Engine> GeneratorAssembly<E> {
                                             .zip(q_c.iter_mut())
                                             .zip(q_add_sel.iter_mut())
         {
-            *q_l = coeff_into_field_element::<E::Fr>(&gate.q_l());
-            *q_r = coeff_into_field_element::<E::Fr>(&gate.q_r());
-            *q_o = coeff_into_field_element::<E::Fr>(&gate.q_o());
-            *q_m = coeff_into_field_element::<E::Fr>(&gate.q_m());
-            *q_c = coeff_into_field_element::<E::Fr>(&gate.q_c());
-            *q_add_sel = coeff_into_field_element::<E::Fr>(&gate.q_add_sel());
+            *q_l = gate.q_l().unpack();
+            *q_r = gate.q_r().unpack();
+            *q_o = gate.q_o().unpack();
+            *q_m = gate.q_m().unpack();
+            *q_c = gate.q_c().unpack();
+            *q_add_sel = gate.q_add_sel().unpack();
         }
 
 
@@ -207,12 +192,12 @@ impl<E: Engine> GeneratorAssembly<E> {
                                                             .zip(q_c.iter_mut())
                                                             .zip(q_add_sel.iter_mut())
                         {
-                            *q_l = coeff_into_field_element(&gate.q_l());
-                            *q_r = coeff_into_field_element(&gate.q_r());
-                            *q_o = coeff_into_field_element(&gate.q_o());
-                            *q_m = coeff_into_field_element(&gate.q_m());
-                            *q_c = coeff_into_field_element(&gate.q_c());
-                            *q_add_sel = coeff_into_field_element(&gate.q_add_sel());
+                            *q_l = gate.q_l().unpack();
+                            *q_r = gate.q_r().unpack();
+                            *q_o = gate.q_o().unpack();
+                            *q_m = gate.q_m().unpack();
+                            *q_c = gate.q_c().unpack();
+                            *q_add_sel = gate.q_add_sel().unpack();
                         }
                 });
             }
@@ -402,7 +387,8 @@ impl<E: Engine> GeneratorAssembly<E> {
     }
 }
 
-pub fn setup_with_precomputations<E: Engine, C: Circuit<E>, CP: CTPrecomputations<E::Fr>, T: Transcript<E::Fr, Input = <FriSpecificBlake2sTree<E::Fr> as IopInstance<E::Fr>> :: Commitment> >(
+pub fn setup_with_precomputations<E: Engine, C: Circuit<E>, CP: CTPrecomputations<E::Fr>, T: Transcript<E::Fr, 
+    Input = <FriSpecificBlake2sTree<E::Fr> as IopInstance<E::Fr>> :: Commitment> >(
     circuit: &C,
     params: &RedshiftParameters<E::Fr>,
     omegas_bitreversed: &CP,
@@ -419,23 +405,25 @@ pub fn setup_with_precomputations<E: Engine, C: Circuit<E>, CP: CTPrecomputation
 
     let mut transcript = T::new();
 
-    let (q_l, q_r, q_o, q_m, q_c, s_id, sigma_1, sigma_2, sigma_3) = assembly.output_setup_polynomials(&worker)?;
+    let (q_l, q_r, q_o, q_m, q_c, q_add_sel, s_id, sigma_1, sigma_2, sigma_3) = assembly.output_setup_polynomials(&worker)?;
 
-    let q_l_commitment_data = ProvingAssembly::<E>::commit_single_poly(&q_l, omegas_bitreversed, &params, &worker)?;
-    let q_r_commitment_data = ProvingAssembly::<E>::commit_single_poly(&q_r, omegas_bitreversed, &params, &worker)?;
-    let q_o_commitment_data = ProvingAssembly::<E>::commit_single_poly(&q_o, omegas_bitreversed, &params, &worker)?;
-    let q_m_commitment_data = ProvingAssembly::<E>::commit_single_poly(&q_m, omegas_bitreversed, &params, &worker)?;
-    let q_c_commitment_data = ProvingAssembly::<E>::commit_single_poly(&q_c, omegas_bitreversed, &params, &worker)?;
-    let s_id_commitment_data = ProvingAssembly::<E>::commit_single_poly(&s_id, omegas_bitreversed, &params, &worker)?;
-    let sigma_1_commitment_data = ProvingAssembly::<E>::commit_single_poly(&sigma_1, omegas_bitreversed, &params, &worker)?;
-    let sigma_2_commitment_data = ProvingAssembly::<E>::commit_single_poly(&sigma_2, omegas_bitreversed, &params, &worker)?;
-    let sigma_3_commitment_data = ProvingAssembly::<E>::commit_single_poly(&sigma_3, omegas_bitreversed, &params, &worker)?;
+    let q_l_commitment_data = commit_single_poly::<E, CP>(&q_l, omegas_bitreversed, &params, &worker)?;
+    let q_r_commitment_data = commit_single_poly::<E, CP>(&q_r, omegas_bitreversed, &params, &worker)?;
+    let q_o_commitment_data = commit_single_poly::<E, CP>(&q_o, omegas_bitreversed, &params, &worker)?;
+    let q_m_commitment_data = commit_single_poly::<E, CP>(&q_m, omegas_bitreversed, &params, &worker)?;
+    let q_c_commitment_data = commit_single_poly::<E, CP>(&q_c, omegas_bitreversed, &params, &worker)?;
+    let q_add_sel_commitment_data = commit_single_poly::<E, CP>(&q_add_sel, omegas_bitreversed, &params, &worker)?;
+    let s_id_commitment_data = commit_single_poly::<E, CP>(&s_id, omegas_bitreversed, &params, &worker)?;
+    let sigma_1_commitment_data = commit_single_poly::<E, CP>(&sigma_1, omegas_bitreversed, &params, &worker)?;
+    let sigma_2_commitment_data = commit_single_poly::<E, CP>(&sigma_2, omegas_bitreversed, &params, &worker)?;
+    let sigma_3_commitment_data = commit_single_poly::<E, CP>(&sigma_3, omegas_bitreversed, &params, &worker)?;
 
     transcript.commit_input(&q_l_commitment_data.oracle.get_commitment());
     transcript.commit_input(&q_r_commitment_data.oracle.get_commitment());
     transcript.commit_input(&q_o_commitment_data.oracle.get_commitment());
     transcript.commit_input(&q_m_commitment_data.oracle.get_commitment());
     transcript.commit_input(&q_c_commitment_data.oracle.get_commitment());
+    transcript.commit_input(&q_add_sel_commitment_data.oracle.get_commitment());
     transcript.commit_input(&s_id_commitment_data.oracle.get_commitment());
     transcript.commit_input(&sigma_1_commitment_data.oracle.get_commitment());
     transcript.commit_input(&sigma_2_commitment_data.oracle.get_commitment());
@@ -448,6 +436,7 @@ pub fn setup_with_precomputations<E: Engine, C: Circuit<E>, CP: CTPrecomputation
     let q_o_setup_value = q_o.evaluate_at(&worker, setup_point);
     let q_m_setup_value = q_m.evaluate_at(&worker, setup_point);
     let q_c_setup_value = q_c.evaluate_at(&worker, setup_point);
+    let q_add_sel_setup_value = q_add_sel.evaluate_at(&worker, setup_point);
 
     let s_id_setup_value = s_id.evaluate_at(&worker, setup_point);
     let sigma_1_setup_value = sigma_1.evaluate_at(&worker, setup_point);
@@ -461,6 +450,7 @@ pub fn setup_with_precomputations<E: Engine, C: Circuit<E>, CP: CTPrecomputation
         q_o: q_o_commitment_data.oracle.get_commitment(),
         q_m: q_m_commitment_data.oracle.get_commitment(),
         q_c: q_c_commitment_data.oracle.get_commitment(),
+        q_add_sel: q_add_sel_commitment_data.oracle.get_commitment(),
         s_id: s_id_commitment_data.oracle.get_commitment(),
         sigma_1: sigma_1_commitment_data.oracle.get_commitment(),
         sigma_2: sigma_2_commitment_data.oracle.get_commitment(),
@@ -497,6 +487,12 @@ pub fn setup_with_precomputations<E: Engine, C: Circuit<E>, CP: CTPrecomputation
             oracle: q_c_commitment_data.oracle,
             setup_point: setup_point,
             setup_value: q_c_setup_value,
+        },
+        q_add_sel_aux: SinglePolySetupData::<E::Fr, FriSpecificBlake2sTree<E::Fr>> {
+            poly: q_add_sel_commitment_data.poly,
+            oracle: q_add_sel_commitment_data.oracle,
+            setup_point: setup_point,
+            setup_value: q_add_sel_setup_value,
         },
         s_id_aux: SinglePolySetupData::<E::Fr, FriSpecificBlake2sTree<E::Fr>> {
             poly: s_id_commitment_data.poly,

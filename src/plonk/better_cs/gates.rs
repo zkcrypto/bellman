@@ -59,6 +59,26 @@ impl<F: PrimeField> Coeff<F> {
             Coeff::<F>::Full(coeff)
         }
     }
+
+    pub fn unpack(&self) -> F {
+        match self {
+            Coeff::Zero => {
+                F::zero()
+            },
+            Coeff::One => {
+                F::one()
+            },
+            Coeff::NegativeOne => {
+                let mut tmp = F::one();
+                tmp.negate();
+
+                tmp
+            },
+            Coeff::Full(c) => {
+                *c
+            },
+        }
+    }
 }
 
 impl<F: PrimeField> Copy for Coeff<F> {}
@@ -86,8 +106,8 @@ impl<F: PrimeField> Neg for Coeff<F> {
 
 #[derive(Copy, Clone, Debug)]
 pub struct Gate<F: PrimeField> {
-    variables: [Variable; 3],
-    coefficients: [Coeff<F>; 6],
+    pub variables: [Variable; 3],
+    pub coefficients: [Coeff<F>; 6],
 }
 
 impl<F: PrimeField> Gate<F> {

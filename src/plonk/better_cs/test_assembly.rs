@@ -158,6 +158,13 @@ impl<E: Engine> TestAssembly<E> {
                 coefficients: [q_l, q_r, q_o, q_m, q_c, q_c_next]
             } = *gate;
 
+            let q_l = q_l.unpack();
+            let q_r = q_r.unpack();
+            let q_o = q_o.unpack();
+            let q_m = q_m.unpack();
+            let q_c = q_c.unpack();
+            let q_c_next = q_c_next.unpack();
+
             assert!(q_c.is_zero(), "should not hardcode a constant into the input gate");
             assert!(q_c_next.is_zero(), "input gates should not link to the next gate");
 
@@ -203,12 +210,18 @@ impl<E: Engine> TestAssembly<E> {
                 coefficients: [q_l, q_r, q_o, q_m, q_c, q_c_next]
             } = this_gate;
 
+            let q_l = q_l.unpack();
+            let q_r = q_r.unpack();
+            let q_o = q_o.unpack();
+            let q_m = q_m.unpack();
+            let q_c = q_c.unpack();
+            let q_c_next = q_c_next.unpack();
+
             let a_value = self.get_value(a_var).expect("must get a variable value");
             let b_value = self.get_value(b_var).expect("must get a variable value");
             let c_value = self.get_value(c_var).expect("must get a variable value");
-
-            let next_gate_c_var = next_gate.variables[2];
-
+            
+            let next_gate_c_var = *next_gate.c_wire();
             let c_next_value = self.get_value(next_gate_c_var).expect("must get a variable value");
 
             let mut res = q_c;
@@ -250,6 +263,13 @@ impl<E: Engine> TestAssembly<E> {
                 variables: [a_var, b_var, c_var],
                 coefficients: [q_l, q_r, q_o, q_m, q_c, q_c_next]
             } = last_gate;
+
+            let q_l = q_l.unpack();
+            let q_r = q_r.unpack();
+            let q_o = q_o.unpack();
+            let q_m = q_m.unpack();
+            let q_c = q_c.unpack();
+            let q_c_next = q_c_next.unpack();
 
             let a_value = self.get_value(a_var).expect("must get a variable value");
             let b_value = self.get_value(b_var).expect("must get a variable value");
