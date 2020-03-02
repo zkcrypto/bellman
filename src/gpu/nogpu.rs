@@ -67,7 +67,7 @@ macro_rules! locked_kernel {
 
             pub fn with<F, R, K>(&mut self, _: F) -> GPUResult<R>
             where
-                F: FnOnce(&mut K) -> GPUResult<R>,
+                F: FnMut(&mut K) -> GPUResult<R>,
             {
                 return Err(GPUError::Simple("GPU accelerator is not enabled!"));
             }

@@ -43,6 +43,14 @@ impl PriorityLock {
         debug!("Priority lock acquired!");
         PriorityLock(f)
     }
+    pub fn wait(priority: bool) {
+        if !priority {
+            File::create(tmp_path(PRIORITY_LOCK_NAME))
+                .unwrap()
+                .lock_exclusive()
+                .unwrap();
+        }
+    }
     pub fn should_break(priority: bool) -> bool {
         !priority
             && File::create(tmp_path(PRIORITY_LOCK_NAME))
@@ -87,6 +95,14 @@ macro_rules! locked_kernel {
                 }
             }
 
+            fn init(&mut self) {
+                if self.kernel.is_none() {
+                    PriorityLock::wait(self.priority);
+                    info!("GPU is available for {}!", $name);
+                    self.kernel = $func::<E>(self.log_d, self.priority);
+                }
+            }
+
             fn free(&mut self) {
                 if let Some(_kernel) = self.kernel.take() {
                     warn!(
@@ -96,30 +112,28 @@ macro_rules! locked_kernel {
                 }
             }
 
-            pub fn with<F, R>(&mut self, f: F) -> GPUResult<R>
+            pub fn with<F, R>(&mut self, mut f: F) -> GPUResult<R>
             where
-                F: FnOnce(&mut $kern<E>) -> GPUResult<R>,
+                F: FnMut(&mut $kern<E>) -> GPUResult<R>,
             {
-                if PriorityLock::should_break(self.priority) {
-                    self.free();
-                } else if self.kernel.is_none() {
-                    info!("GPU is available for {}!", $name);
-                    self.kernel = $func::<E>(self.log_d, self.priority);
-                }
+                self.init();
 
-                if let Some(ref mut k) = self.kernel {
-                    match f(k) {
-                        Err(e) => {
-                            if let GPUError::GPUTaken = e {
+                loop {
+                    if let Some(ref mut k) = self.kernel {
+                        match f(k) {
+                            Err(GPUError::GPUTaken) => {
                                 self.free();
+                                self.init();
                             }
-                            warn!("GPU {} failed! Falling back to CPU... Error: {}", $name, e);
-                            Err(e)
+                            Err(e) => {
+                                warn!("GPU {} failed! Falling back to CPU... Error: {}", $name, e);
+                                return Err(e);
+                            }
+                            Ok(v) => return Ok(v),
                         }
-                        Ok(v) => Ok(v),
+                    } else {
+                        return Err(GPUError::KernelUninitialized);
                     }
-                } else {
-                    Err(GPUError::KernelUninitialized)
                 }
             }
         }
