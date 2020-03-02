@@ -62,8 +62,6 @@ impl<E: Engine> ConstraintSystem<E> for TestAssembly<E> {
 
         self.input_gates.push(gate);
 
-        // println!("Allocated input Input({}) with value {}", index, value);
-
         Ok(input_var)
 
     }

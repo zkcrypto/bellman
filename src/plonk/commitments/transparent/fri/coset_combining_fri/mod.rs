@@ -1,6 +1,6 @@
 pub mod fri;
-// pub mod query_producer;
-// pub mod verifier;
+pub mod query_producer;
+pub mod verifier;
 pub mod precomputation;
 
 use crate::SynthesisError;

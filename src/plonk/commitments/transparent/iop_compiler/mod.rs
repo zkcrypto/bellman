@@ -1,6 +1,8 @@
 use crate::ff::PrimeField;
 
 pub mod coset_combining_blake2s_tree;
+pub mod rescue;
+pub mod coset_combining_rescue_tree;
 
 pub trait Commitment: Clone + Eq + PartialEq + std::fmt::Debug {}
 

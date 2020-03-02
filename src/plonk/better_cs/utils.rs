@@ -64,8 +64,8 @@ where E::Fr : PartialTwoBitReductionField {
 pub(crate) fn calculate_permutations_as_in_a_paper<E: Engine>(
     input_gates: &Vec<Gate<E::Fr>>,
     aux_gates: &Vec<Gate<E::Fr>>,
-    num_inputs: usize,
-    num_aux: usize,
+    num_inputs: &usize,
+    num_aux: &usize,
 ) -> (Vec<usize>, Vec<usize>, Vec<usize>) 
 {
     let num_gates = input_gates.len() + aux_gates.len();
@@ -166,8 +166,8 @@ fn make_s_id<E: Engine>(input_gates: &Vec<Gate<E::Fr>>, aux_gates: &Vec<Gate<E::
 pub(crate) fn make_circuit_description_polynomials<E: Engine>(
     input_gates: &Vec<Gate<E::Fr>>,
     aux_gates: &Vec<Gate<E::Fr>>,
-    num_inputs: usize,
-    num_aux: usize,
+    _num_inputs: &usize,
+    _num_aux: &usize,
     worker: &Worker) -> Result<(
         Polynomial::<E::Fr, Values>, Polynomial::<E::Fr, Values>, Polynomial::<E::Fr, Values>,
         Polynomial::<E::Fr, Values>, Polynomial::<E::Fr, Values>, Polynomial::<E::Fr, Values>
@@ -252,8 +252,8 @@ pub(crate) fn make_circuit_description_polynomials<E: Engine>(
 pub(crate) fn output_setup_polynomials<E: Engine>(
     input_gates: &Vec<Gate<E::Fr>>,
     aux_gates: &Vec<Gate<E::Fr>>,
-    num_inputs: usize,
-    num_aux: usize,
+    num_inputs: &usize,
+    num_aux: &usize,
     worker: &Worker) -> Result<
     (
         Polynomial::<E::Fr, Coefficients>, // q_l
@@ -283,7 +283,7 @@ pub(crate) fn output_setup_polynomials<E: Engine>(
     let sigma_3 = Polynomial::from_values(sigma_3)?;
 
     let (q_l, q_r, q_o, q_m, q_c, q_add_sel) = 
-        make_circuit_description_polynomials(input_gates, aux_gates, num_inputs, num_aux, &worker)?;
+        make_circuit_description_polynomials::<E>(input_gates, aux_gates, num_inputs, num_aux, &worker)?;
 
     let s_id = s_id.ifft(&worker);
     let sigma_1 = sigma_1.ifft(&worker);

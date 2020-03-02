@@ -149,7 +149,7 @@ impl<E: Engine> ProvingAssembly<E> {
         tmp
     }
 
-     fn new_empty_gate(&mut self) -> usize {
+    fn new_empty_gate(&mut self) -> usize {
         self.n += 1;
         let index = self.n;
 
@@ -235,6 +235,7 @@ impl<E: Engine> ProvingAssembly<E> {
     }
 }
 
+//use setup and selector polynomials, precomputed by 
 fn prove_with_setup_precomputed<E: Engine, C: Circuit<E>, CP: CTPrecomputations<E::Fr>, CPI: CTPrecomputations<E::Fr>, 
     FP: FriPrecomputations<E::Fr>, T: Transcript<E::Fr, 
     Input = <FriSpecificBlake2sTree<E::Fr> as IopInstance<E::Fr>> :: Commitment> >

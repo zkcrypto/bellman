@@ -8,6 +8,7 @@ use crate::plonk::commitments::transparent::utils::log2_floor;
 use crate::plonk::commitments::transcript::Prng;
 use crate::plonk::commitments::transparent::precomputations::*;
 use super::*;
+use super::query_producer::*;
 
 pub struct CosetCombiningFriIop<F: PrimeField> {
     cosets_schedule: Vec<usize>,
@@ -56,8 +57,7 @@ impl<F: PrimeField> FriIop<F> for CosetCombiningFriIop<F> {
         natural_first_element_indexes: Vec<usize>,
         params: &Self::Params
     ) -> Result<Self::Proof, SynthesisError> {
-        unimplemented!()
-        // prototype.produce_proof(iop_values, natural_first_element_indexes)
+        prototype.produce_proof(iop_values, natural_first_element_indexes)
     }
 
     fn get_fri_challenges<P: Prng<F, Input = <Self::IopType as IopInstance<F>>::Commitment>>(
@@ -86,8 +86,7 @@ impl<F: PrimeField> FriIop<F> for CosetCombiningFriIop<F> {
         fri_challenges: &[F],
         params: &Self::Params
     ) -> Result<bool, SynthesisError> {
-        unimplemented!()
-        // Self::verify_proof_queries(proof, natural_element_indexes, Self::DEGREE, expected_value, fri_challenges)
+        Self::verify_proof_queries(proof, natural_element_indexes, Self::DEGREE, expected_value, fri_challenges)
     }
 }
 
@@ -95,7 +94,7 @@ use std::time::Instant;
 
 #[derive(PartialEq, Eq, Clone)]
 pub struct FRIProofPrototype<F: PrimeField, I: IopInstance<F>> {
-    // pub l0_commitment: I,
+    pub l0_commitment: I,
     pub intermediate_commitments: Vec<I>,
     pub intermediate_values: Vec< Polynomial<F, Values> >,
     pub challenges: Vec<Vec<F>>,

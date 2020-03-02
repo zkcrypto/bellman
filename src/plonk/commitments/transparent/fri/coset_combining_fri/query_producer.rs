@@ -9,7 +9,9 @@ use crate::plonk::commitments::transparent::utils::log2_floor;
 use super::fri::*;
 use super::super::*;
 
-impl<F: PrimeField, I: IOP<F>> FRIProofPrototype<F, I> {
+impl<F: PrimeField, I: IOP<F>> FRIProofPrototype<F, I> 
+where I: crate::plonk::commitments::transparent::iop_compiler::IopInstance<F> 
+{
     pub fn produce_proof(
         self,
         iop_values: &Polynomial<F, Values>,
