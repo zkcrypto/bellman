@@ -360,6 +360,7 @@ impl<E: ScalarEngine> AllocatedNum<E> {
     }
 }
 
+#[derive(Clone)]
 pub struct Num<E: ScalarEngine> {
     value: Option<E::Fr>,
     lc: LinearCombination<E>,
@@ -407,6 +408,43 @@ impl<E: ScalarEngine> Num<E> {
             lc: self.lc + &bit.lc(one, coeff),
         }
     }
+
+    pub fn add(self, other: &Self) -> Self {
+        let lc = self.lc + &other.lc;
+        let value = match (self.value, other.value) {
+            (Some(v1), Some(v2)) => {
+                let mut tmp = v1;
+                tmp.add_assign(&v2);
+                Some(tmp)
+            }
+            (Some(v), None) | (None, Some(v)) => Some(v),
+            (None, None) => None,
+        };
+
+        Num { value, lc }
+    }
+
+    pub fn scale(self, scalar: E::Fr) -> Self {
+        let lc =
+            self.lc
+                .as_ref()
+                .iter()
+                .fold(LinearCombination::zero(), |acc, (variable, mut fr)| {
+                    fr.mul_assign(&scalar);
+                    acc + (fr, *variable)
+                });
+
+        let value = match self.value {
+            Some(v) => {
+                let mut tmp = v;
+                tmp.mul_assign(&scalar);
+                Some(tmp)
+            }
+            None => None,
+        };
+
+        Num { value, lc }
+    }
 }
 
 #[cfg(test)]
@@ -417,7 +455,7 @@ mod test {
     use rand_core::SeedableRng;
     use rand_xorshift::XorShiftRng;
 
-    use super::{AllocatedNum, Boolean};
+    use super::{AllocatedNum, Boolean, Num};
     use crate::gadgets::test::*;
 
     #[test]
@@ -585,5 +623,54 @@ mod test {
                 assert!(cs.is_satisfied());
             }
         }
+    }
+
+    #[test]
+    fn test_num_scale() {
+        use crate::{Index, LinearCombination, Variable};
+
+        let mut rng = XorShiftRng::from_seed([
+            0x59, 0x62, 0xbe, 0x3d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06,
+            0xbc, 0xe5,
+        ]);
+
+        let n = 5;
+
+        let mut lc = LinearCombination::<Bls12>::zero();
+
+        let mut expected_sums = vec![Fr::zero(); n];
+        let mut value = Fr::zero();
+        for i in 0..n {
+            let coeff = Fr::random(&mut rng);
+            lc = lc + (coeff, Variable::new_unchecked(Index::Aux(i)));
+            let mut tmp = expected_sums[i];
+            tmp.add_assign(&coeff);
+            expected_sums[i] = tmp;
+
+            value.add_assign(&coeff);
+        }
+
+        let scalar = Fr::random(&mut rng);
+        let num = Num {
+            value: Some(value),
+            lc: lc.clone(),
+        };
+
+        let scaled_num = num.clone().scale(scalar);
+
+        let mut scaled_value = num.value.unwrap();
+        scaled_value.mul_assign(&scalar);
+
+        assert_eq!(scaled_value, scaled_num.value.unwrap());
+
+        // Each variable has the expected coefficient, the sume of those added by its Index.
+        scaled_num.lc.0.iter().for_each(|(var, coeff)| match var.0 {
+            Index::Aux(i) => {
+                let mut tmp = expected_sums[i];
+                tmp.mul_assign(&scalar);
+                assert_eq!(tmp, *coeff)
+            }
+            _ => panic!("unexpected variable type"),
+        });
     }
 }

@@ -152,6 +152,7 @@ pub use gpu::GPU_NVIDIA_DEVICES;
 
 use ff::{Field, ScalarEngine};
 
+use std::collections::HashMap;
 use std::io;
 use std::marker::PhantomData;
 use std::ops::{Add, Sub};
@@ -187,7 +188,7 @@ impl Variable {
 
 /// Represents the index of either an input variable or
 /// auxiliary variable.
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(Copy, Clone, PartialEq, Debug, Eq, Hash)]
 pub enum Index {
     Input(usize),
     Aux(usize),
@@ -196,7 +197,10 @@ pub enum Index {
 /// This represents a linear combination of some variables, with coefficients
 /// in the scalar field of a pairing-friendly elliptic curve group.
 #[derive(Clone)]
-pub struct LinearCombination<E: ScalarEngine>(Vec<(Variable, E::Fr)>);
+pub struct LinearCombination<E: ScalarEngine>(
+    Vec<(Variable, E::Fr)>,
+    Option<HashMap<Index, E::Fr>>,
+);
 
 impl<E: ScalarEngine> AsRef<[(Variable, E::Fr)]> for LinearCombination<E> {
     fn as_ref(&self) -> &[(Variable, E::Fr)] {
@@ -206,7 +210,19 @@ impl<E: ScalarEngine> AsRef<[(Variable, E::Fr)]> for LinearCombination<E> {
 
 impl<E: ScalarEngine> LinearCombination<E> {
     pub fn zero() -> LinearCombination<E> {
-        LinearCombination(vec![])
+        LinearCombination(vec![], None)
+    }
+
+    pub fn ensure_hashmap(&mut self) {
+        if self.1.is_none() {
+            self.1 = Some(self.0.iter().map(|(var, val)| (var.0, *val)).collect());
+        }
+    }
+
+    pub fn add_unsimplified(mut self, (coeff, var): (E::Fr, Variable)) -> LinearCombination<E> {
+        self.0.push((var, coeff));
+
+        self
     }
 }
 
@@ -214,10 +230,56 @@ impl<E: ScalarEngine> Add<(E::Fr, Variable)> for LinearCombination<E> {
     type Output = LinearCombination<E>;
 
     fn add(mut self, (coeff, var): (E::Fr, Variable)) -> LinearCombination<E> {
-        self.0.push((var, coeff));
+        let mut found = false;
+
+        for i in 0..self.0.len() {
+            let (v, mut c) = self.0[i];
+
+            if v.0 == var.0 {
+                c.add_assign(&coeff);
+                self.0[i] = (v, c);
+                found = true;
+            }
+        }
+
+        if !found {
+            self.0.push((var, coeff));
+        }
 
         self
     }
+}
+
+#[test]
+fn test_add_simplify() {
+    use paired::bls12_381::Bls12;
+
+    let n = 5;
+
+    let mut lc = LinearCombination::<Bls12>::zero();
+
+    let mut expected_sums = vec![<Bls12 as ScalarEngine>::Fr::zero(); n];
+    let mut total_additions = 0;
+    for i in 0..n {
+        for _ in 0..i + 1 {
+            let coeff = <Bls12 as ScalarEngine>::Fr::one();
+            lc = lc + (coeff, Variable::new_unchecked(Index::Aux(i)));
+            let mut tmp = expected_sums[i];
+            tmp.add_assign(&coeff);
+            expected_sums[i] = tmp;
+            total_additions += 1;
+        }
+    }
+
+    // There are only as many terms as distinct variable Indexes — not one per addition operation.
+    assert_eq!(n, lc.0.len());
+    assert!(lc.0.len() != total_additions);
+
+    // Each variable has the expected coefficient, the sume of those added by its Index.
+    lc.0.iter().for_each(|(var, coeff)| match var.0 {
+        Index::Aux(i) => assert_eq!(expected_sums[i], *coeff),
+        _ => panic!("unexpected variable type"),
+    });
 }
 
 impl<E: ScalarEngine> Sub<(E::Fr, Variable)> for LinearCombination<E> {
@@ -251,11 +313,25 @@ impl<'a, E: ScalarEngine> Add<&'a LinearCombination<E>> for LinearCombination<E>
     type Output = LinearCombination<E>;
 
     fn add(mut self, other: &'a LinearCombination<E>) -> LinearCombination<E> {
-        for s in &other.0 {
-            self = self + (s.1, s.0);
-        }
+        self.ensure_hashmap();
 
-        self
+        if let Some(mut map) = self.1 {
+            for (var, val) in &other.0 {
+                let v = map.entry(var.0).or_insert(E::Fr::zero());
+                v.add_assign(val)
+            }
+
+            self = LinearCombination(
+                map.clone()
+                    .into_iter()
+                    .map(|(index, val)| (Variable(index), val))
+                    .collect(),
+                Some(map),
+            );
+            self
+        } else {
+            unreachable!("ensure_hashmap guarantees Some(map)");
+        }
     }
 }
 
