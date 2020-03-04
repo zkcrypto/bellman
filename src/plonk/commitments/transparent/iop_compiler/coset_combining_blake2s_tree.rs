@@ -3,6 +3,7 @@ use blake2s_const::blake2s_const;
 use crate::multicore::Worker;
 use super::super::utils::log2_floor;
 use super::*;
+use std::convert::From;
 
 #[derive(Debug)]
 pub struct FriSpecificBlake2sTree<F: PrimeField> {
@@ -15,6 +16,12 @@ pub struct FriSpecificBlake2sTree<F: PrimeField> {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct FriSpecificBlake2sTreeParams {
     pub values_per_leaf: usize
+}
+
+impl From<usize> for FriSpecificBlake2sTreeParams {
+    fn from(data: usize) -> Self {
+        Self { values_per_leaf: data}
+    }
 }
 
 

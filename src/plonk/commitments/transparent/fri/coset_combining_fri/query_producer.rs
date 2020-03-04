@@ -1,15 +1,14 @@
 use crate::pairing::ff::PrimeField;
-use crate::plonk::commitments::transparent::iop::*;
 use crate::plonk::polynomials::*;
 use crate::plonk::domains::*;
 use crate::multicore::*;
 use crate::SynthesisError;
-use crate::plonk::commitments::transparent::iop::*;
 use crate::plonk::commitments::transparent::utils::log2_floor;
+use crate::plonk::commitments::transparent::iop_compiler::*;
 use super::fri::*;
 use super::super::*;
 
-impl<F: PrimeField, I: IOP<F>> FRIProofPrototype<F, I> 
+impl<F: PrimeField, I: IopInstance<F>> FRIProofPrototype<F, I> 
 where I: crate::plonk::commitments::transparent::iop_compiler::IopInstance<F> 
 {
     pub fn produce_proof(
@@ -20,9 +19,8 @@ where I: crate::plonk::commitments::transparent::iop_compiler::IopInstance<F>
         let domain_size = self.initial_degree_plus_one * self.lde_factor;
 
         let mut roots = vec![];
-        let l0_commitment = Some(self.l0_commitment);
 
-        for iop in l0_commitment.iter().chain(&self.intermediate_commitments) {
+        for iop in &self.intermediate_commitments {
             roots.push(iop.get_root());
         }
 

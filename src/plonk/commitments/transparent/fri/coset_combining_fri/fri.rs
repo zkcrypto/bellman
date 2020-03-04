@@ -1,18 +1,18 @@
 use crate::pairing::ff::PrimeField;
 use crate::plonk::commitments::transparent::iop_compiler::*;
-use crate::plonk::commitments::transparent::iop_compiler::coset_combining_blake2s_tree::*;
 use crate::plonk::polynomials::*;
 use crate::multicore::*;
 use crate::SynthesisError;
 use crate::plonk::commitments::transparent::utils::log2_floor;
 use crate::plonk::commitments::transcript::Prng;
-use crate::plonk::commitments::transparent::precomputations::*;
 use super::*;
 use super::query_producer::*;
+use std::convert::From;
 
-pub struct CosetCombiningFriIop<F: PrimeField> {
+pub struct CosetCombiningFriIop<F: PrimeField, I: IopInstance<F>> {
     cosets_schedule: Vec<usize>,
     _marker_f: std::marker::PhantomData<F>,
+    _marker_i: std::marker::PhantomData<I>,
 }
 
 #[derive(Clone, Debug)]
@@ -21,10 +21,10 @@ pub struct CosetParams<F: PrimeField> {
     pub coset_factor: F
 }
 
-impl<F: PrimeField> FriIop<F> for CosetCombiningFriIop<F> {
+impl<F: PrimeField, I: IopInstance<F>> FriIop<F> for CosetCombiningFriIop<F, I> {
     const DEGREE: usize = 2;
 
-    type IopType = FriSpecificBlake2sTree<F>;
+    type IopType = I;
     type ProofPrototype = FRIProofPrototype<F, Self::IopType>;
     type Proof = FRIProof<F, Self::IopType>;
     type Params = CosetParams<F>;
@@ -94,7 +94,7 @@ use std::time::Instant;
 
 #[derive(PartialEq, Eq, Clone)]
 pub struct FRIProofPrototype<F: PrimeField, I: IopInstance<F>> {
-    pub l0_commitment: I,
+    //pub l0_commitment: I,
     pub intermediate_commitments: Vec<I>,
     pub intermediate_values: Vec< Polynomial<F, Values> >,
     pub challenges: Vec<Vec<F>>,
@@ -145,7 +145,7 @@ impl<F: PrimeField, I: IopInstance<F>> FriProof<F, I> for FRIProof<F, I> {
     }
 }
 
-impl<F: PrimeField> CosetCombiningFriIop<F> {
+impl<F: PrimeField, I: IopInstance<F>> CosetCombiningFriIop<F, I> {
     pub fn proof_from_lde_by_values<P: Prng<F, Input = <<Self as FriIop<F>>::IopType as IopInstance<F>>::Commitment>,
         C: FriPrecomputations<F>
     >(
@@ -313,10 +313,8 @@ impl<F: PrimeField> CosetCombiningFriIop<F> {
                 coset_schedule_index += 1;
                 this_domain_size = next_domain_size;
                 let coset_factor = params.cosets_schedule[coset_schedule_index];
-                let tree_params = FriSpecificBlake2sTreeParams {
-                    values_per_leaf: (1 << coset_factor)
-                };
-                let intermediate_iop = FriSpecificBlake2sTree::create(next_values.as_ref(), &tree_params);
+                let tree_params = <I as IopInstance<F>>::Params::from(1 << coset_factor);
+                let intermediate_iop = I::create(next_values.as_ref(), &tree_params);
                 let root = intermediate_iop.get_commitment();
                 roots.push(root);
                 let num_challenges = coset_factor;

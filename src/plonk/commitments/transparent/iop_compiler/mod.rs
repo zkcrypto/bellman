@@ -1,4 +1,5 @@
 use crate::ff::PrimeField;
+use std::convert::From;
 
 pub mod coset_combining_blake2s_tree;
 pub mod rescue;
@@ -9,7 +10,7 @@ pub trait Commitment: Clone + Eq + PartialEq + std::fmt::Debug {}
 pub trait IopInstance<F: PrimeField>: PartialEq + Eq {
     type Commitment: Clone + Eq + PartialEq + std::fmt::Debug;
     type Query: IopQuery<F>;
-    type Params: Clone + Eq + PartialEq + std::fmt::Debug;
+    type Params: Clone + Eq + PartialEq + std::fmt::Debug + From<usize>;
 
     fn create(values: &[F], params: &Self::Params) -> Self;
     fn size(&self) -> usize;

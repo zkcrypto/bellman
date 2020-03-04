@@ -3,6 +3,7 @@ use crate::multicore::Worker;
 use super::super::utils::log2_floor;
 use super::rescue::*;
 use super::*;
+use std::convert::From;
 
 #[derive(Debug)]
 pub struct FriSpecificRescueTree<F: PrimeField> {
@@ -16,6 +17,13 @@ pub struct FriSpecificRescueTree<F: PrimeField> {
 pub struct FriSpecificRescueTreeParams {
     pub values_per_leaf: usize
 }
+
+impl From<usize> for FriSpecificRescueTreeParams {
+    fn from(data: usize) -> Self {
+        Self { values_per_leaf: data}
+    }
+}
+
 
 impl<F: PrimeField> FriSpecificRescueTree<F> {
     
