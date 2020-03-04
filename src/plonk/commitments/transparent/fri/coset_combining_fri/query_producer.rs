@@ -21,7 +21,7 @@ where I: crate::plonk::commitments::transparent::iop_compiler::IopInstance<F>
         let mut roots = vec![];
 
         for iop in &self.intermediate_commitments {
-            roots.push(iop.get_root());
+            roots.push(iop.get_commitment());
         }
 
         let mut rounds = vec![];
@@ -31,7 +31,7 @@ where I: crate::plonk::commitments::transparent::iop_compiler::IopInstance<F>
             let mut domain_idx = natural_first_element_index;
             let mut domain_size = domain_size;
 
-            for (iop, leaf_values) in l0_commitment.iter().chain(&self.intermediate_commitments)
+            for (iop, leaf_values) in self.intermediate_commitments.into_iter()
                                         .zip(Some(iop_values).into_iter().chain(&self.intermediate_values)) {
                 
                 let coset_values = <I::Combiner as CosetCombiner<F>>::get_coset_for_natural_index(domain_idx, domain_size);

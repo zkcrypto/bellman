@@ -24,6 +24,14 @@ pub trait IopQuery<F: PrimeField>: 'static + PartialEq + Eq + Clone + std::fmt::
     fn values(&self) -> &[F];
 }
 
-// const fn byte_size<F: PrimeField>() -> usize {
-//     (((F::NUM_BITS as usize) / 64) + 1) * 8
-// }
+pub trait CosetCombiner<F: PrimeField> {
+    const EXPECTED_DEGREE: usize;
+    const COSET_SIZE: usize;
+    
+    fn get_for_natural_index(leafs: &[F], natural_index: usize) -> &F;
+    fn get_for_tree_index(leafs: &[F], tree_index: usize) -> &F;
+    fn tree_index_into_natural_index(tree_index: usize) -> usize;
+    fn natural_index_into_tree_index(natural_index: usize) -> usize;
+    fn get_coset_for_natural_index(natural_index: usize, domain_size: usize) -> Vec<usize>;
+    fn get_coset_for_tree_index(tree_index: usize, domain_size: usize) -> Vec<usize>;
+}
