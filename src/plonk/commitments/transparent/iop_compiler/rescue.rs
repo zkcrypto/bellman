@@ -7,6 +7,8 @@
 use crate::ff::{PrimeField, PrimeFieldRepr};
 use num::integer::*;
 use num::bigint::BigUint;
+use num::{Zero, One};
+use num::ToPrimitive;
 
 pub(crate) const RESCUE_ROUNDS: usize = 10;
 pub(crate) const RESCUE_M: usize = 13;
@@ -14,6 +16,7 @@ pub(crate) const RESCUE_M: usize = 13;
 // Set sponge capacity to 1
 pub(crate) const SPONGE_RATE: usize = RESCUE_M - 1;
 
+#[derive(Debug, Copy, Clone)]
 pub(crate) struct RescueParams<F>
 where F: PrimeField
 {
@@ -35,29 +38,56 @@ impl<F: PrimeField> RescueParams<F>
         let S = F::S;
         let g = F::multiplicative_generator();
 
-        let ALPHA = g.pow([S as u64]);
+        let mut t = F::char();
+        t.shr(S);
+        let ALPHA = g.pow(t);
 
+        //x inner is equal to p-1
         let mut x_inner = F::char();
         x_inner.div2();
         x_inner.shl(1);
 
-        let x : BigUint = 0;
+        fn biguint_to_u64_array(mut v: BigUint) -> [u64; 4] {
+            let m = BigUint::from(1u64) << 64;
+            let mut ret = [0; 4];
+
+            for idx in 0..4 {
+                ret[idx] = (&v % &m).to_u64().expect("is guaranteed to fit");
+                v >>= 64;
+            }
+            assert!(v.is_zero());
+            ret
+        }
+
+        fn compute_alpha_inapha(a: &BigUint) -> (u64, [u64; 4]) {
+            let mut alpha = BigUint::from(3u64);
+            loop {
+                let ExtendedGcd{ gcd, x, y, .. } = a.extended_gcd(&alpha); 
+                if gcd.is_one() {
+                    let alpha = alpha.to_u64().expect("Should fit in one machine word");
+                    let inalpha = biguint_to_u64_array(y);
+                    return (alpha, inalpha)
+                }
+                alpha += BigUint::one();
+            }
+        }
+
+        let x = BigUint::from(0u64);
         for limb in x_inner.as_ref() {
             x << 64;
-            x += limb;
+            x += BigUint::from(*limb);
         }
+        let (RESCUE_ALPHA, RESCUE_INVALPHA) = compute_alpha_inapha(&x);
 
-        let mut k : BigUint::from_u64(3u64).unwrap();
-        while {
-            let ExtendedGcd{ gcd, x, y, .. } = x.extended_gcd(&k);
-            
-        }
+        let (quotient, remainder) = x.div_rem(&BigUint::from(3u64));
+        assert!(remainder.is_zero());
+        let BETA = g.pow(&biguint_to_u64_array(quotient));
 
-        //check if 
+        RescueParams{ S, ALPHA, RESCUE_ALPHA, RESCUE_INVALPHA, BETA }
     }
-}  
+}
 
-pub(crate) fn generate_mds_matrix<F: PrimeField>(&_P: RescueParams<F>) -> [[F; RESCUE_M]; RESCUE_M] {
+pub(crate) fn generate_mds_matrix<F: PrimeField>(_params: &RescueParams<F>) -> [[F; RESCUE_M]; RESCUE_M] {
     // TODO: Correct MDS generation; this causes horribly-biased output
     let mut mds_matrix = [[F::zero(); RESCUE_M]; RESCUE_M];
     for i in (0..RESCUE_M).rev() {
@@ -69,9 +99,10 @@ pub(crate) fn generate_mds_matrix<F: PrimeField>(&_P: RescueParams<F>) -> [[F; R
     mds_matrix
 }
 
-fn mds<F: PrimeField, P: RescueParams<F>>(
+fn mds<F: PrimeField>(
     in_state: &[F; RESCUE_M],
     mds_matrix: &[[F; RESCUE_M]; RESCUE_M],
+    _params: &RescueParams<F>
 ) -> [F; RESCUE_M] {
     let mut out_state = [F::zero(); RESCUE_M];
     for i in 0..RESCUE_M {
@@ -88,6 +119,7 @@ fn rescue_f<F: PrimeField>(
     state: &mut [F; RESCUE_M],
     mds_matrix: &[[F; RESCUE_M]; RESCUE_M],
     key_schedule: &[[F; RESCUE_M]; 2 * RESCUE_ROUNDS + 1],
+    params: &RescueParams<F>,
 ) {
     for i in 0..RESCUE_M {
         state[i].add_assign(&key_schedule[0][i]);
@@ -95,16 +127,16 @@ fn rescue_f<F: PrimeField>(
 
     for r in 0..2 * RESCUE_ROUNDS {
         let exp = if r % 2 == 0 {
-            F::RESCUE_INVALPHA
+            params.RESCUE_INVALPHA
         } else {
-            [F::RESCUE_ALPHA, 0, 0, 0]
+            [params.RESCUE_ALPHA, 0, 0, 0]
         };
         for entry in state.iter_mut() {
-            *entry = entry.pow_vartime(&exp);
+            *entry = entry.pow(&exp);
         }
-        *state = mds(state, mds_matrix);
+        *state = mds(state, mds_matrix, params);
         for i in 0..RESCUE_M {
-            state[i] += key_schedule[r + 1][i];
+            state[i].add_assign(&(key_schedule[r + 1][i]));
         }
     }
 }
@@ -113,6 +145,7 @@ fn rescue_f<F: PrimeField>(
 fn generate_key_schedule<F: PrimeField>(
     master_key: [F; RESCUE_M],
     mds_matrix: &[[F; RESCUE_M]; RESCUE_M],
+    params: &RescueParams<F>,
 ) -> [[F; RESCUE_M]; 2 * RESCUE_ROUNDS + 1] {
     // TODO: Generate correct constants
     let constants = [[F::one(); RESCUE_M]; 2 * RESCUE_ROUNDS + 1];
@@ -121,22 +154,22 @@ fn generate_key_schedule<F: PrimeField>(
     let mut state = master_key;
 
     for i in 0..RESCUE_M {
-        state[i] += constants[0][i];
+        state[i].add_assign(&(constants[0][i]));
     }
     key_schedule.push(state);
 
     for r in 0..2 * RESCUE_ROUNDS {
         let exp = if r % 2 == 0 {
-            F::RESCUE_INVALPHA
+            params.RESCUE_INVALPHA
         } else {
-            [F::RESCUE_ALPHA, 0, 0, 0]
+            [params.RESCUE_ALPHA, 0, 0, 0]
         };
         for entry in state.iter_mut() {
-            *entry = entry.pow_vartime(&exp);
+            *entry = entry.pow(&exp);
         }
-        state = mds(&state, mds_matrix);
+        state = mds(&state, mds_matrix, params);
         for i in 0..RESCUE_M {
-            state[i] += constants[r + 1][i];
+            state[i].add_assign(&(constants[r + 1][i]));
         }
         key_schedule.push(state);
     }
@@ -184,13 +217,14 @@ fn rescue_duplex<F: PrimeField>(
     input: &[Option<F>; SPONGE_RATE],
     mds_matrix: &[[F; RESCUE_M]; RESCUE_M],
     key_schedule: &[[F; RESCUE_M]; 2 * RESCUE_ROUNDS + 1],
+    params: &RescueParams<F>,
 ) -> [Option<F>; SPONGE_RATE] {
     let padded = pad(input);
     for i in 0..SPONGE_RATE {
-        state[i] += padded[i];
+        state[i].add_assign(&padded[i]);
     }
 
-    rescue_f(state, mds_matrix, key_schedule);
+    rescue_f(state, mds_matrix, key_schedule, params);
 
     let mut output = [None; SPONGE_RATE];
     for i in 0..SPONGE_RATE {
@@ -219,6 +253,7 @@ pub struct Rescue<F: PrimeField> {
     state: [F; RESCUE_M],
     mds_matrix: [[F; RESCUE_M]; RESCUE_M],
     key_schedule: [[F; RESCUE_M]; 2 * RESCUE_ROUNDS + 1],
+    params: RescueParams<F>,
 }
 
 impl<F: PrimeField> Default for Rescue<F> {
@@ -229,16 +264,18 @@ impl<F: PrimeField> Default for Rescue<F> {
 
 impl<F: PrimeField> Rescue<F> {
     pub fn new() -> Self {
-        let mds_matrix = generate_mds_matrix();
+        let params = RescueParams::new();
+        let mds_matrix = generate_mds_matrix(&params);
 
         // To use Rescue as a permutation, fix the master key to zero
-        let key_schedule = generate_key_schedule([F::zero(); RESCUE_M], &mds_matrix);
+        let key_schedule = generate_key_schedule([F::zero(); RESCUE_M], &mds_matrix, &params);
 
         Rescue {
             sponge: SpongeState::Absorbing([None; SPONGE_RATE]),
             state: [F::zero(); RESCUE_M],
             mds_matrix,
             key_schedule,
+            params,
         }
     }
 
@@ -253,7 +290,7 @@ impl<F: PrimeField> Rescue<F> {
                 }
 
                 // We've already absorbed as many elements as we can
-                let _ = rescue_duplex(&mut self.state, input, &self.mds_matrix, &self.key_schedule);
+                let _ = rescue_duplex(&mut self.state, input, &self.mds_matrix, &self.key_schedule, &self.params);
                 self.sponge = SpongeState::absorb(val);
             }
             SpongeState::Squeezing(_) => {
@@ -272,6 +309,7 @@ impl<F: PrimeField> Rescue<F> {
                         &input,
                         &self.mds_matrix,
                         &self.key_schedule,
+                        &self.params
                     ));
                 }
                 SpongeState::Squeezing(ref mut output) => {
