@@ -22,7 +22,7 @@ impl fmt::Display for Fr {
 }
 
 impl Field for Fr {
-    fn random<R: RngCore>(rng: &mut R) -> Self {
+    fn random<R: RngCore + ?std::marker::Sized>(rng: &mut R) -> Self {
         Fr(Wrapping(rng.next_u32()) % MODULUS_R)
     }
 
