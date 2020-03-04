@@ -233,7 +233,7 @@ fn rescue_duplex<F: PrimeField>(
     output
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum SpongeState<F: PrimeField> {
     Absorbing([Option<F>; SPONGE_RATE]),
     Squeezing([Option<F>; SPONGE_RATE]),
@@ -247,7 +247,7 @@ impl<F: PrimeField> SpongeState<F> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Rescue<F: PrimeField> {
     sponge: SpongeState<F>,
     state: [F; RESCUE_M],

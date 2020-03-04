@@ -6,3 +6,4 @@ pub mod data_structures;
 pub mod utils;
 pub mod generators;
 pub mod prover;
+pub mod verifier;
