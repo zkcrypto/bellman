@@ -28,18 +28,10 @@ pub mod gm17;
 #[cfg(feature = "sonic")]
 pub mod sonic;
 
-#[cfg(feature = "plonk")]
-pub mod plonk;
-
 #[macro_use]
-#[cfg(feature = "plonk")]
+#[cfg(feature = "redshift")]
+pub mod redshift;
 extern crate lazy_static;
-
-#[cfg(feature = "marlin")]
-pub mod marlin;
-
-#[cfg(any(feature = "marlin", feature = "plonk"))]
-pub mod kate_commitment;
 
 mod group;
 mod source;

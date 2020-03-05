@@ -7,12 +7,13 @@ use crate::plonk::polynomials::*;
 use crate::plonk::fft::cooley_tukey_ntt::*;
 use crate::multicore::*;
 
+//NB: this structure should be better called FRI parameters
 #[derive(Debug, Clone)]
 pub struct RedshiftParameters<F: PrimeField>{
     pub lde_factor: usize,
     pub num_queries: usize,
     pub output_coeffs_at_degree_plus_one: usize,
-    pub coset_params: CosetParams<F>,
+    pub coset_params: CosetFriParams<F>,
 }
 
 #[derive(Debug)]

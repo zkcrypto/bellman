@@ -10,14 +10,12 @@ use super::query_producer::*;
 use std::convert::From;
 
 pub struct CosetCombiningFriIop<F: PrimeField, I: IopInstance<F>> {
-    cosets_schedule: Vec<usize>,
     _marker_f: std::marker::PhantomData<F>,
     _marker_i: std::marker::PhantomData<I>,
 }
 
 #[derive(Clone, Debug)]
-pub struct CosetParams<F: PrimeField> {
-    pub cosets_schedule: Vec<usize>,
+pub struct CosetFriParams<F: PrimeField> {
     pub coset_factor: F
 }
 
@@ -27,7 +25,7 @@ impl<F: PrimeField, I: IopInstance<F>> FriIop<F> for CosetCombiningFriIop<F, I> 
     type IopType = I;
     type ProofPrototype = FRIProofPrototype<F, Self::IopType>;
     type Proof = FRIProof<F, Self::IopType>;
-    type Params = CosetParams<F>;
+    type Params = CosetFriParams<F>;
 
     fn proof_from_lde<P: Prng<F, Input = <Self::IopType as IopInstance<F>>::Commitment>,
         C: FriPrecomputations<F>
@@ -94,7 +92,6 @@ use std::time::Instant;
 
 #[derive(PartialEq, Eq, Clone)]
 pub struct FRIProofPrototype<F: PrimeField, I: IopInstance<F>> {
-    //pub l0_commitment: I,
     pub intermediate_commitments: Vec<I>,
     pub intermediate_values: Vec< Polynomial<F, Values> >,
     pub challenges: Vec<Vec<F>>,
@@ -108,7 +105,6 @@ pub struct FRIProofPrototype<F: PrimeField, I: IopInstance<F>> {
 impl<F: PrimeField, I: IopInstance<F>> FriProofPrototype<F, I> for FRIProofPrototype<F, I> {
     fn get_roots(&self) -> Vec<I::Commitment> {
         let mut roots = vec![];
-        // roots.push(self.l0_commitment.get_commitment().clone());
         for c in self.intermediate_commitments.iter() {
             roots.push(c.get_commitment().clone());
         }
@@ -369,7 +365,6 @@ impl<F: PrimeField, I: IopInstance<F>> CosetCombiningFriIop<F, I> {
         final_poly_coeffs.truncate(output_coeffs_at_degree_plus_one);
 
         Ok(FRIProofPrototype {
-            // l0_commitment,
             intermediate_commitments,
             intermediate_values,
             challenges,
