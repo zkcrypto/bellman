@@ -263,6 +263,7 @@ impl<F: PrimeField> Default for Rescue<F> {
 }
 
 impl<F: PrimeField> Rescue<F> {
+    //we use master key as a parameter here
     pub fn new() -> Self {
         let params = RescueParams::new();
         let mds_matrix = generate_mds_matrix(&params);

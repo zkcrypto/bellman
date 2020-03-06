@@ -3,65 +3,70 @@ use crate::pairing::ff::{PrimeField, PrimeFieldRepr};
 use super::Channel;
 
 lazy_static! {
-    static ref STATELESS_CHANNEL_BLAKE2S_PARAMS: State = {
-        Params::new()
-            .hash_length(32)
-            .key(b"Squeamish Ossifrage")
-            .personal(b"S_Prng_F")
-            .to_state()
-    };
+    static ref STATELESS_CHANNEL_RESCUE_PARAMS : Rescue = Rescue::default();
 }
 
 #[derive(Clone)]
-pub struct StatelessBlake2sChannel<F: PrimeField> {
-    state: State,
+pub struct StatelessRescueChannel<F: PrimeField> {
+    state: Rescue,
     _marker: std::marker::PhantomData<F>
 }
 
-impl<F: PrimeField> StatelessBlake2sChannel<F> {
+impl<F: PrimeField> StatelessRescueChannel<F> {
     const SHAVE_BITS: u32 = 256 - F::CAPACITY;
     // const REPR_SIZE: usize = std::mem::size_of::<F::Repr>();
     const REPR_SIZE: usize = (((F::NUM_BITS as usize)/ 64) + 1) * 8;
 }
 
-impl<F: PrimeField> Channel<F> for StatelessBlake2sChannel<F> {
+impl<F: PrimeField> Channel<F> for StatelessRescueChannel<F> {
     type Fp = F;
 
     fn new() -> Self {
         assert!(F::NUM_BITS < 256);
         Self {
-            state: STATELESS_PRNG_BLAKE2S_PARAMS.clone(),
+            state: STATELESS_CHANNEL_RESCUE_PARAMS.clone(),
             _marker: std::marker::PhantomData
         }
     }
 
     fn consume_bytes(&mut self, bytes: &[u8]) {
-        self.state.update(&bytes);
-    }
-
-    fn consume_field_element(&mut self, element: &F) {
-        let repr = element.into_repr();
-        let mut bytes: Vec<u8> = vec![0u8; Self::REPR_SIZE];
-        repr.write_be(&mut bytes[..]).expect("should write");       
-        self.state.update(&bytes[..]);
-    }
-
-    fn produce_field_element_challenge(&mut self) -> F {
-        let value = *(self.state.finalize().as_array());
-        
         let mut repr = F::Repr::default();
         let shaving_mask: u64 = 0xffffffffffffffff >> (Self::SHAVE_BITS % 64);
-        repr.read_be(&value[..]).expect("will read");
+        repr.read_be(&bytes[0..32]).expect("will read");
         let last_limb_idx = repr.as_ref().len() - 1;
         repr.as_mut()[last_limb_idx] &= shaving_mask;
         let value = F::from_repr(repr).expect("in a field");
+        self.state.absorb(value);
+    }
 
+    fn consume_field_element(&mut self, element: &F) {      
+        self.state.absorb(element);
+    }
+
+    fn produce_field_element_challenge(&mut self) -> F {
+        let value = self.state.squeeze();
+        self.state.absorb(value.clone());
         value
     }
 
     fn produce_challenge_bytes(&mut self, num_of_bytes: usize) -> Vec<u8> {
-        let value = *(self.state.finalize().as_array());
-        self.state.update(&value[..]);
-        Vec::from(&value[..])
-    }    
+        let mut res = Vec::with_capacity(num_of_bytes);
+        
+        for o in res.chunks_mut(Self::REPR_SIZE) {
+            let element = self.state.squeeze();
+            self.state.absorb(element.clone());
+
+            let repr = element.into_repr();
+            if o.len() == Self::REPR_SIZE {
+                repr.write_be(&o).expect("should write");       
+            }
+            else {
+                let mut scratch_space = [0u8; Self::REPR_SIZE];
+                repr.write_be(&scratch_space).expect("should write");  
+                o.copy_from_slice(&scratch_space[0..o.len()]);  
+            }
+        }
+
+        res
+    }
 }
