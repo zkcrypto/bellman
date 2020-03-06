@@ -29,7 +29,7 @@ impl<F: PrimeField> Channel<F> for StatelessRescueChannel<F> {
         }
     }
 
-    fn consume_field_element(&mut self, element: &Input) {      
+    fn consume(&mut self, element: &Self::Input) {      
         self.state.absorb(element);
     }
 

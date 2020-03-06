@@ -1,228 +1,174 @@
 use crate::pairing::ff::PrimeField;
-use crate::plonk::commitments::transparent::iop_compiler::*;
-use crate::plonk::polynomials::*;
 use crate::multicore::*;
 use crate::SynthesisError;
-use crate::plonk::commitments::transparent::utils::log2_floor;
-use crate::plonk::commitments::transcript::Prng;
+
 use super::*;
 use super::query_producer::*;
 use std::convert::From;
+use crate::redshift::IOP::oracle::*;
 
-pub struct CosetCombiningFriIop<F: PrimeField, I: IopInstance<F>> {
+
+pub struct CosetCombiningFriIop<F: PrimeField, Params: FriParams<F>> {
     _marker_f: std::marker::PhantomData<F>,
-    _marker_i: std::marker::PhantomData<I>,
+    _marker_params: std::marker::PhantomData<Params>,
 }
 
-#[derive(Clone, Debug)]
-pub struct CosetFriParams<F: PrimeField> {
-    pub coset_factor: F
-}
+impl<F: PrimeField, Params: FriParams<F>> FriIop<F> for CosetCombiningFriIop<F, Params> {
+    type Params = Params;
 
-impl<F: PrimeField, I: IopInstance<F>> FriIop<F> for CosetCombiningFriIop<F, I> {
-    const DEGREE: usize = 2;
-
-    type IopType = I;
-    type ProofPrototype = FRIProofPrototype<F, Self::IopType>;
-    type Proof = FRIProof<F, Self::IopType>;
-    type Params = CosetFriParams<F>;
-
-    fn proof_from_lde<P: Prng<F, Input = <Self::IopType as IopInstance<F>>::Commitment>,
-        C: FriPrecomputations<F>
+    fn proof_from_lde<C: FriPrecomputations<F>
     >(
-        lde_values: &Polynomial<F, Values>, 
+        lde_values: &Polynomial<F, Values>,
         lde_factor: usize,
-        output_coeffs_at_degree_plus_one: usize,
         precomputations: &C,
         worker: &Worker,
-        prng: &mut P,
+        channel: &mut <Self::Params as FriParams<F>>::Channel,
         params: &Self::Params
-    ) -> Result<Self::ProofPrototype, SynthesisError> {
+    ) -> Result<<Self::Params as FriParams<F>>::ProofPrototype, SynthesisError> {
         Self::proof_from_lde_by_values(
             lde_values, 
             lde_factor,
-            output_coeffs_at_degree_plus_one,
             precomputations,
             worker,
-            prng,
+            channel,
             params
         )
     }
 
-    fn prototype_into_proof(
-        prototype: Self::ProofPrototype,
-        iop_values: &Polynomial<F, Values>,
-        natural_first_element_indexes: Vec<usize>,
-        params: &Self::Params
-    ) -> Result<Self::Proof, SynthesisError> {
-        prototype.produce_proof(iop_values, natural_first_element_indexes)
-    }
+//     fn prototype_into_proof(
+//         prototype: Self::ProofPrototype,
+//         iop_values: &Polynomial<F, Values>,
+//         natural_first_element_indexes: Vec<usize>,
+//         params: &Self::Params
+//     ) -> Result<Self::Proof, SynthesisError> {
+//         prototype.produce_proof(iop_values, natural_first_element_indexes)
+//     }
 
-    fn get_fri_challenges<P: Prng<F, Input = <Self::IopType as IopInstance<F>>::Commitment>>(
-        proof: &Self::Proof,
-        prng: &mut P,
-        params: &Self::Params
-    ) -> Vec<F> {
-        let mut fri_challenges = vec![];
+//     fn get_fri_challenges<P: Prng<F, Input = <Self::IopType as IopInstance<F>>::Commitment>>(
+//         proof: &Self::Proof,
+//         prng: &mut P,
+//         params: &Self::Params
+//     ) -> Vec<F> {
+//         let mut fri_challenges = vec![];
 
-        for root in proof.roots.iter() {
-            let iop_challenge = {
-                prng.commit_input(&root);
+//         for root in proof.roots.iter() {
+//             let iop_challenge = {
+//                 prng.commit_input(&root);
                 
-                prng.get_challenge()
-            };
+//                 prng.get_challenge()
+//             };
 
-            fri_challenges.push(iop_challenge);
-        }
+//             fri_challenges.push(iop_challenge);
+//         }
 
-        fri_challenges
-    }
+//         fri_challenges
+//     }
 
-    fn verify_proof_with_challenges(
-        proof: &Self::Proof,
-        natural_element_indexes: Vec<usize>,
-        expected_value: &[F],
-        fri_challenges: &[F],
-        params: &Self::Params
-    ) -> Result<bool, SynthesisError> {
-        Self::verify_proof_queries(proof, natural_element_indexes, Self::DEGREE, expected_value, fri_challenges)
-    }
+//     fn verify_proof_with_challenges(
+//         proof: &Self::Proof,
+//         natural_element_indexes: Vec<usize>,
+//         expected_value: &[F],
+//         fri_challenges: &[F],
+//         params: &Self::Params
+//     ) -> Result<bool, SynthesisError> {
+//         Self::verify_proof_queries(proof, natural_element_indexes, Self::DEGREE, expected_value, fri_challenges)
+//     }
+// }
+
+// use std::time::Instant;
+
+// #[derive(PartialEq, Eq, Clone)]
+// pub struct FRIProofPrototype<F: PrimeField, I: IopInstance<F>> {
+//     pub intermediate_commitments: Vec<I>,
+//     pub intermediate_values: Vec< Polynomial<F, Values> >,
+//     pub challenges: Vec<Vec<F>>,
+//     pub final_root: I::Commitment,
+//     pub final_coefficients: Vec<F>,
+//     pub initial_degree_plus_one: usize,
+//     pub output_coeffs_at_degree_plus_one: usize,
+//     pub lde_factor: usize,
+// }
+
+// impl<F: PrimeField, I: IopInstance<F>> FriProofPrototype<F, I> for FRIProofPrototype<F, I> {
+//     fn get_roots(&self) -> Vec<I::Commitment> {
+//         let mut roots = vec![];
+//         for c in self.intermediate_commitments.iter() {
+//             roots.push(c.get_commitment().clone());
+//         }
+
+//         roots
+//     }
+
+//     fn get_final_root(&self) -> I::Commitment {
+//         self.final_root.clone()
+//     }
+
+//     fn get_final_coefficients(&self) -> Vec<F> {
+//         self.final_coefficients.clone()
+//     }
+// }
+
+// #[derive(PartialEq, Eq, Clone)]
+// pub struct FRIProof<F: PrimeField, I: IopInstance<F>> {
+//     pub queries: Vec<Vec<I::Query>>,
+//     pub roots: Vec<I::Commitment>,
+//     pub final_coefficients: Vec<F>,
+//     pub initial_degree_plus_one: usize,
+//     pub output_coeffs_at_degree_plus_one: usize,
+//     pub lde_factor: usize,
+// }
+
+// impl<F: PrimeField, I: IopInstance<F>> FriProof<F, I> for FRIProof<F, I> {
+//     fn get_final_coefficients(&self) -> &[F] {
+//         &self.final_coefficients
+//     }
+
+//     fn get_queries(&self) -> &Vec<Vec<I::Query>> {
+//         &self.queries
+//     }
 }
 
-use std::time::Instant;
-
-#[derive(PartialEq, Eq, Clone)]
-pub struct FRIProofPrototype<F: PrimeField, I: IopInstance<F>> {
-    pub intermediate_commitments: Vec<I>,
-    pub intermediate_values: Vec< Polynomial<F, Values> >,
-    pub challenges: Vec<Vec<F>>,
-    pub final_root: I::Commitment,
-    pub final_coefficients: Vec<F>,
-    pub initial_degree_plus_one: usize,
-    pub output_coeffs_at_degree_plus_one: usize,
-    pub lde_factor: usize,
-}
-
-impl<F: PrimeField, I: IopInstance<F>> FriProofPrototype<F, I> for FRIProofPrototype<F, I> {
-    fn get_roots(&self) -> Vec<I::Commitment> {
-        let mut roots = vec![];
-        for c in self.intermediate_commitments.iter() {
-            roots.push(c.get_commitment().clone());
-        }
-
-        roots
-    }
-
-    fn get_final_root(&self) -> I::Commitment {
-        self.final_root.clone()
-    }
-
-    fn get_final_coefficients(&self) -> Vec<F> {
-        self.final_coefficients.clone()
-    }
-}
-
-#[derive(PartialEq, Eq, Clone)]
-pub struct FRIProof<F: PrimeField, I: IopInstance<F>> {
-    pub queries: Vec<Vec<I::Query>>,
-    pub roots: Vec<I::Commitment>,
-    pub final_coefficients: Vec<F>,
-    pub initial_degree_plus_one: usize,
-    pub output_coeffs_at_degree_plus_one: usize,
-    pub lde_factor: usize,
-}
-
-impl<F: PrimeField, I: IopInstance<F>> FriProof<F, I> for FRIProof<F, I> {
-    fn get_final_coefficients(&self) -> &[F] {
-        &self.final_coefficients
-    }
-
-    fn get_queries(&self) -> &Vec<Vec<I::Query>> {
-        &self.queries
-    }
-}
-
-impl<F: PrimeField, I: IopInstance<F>> CosetCombiningFriIop<F, I> {
-    pub fn proof_from_lde_by_values<P: Prng<F, Input = <<Self as FriIop<F>>::IopType as IopInstance<F>>::Commitment>,
-        C: FriPrecomputations<F>
+impl<F: PrimeField, Params: FriParams<F>> CosetCombiningFriIop<F, Params> {
+    pub fn proof_from_lde_by_values<C: FriPrecomputations<F>
     >(
-        lde_values: &Polynomial<F, Values>, 
+        lde_values: &Polynomial<F, Values>,
         lde_factor: usize,
-        output_coeffs_at_degree_plus_one: usize,
         precomputations: &C,
         worker: &Worker,
-        prng: &mut P,
-        params: &<Self as FriIop<F>>::Params
-    ) -> Result<FRIProofPrototype<F, <Self as FriIop<F>>::IopType>, SynthesisError> {
-        let mut coset_schedule_index = 0;
-        let coset_factor = params.cosets_schedule[coset_schedule_index];
-
-        let mut total_wrap_factor = 1;
-        for s in params.cosets_schedule.iter() {
-            let coeff = 1 << *s;
-            total_wrap_factor *= coeff;
-        }
-
-        let mut roots = vec![];
-        // let tree_params = FriSpecificBlake2sTreeParams {
-        //     values_per_leaf: (1 << coset_factor)
-        // };
-
-        // let l0_commitment = FriSpecificBlake2sTree::create(lde_values.as_ref(), &tree_params);
-        // let root = l0_commitment.get_commitment();
-        // roots.push(root);
+        channel: &mut <Self::Params as FriParams<F>>::Channel,
+        params: &Self::Params
+    ) -> Result<<Self::Params as FriParams<F>>::ProofPrototype, SynthesisError> {
+        
         let initial_domain_size = lde_values.size();
-
         assert_eq!(precomputations.domain_size(), initial_domain_size);
 
         let mut two = F::one();
         two.double();
         let two_inv = two.inverse().expect("should exist");
+        let final_degree_plus_one = params.OUTPUT_POLY_DEGREE + 1;
         
-        assert!(output_coeffs_at_degree_plus_one.is_power_of_two());
+        assert!(final_degree_plus_one.is_power_of_two());
         assert!(lde_factor.is_power_of_two());
 
         let initial_degree_plus_one = initial_domain_size / lde_factor;
-        assert_eq!(initial_degree_plus_one / total_wrap_factor, output_coeffs_at_degree_plus_one, 
-            "number of FRI round does not match the ouput degree: initial degree+1 =  {}, wrapping factor {}, output at degree+1 = {}",
-             initial_degree_plus_one, total_wrap_factor, output_coeffs_at_degree_plus_one);
+        let wrapping_factor = params.COLLAPSING_FACTOR;
+        let num_steps = log2_floor(initial_degree_plus_one / final_degree_plus_one) / log2_floor(wrapping_factor) as u32;
+    
+        let mut commitments = Vec::with_capacity(num_steps);
+        let mut challenges = Vec::with_capacity(num_steps);
 
-        let mut intermediate_commitments = vec![];
-        let mut intermediate_values = vec![];
-        let mut challenges = vec![];
-        let num_challenges = coset_factor;
-        let mut next_domain_challenges = {
-            // prng.commit_input(&l0_commitment.get_commitment());
-            let mut challenges = vec![];
-            for _ in 0..num_challenges {
-                challenges.push(prng.get_challenge());
-            }
-
-            challenges
-        };
-
-        challenges.push(next_domain_challenges.clone());
-
-        let mut values_slice = lde_values.as_ref();
-
-        let omegas_inv_bitreversed: &[F] = precomputations.omegas_inv_bitreversed();
+        let initial_oracle: Self::Params::OracleType::create(lde_values.as_ref());
+        commitments.push(initial_oracle.get_commitment());
 
         // if we would precompute all N we would have
         // [0, N/2, N/4, 3N/4, N/8, N/2 + N/8, N/8 + N/4, N/8 + N/4 + N/2, ...]
         // but we only precompute half of them and have
         // [0, N/4, N/8, N/8 + N/4, ...]
 
-        let mut this_domain_size = lde_values.size();
-
-        // step 0: fold totally by 2
-        // step 1: fold totally by 4
-        // etc...
-
-        let num_steps = params.cosets_schedule.len();
+        let omegas_inv_bitreversed: &[F] = precomputations.omegas_inv_bitreversed();
+        let this_domain_size = initial_domain_size;
         
-        for (fri_step, coset_factor) in params.cosets_schedule.iter().enumerate() {
-            let coset_factor = *coset_factor;
-            let wrapping_factor = 1 << coset_factor;
+        for fri_step in (0..num_steps) {
             let next_domain_size = this_domain_size / wrapping_factor;
             let mut next_values = vec![F::zero(); next_domain_size];
 
@@ -485,3 +431,18 @@ mod test {
         ).expect("FRI must succeed");
     }
 }
+
+let num_challenges = coset_factor;
+        let mut next_domain_challenges = {
+            // prng.commit_input(&l0_commitment.get_commitment());
+            let mut challenges = vec![];
+            for _ in 0..num_challenges {
+                challenges.push(prng.get_challenge());
+            }
+
+            challenges
+        };
+
+        challenges.push(next_domain_challenges.clone());
+
+        let mut values_slice = lde_values.as_ref();

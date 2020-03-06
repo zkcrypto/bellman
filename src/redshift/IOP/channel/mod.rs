@@ -14,7 +14,7 @@ pub mod rescue_channel;
 pub trait Channel<F: PrimeField>: Sized + Clone + 'static {
     type Input;
     fn new() -> Self;
-    fn consume(&mut self, data: &Input);
+    fn consume(&mut self, data: &Self::Input);
     fn produce_field_element_challenge(&mut self) -> F;
     fn produce_challenge_bytes(&mut self, num_of_bytes: usize) -> Vec<u8>;
 }

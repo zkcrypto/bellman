@@ -36,7 +36,7 @@ impl<F: PrimeField> Channel<F> for StatelessBlake2sChannel<F> {
         }
     }
 
-    fn consume(&mut self, bytes: &Input) {
+    fn consume(&mut self, bytes: &Self::Input) {
         self.state.update(&bytes);
     }
 

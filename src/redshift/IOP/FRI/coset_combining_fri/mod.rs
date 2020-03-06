@@ -38,46 +38,58 @@ pub trait FriParams<F: PrimeField> : Clone + std::fmt::Debug {
     //number of iterations done during FRI query phase
     const R : usize;
     //the degree of the resulting polynomial at the bottom level of FRI
-    const OUTPUT_POLY_DEGREE : usize,
+    const OUTPUT_POLY_DEGREE : usize;
 
-    pub type OracleType: Oracle<F>;
-    pub type Channel: Channel<F, Input = Self::OracleType::Commitment>;
-    pub type ProofPrototype: FriProofPrototype<F, Self::OracleType>;
-    pub type Proof: FriProof<F, Self::OracleType>;
+    type OracleType: Oracle<F>;
+    type Channel: Channel<F, Input = Self::OracleType::Commitment>;
+    type ProofPrototype: FriProofPrototype<F, Self::OracleType>;
+    type Proof: FriProof<F, Self::OracleType>;
 }
 
-pub trait FriIOP<F: PrimeField> {
-    type Params = FriParams<F>;
+pub trait FriIop<F: PrimeField> {
+    type Params : FriParams<F>;
 
-    fn proof_from_lde<P: Self::Params::Channel, C: FriPrecomputations<F>>
+    fn proof_from_lde<C: FriPrecomputations<F>>
     (
         //valuse of the polynomial on FRI domain
         lde_values: &Polynomial<F, Values>,
         lde_factor: usize,
         precomputations: &C,
         worker: &Worker,
-        channel: &mut P,
+        channel: &mut <Self::Params as FriParams<F>>::Channel,
         params: &Self::Params
-    ) -> Result<Self::FriParams::ProofPrototype, SynthesisError>;
+    ) -> Result<<Self::Params as FriParams<F>>::ProofPrototype, SynthesisError>;
 
-    fn prototype_into_proof(
-        prototype: Self::ProofPrototype,
-        iop_values: &Polynomial<F, Values>,
-        natural_first_element_indexes: Vec<usize>,
-        params: &Self::Params
-    ) -> Result<Self::Proof, SynthesisError>;
+    // fn prototype_into_proof(
+    //     prototype: Self::Params::ProofPrototype,
+    //     iop_values: &Polynomial<F, Values>,
+    //     natural_first_element_indexes: Vec<usize>,
+    //     params: &Self::Params
+    // ) -> Result<Self::Proof, SynthesisError>;
 
-    fn get_fri_challenges<P: Prng<F, Input = <Self::IopType as IopInstance<F>>::Commitment>>(
-        proof: &Self::Proof,
-        prng: &mut P,
-        params: &Self::Params
-    ) -> Vec<F>;
+    // fn get_fri_challenges<P: Prng<F, Input = <Self::IopType as IopInstance<F>>::Commitment>>(
+    //     proof: &Self::Proof,
+    //     prng: &mut P,
+    //     params: &Self::Params
+    // ) -> Vec<F>;
 
-    fn verify_proof_with_challenges(
-        proof: &Self::Proof,
-        natural_element_indexes: Vec<usize>,
-        expected_value: &[F],
-        fri_challenges: &[F],
-        params: &Self::Params
-    ) -> Result<bool, SynthesisError>;
+    // fn verify_proof_with_challenges(
+    //     proof: &Self::Proof,
+    //     natural_element_indexes: Vec<usize>,
+    //     expected_value: &[F],
+    //     fri_challenges: &[F],
+    //     params: &Self::Params
+    // ) -> Result<bool, SynthesisError>;
+}
+
+pub fn log2_floor(num: usize) -> u32 {
+    assert!(num > 0);
+
+    let mut pow = 0;
+
+    while (1 << (pow+1)) <= num {
+        pow += 1;
+    }
+
+    pow
 }
