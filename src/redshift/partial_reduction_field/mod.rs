@@ -57,6 +57,7 @@ pub use self::engine::Transparent252;
 
 pub(crate) mod proth;
 pub(crate) mod proth_engine;
+pub mod precomputations;
 
 #[cfg(test)]
 mod test {
@@ -141,7 +142,8 @@ mod test {
         use crate::redshift::fft::with_precomputation::FftPrecomputations;
         use crate::redshift::fft::with_precomputation::fft::best_fft as best_fft_with_precomputations;
         use crate::redshift::domains::Domain;
-        use crate::redshift::IOP::FRI::coset_combining_fri::precomputation::*;
+        use super::precomputations::PrecomputedOmegas;
+        
         let poly_sizes = vec![32_000_000, 64_000_000];
 
         let worker = Worker::new();
@@ -188,7 +190,7 @@ mod test {
         use std::time::Instant;
         use crate::multicore::*;
         use crate::redshift::fft::with_precomputation::FftPrecomputations;
-        use crate::redshift::IOP::FRI::coset_combining_fri::precomputation::*;
+        use super::precomputations::PrecomputedOmegas;
 
         let poly_sizes = vec![1_000_000, 2_000_000, 4_000_000];
 

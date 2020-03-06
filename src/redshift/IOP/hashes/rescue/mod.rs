@@ -258,18 +258,18 @@ pub struct Rescue<F: PrimeField> {
 
 impl<F: PrimeField> Default for Rescue<F> {
     fn default() -> Self {
-        Rescue::new()
+        Rescue::new([F::zero(); RESCUE_M])
     }
 }
 
 impl<F: PrimeField> Rescue<F> {
     //we use master key as a parameter here
-    pub fn new() -> Self {
+    pub fn new(master_key: [F; RESCUE_M]) -> Self {
         let params = RescueParams::new();
         let mds_matrix = generate_mds_matrix(&params);
 
         // To use Rescue as a permutation, fix the master key to zero
-        let key_schedule = generate_key_schedule([F::zero(); RESCUE_M], &mds_matrix, &params);
+        let key_schedule = generate_key_schedule(master_key, &mds_matrix, &params);
 
         Rescue {
             sponge: SpongeState::Absorbing([None; SPONGE_RATE]),

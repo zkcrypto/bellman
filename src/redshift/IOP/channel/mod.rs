@@ -1,3 +1,4 @@
+use crate::pairing::ff::PrimeField;
 pub mod blake_channel;
 pub mod rescue_channel;
 
@@ -11,10 +12,9 @@ pub mod rescue_channel;
 // the latter is used in FRI, when we take index of the element on the top level domain.
 // However we prefer to return raw bytes in the latter case
 pub trait Channel<F: PrimeField>: Sized + Clone + 'static {
-    type Fp;
+    type Input;
     fn new() -> Self;
-    fn consume_bytes(&mut self, bytes: &[u8]);
-    fn consume_field_element(&mut self, element: &F);
+    fn consume(&mut self, data: &Input);
     fn produce_field_element_challenge(&mut self) -> F;
     fn produce_challenge_bytes(&mut self, num_of_bytes: usize) -> Vec<u8>;
 }

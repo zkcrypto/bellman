@@ -3,8 +3,8 @@ use crate::pairing::{Engine};
 
 use crate::SynthesisError;
 
-use crate::plonk::cs::gates::Variable as PlonkVariable;
-use crate::plonk::cs::gates::Index as PlonkIndex;
+use crate::cs::Variable as PlonkVariable;
+use crate::cs::Index as PlonkIndex;
 
 use super::cs::Circuit as PlonkCircuit;
 use super::cs::ConstraintSystem as PlonkConstraintSystem;
@@ -1724,10 +1724,10 @@ fn convert_variable(r1cs_variable: crate::Variable) -> PlonkVariable {
 
 fn convert_variable_back(plonk_variable: PlonkVariable) -> crate::Variable {
     let var = match plonk_variable.get_unchecked() {
-        crate::plonk::cs::variable::Index::Input(0) => {unreachable!("can not convert input variable number 0 (does not exist in plonk)")},
-        crate::plonk::cs::variable::Index::Aux(0) => {unreachable!("can not convert aux variable labeled as 0 (does not exist in plonk, dummy gate)")},
-        crate::plonk::cs::variable::Index::Input(i) => crate::Variable(crate::Index::Input(i)),
-        crate::plonk::cs::variable::Index::Aux(i) => crate::Variable(crate::Index::Aux(i)),
+        crate::cs::Index::Input(0) => {unreachable!("can not convert input variable number 0 (does not exist in plonk)")},
+        crate::cs::Index::Aux(0) => {unreachable!("can not convert aux variable labeled as 0 (does not exist in plonk, dummy gate)")},
+        crate::cs::Index::Input(i) => crate::Variable(crate::Index::Input(i)),
+        crate::cs::Index::Aux(i) => crate::Variable(crate::Index::Aux(i)),
     };
 
     var

@@ -19,7 +19,7 @@ impl<F: PrimeField> StatelessRescueChannel<F> {
 }
 
 impl<F: PrimeField> Channel<F> for StatelessRescueChannel<F> {
-    type Fp = F;
+    type Input = F;
 
     fn new() -> Self {
         assert!(F::NUM_BITS < 256);
@@ -29,17 +29,7 @@ impl<F: PrimeField> Channel<F> for StatelessRescueChannel<F> {
         }
     }
 
-    fn consume_bytes(&mut self, bytes: &[u8]) {
-        let mut repr = F::Repr::default();
-        let shaving_mask: u64 = 0xffffffffffffffff >> (Self::SHAVE_BITS % 64);
-        repr.read_be(&bytes[0..32]).expect("will read");
-        let last_limb_idx = repr.as_ref().len() - 1;
-        repr.as_mut()[last_limb_idx] &= shaving_mask;
-        let value = F::from_repr(repr).expect("in a field");
-        self.state.absorb(value);
-    }
-
-    fn consume_field_element(&mut self, element: &F) {      
+    fn consume_field_element(&mut self, element: &Input) {      
         self.state.absorb(element);
     }
 

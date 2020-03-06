@@ -26,7 +26,7 @@ impl<F: PrimeField> StatelessBlake2sChannel<F> {
 }
 
 impl<F: PrimeField> Channel<F> for StatelessBlake2sChannel<F> {
-    type Fp = F;
+    type Input = [u8; 32];
 
     fn new() -> Self {
         assert!(F::NUM_BITS < 256);
@@ -36,15 +36,8 @@ impl<F: PrimeField> Channel<F> for StatelessBlake2sChannel<F> {
         }
     }
 
-    fn consume_bytes(&mut self, bytes: &[u8]) {
+    fn consume(&mut self, bytes: &Input) {
         self.state.update(&bytes);
-    }
-
-    fn consume_field_element(&mut self, element: &F) {
-        let repr = element.into_repr();
-        let mut bytes: Vec<u8> = vec![0u8; Self::REPR_SIZE];
-        repr.write_be(&mut bytes[..]).expect("should write");       
-        self.state.update(&bytes[..]);
     }
 
     fn produce_field_element_challenge(&mut self) -> F {

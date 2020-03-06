@@ -1,7 +1,7 @@
 use crate::pairing::ff::{Field, PrimeField};
 use crate::pairing::{Engine};
 use std::ops::{Add, Sub, Neg};
-pub use crate::plonk::cs::variable::*;
+pub use crate::cs::*;
 
 pub enum Coeff<F: PrimeField> {
     Zero,

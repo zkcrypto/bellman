@@ -6,18 +6,22 @@ pub mod precomputation;
 use crate::SynthesisError;
 use crate::multicore::Worker;
 use crate::ff::PrimeField;
-use crate::plonk::commitments::transparent::iop_compiler::*;
 
-use crate::plonk::polynomials::*;
-use crate::plonk::commitments::transcript::Prng;
+use crate::redshift::IOP::oracle::Oracle;
+use crate::redshift::polynomials::*;
+use crate::redshift::IOP::channel::Channel;
 
-pub trait FriProofPrototype<F: PrimeField, I: IopInstance<F>> {
-    fn get_roots(&self) -> Vec<I::Commitment>;
+//proof prototype is just a series of FRI-oracles (FRI setup phase)
+pub trait FriProofPrototype<F: PrimeField, I: Oracle<F>> {
+    fn get_commitments(&self) -> Vec<I::Commitment>;
     fn get_final_root(&self) -> I::Commitment;
+    //coefficients of the polynomials on the bottom letter of FRI
     fn get_final_coefficients(&self) -> Vec<F>;
 }
 
-pub trait FriProof<F: PrimeField, I: IopInstance<F>> {
+//result of FRI query phase (r iterations)
+//the parameter r is defined in FRI params  
+pub trait FriProof<F: PrimeField, I: Oracle<F>> {
     fn get_final_coefficients(&self) -> &[F];
     fn get_queries(&self) -> &Vec<Vec<I::Query>>;
 }
@@ -28,25 +32,33 @@ pub trait FriPrecomputations<F: PrimeField> {
     fn domain_size(&self) -> usize;
 }
 
-pub trait FriIop<F: PrimeField> {
-    const DEGREE: usize;
+pub trait FriParams<F: PrimeField> : Clone + std::fmt::Debug {
+    //power of 2 - it measures how much nearby levels of FRI differ in size (nu in the paper)
+    const COLLAPSING_FACTOR : usize;
+    //number of iterations done during FRI query phase
+    const R : usize;
+    //the degree of the resulting polynomial at the bottom level of FRI
+    const OUTPUT_POLY_DEGREE : usize,
 
-    type IopType: IopInstance<F>;
-    type ProofPrototype: FriProofPrototype<F, Self::IopType>;
-    type Proof: FriProof<F, Self::IopType>;
-    type Params: Clone + std::fmt::Debug;
+    pub type OracleType: Oracle<F>;
+    pub type Channel: Channel<F, Input = Self::OracleType::Commitment>;
+    pub type ProofPrototype: FriProofPrototype<F, Self::OracleType>;
+    pub type Proof: FriProof<F, Self::OracleType>;
+}
 
-    fn proof_from_lde<P: Prng<F, Input = <Self::IopType as IopInstance<F>>::Commitment>,
-    C: FriPrecomputations<F>
-    >(
-        lde_values: &Polynomial<F, Values>, 
+pub trait FriIOP<F: PrimeField> {
+    type Params = FriParams<F>;
+
+    fn proof_from_lde<P: Self::Params::Channel, C: FriPrecomputations<F>>
+    (
+        //valuse of the polynomial on FRI domain
+        lde_values: &Polynomial<F, Values>,
         lde_factor: usize,
-        output_coeffs_at_degree_plus_one: usize,
         precomputations: &C,
         worker: &Worker,
-        prng: &mut P,
+        channel: &mut P,
         params: &Self::Params
-    ) -> Result<Self::ProofPrototype, SynthesisError>;
+    ) -> Result<Self::FriParams::ProofPrototype, SynthesisError>;
 
     fn prototype_into_proof(
         prototype: Self::ProofPrototype,
