@@ -1,6 +1,6 @@
 use crate::pairing::ff::PrimeField;
 use crate::multicore::*;
-use crate::plonk::domains::*;
+use crate::redshift::domains::*;
 
 pub(crate) mod partial_reduction;
 
@@ -457,11 +457,10 @@ mod test {
     #[test]
     fn test_bit_reversed_omegas_computation() {
         use rand::{XorShiftRng, SeedableRng, Rand, Rng};
-        use crate::plonk::transparent_engine::proth::Fr;
-        use crate::plonk::polynomials::*;
+        use crate::redshift::partial_reduction_field::proth::Fr;
+        use crate::redshift::polynomials::*;
         use std::time::Instant;
         use crate::multicore::*;
-        use crate::plonk::commitments::transparent::utils::*;
         use super::CTPrecomputations;
         use super::BitReversedOmegas;
 
@@ -480,16 +479,15 @@ mod test {
     #[test]
     fn test_bench_ct_serial_fft() {
         use rand::{XorShiftRng, SeedableRng, Rand, Rng};
-        use crate::plonk::transparent_engine::proth::Fr;
-        use crate::plonk::polynomials::*;
+        use crate::redshift::partial_reduction_field::proth::Fr;
+        use crate::redshift::polynomials::*;
         use std::time::Instant;
         use super::*;
         use crate::multicore::*;
-        use crate::plonk::commitments::transparent::utils::*;
-        use crate::plonk::fft::fft::serial_fft;
+        use crate::redshift::fft::fft::serial_fft;
         use super::CTPrecomputations;
         use super::BitReversedOmegas;
-        use crate::plonk::domains::Domain;
+        use crate::redshift::domains::Domain;
 
         let poly_sizes = vec![1_000_000, 2_000_000, 4_000_000];
 
@@ -576,16 +574,15 @@ mod test {
     #[test]
     fn test_bench_ct_parallel_fft() {
         use rand::{XorShiftRng, SeedableRng, Rand, Rng};
-        use crate::plonk::transparent_engine::proth::Fr;
-        use crate::plonk::polynomials::*;
+        use crate::redshift::partial_reduction_field::proth::Fr;
+        use crate::redshift::polynomials::*;
         use std::time::Instant;
         use super::*;
         use crate::multicore::*;
-        use crate::plonk::commitments::transparent::utils::*;
-        use crate::plonk::fft::fft::parallel_fft;
+        use crate::redshift::fft::fft::parallel_fft;
         use super::CTPrecomputations;
         use super::BitReversedOmegas;
-        use crate::plonk::domains::Domain;
+        use crate::redshift::domains::Domain;
 
         let poly_sizes = vec![1_000_000, 2_000_000, 4_000_000];
 

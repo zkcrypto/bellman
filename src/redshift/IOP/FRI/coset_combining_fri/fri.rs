@@ -68,6 +68,7 @@ impl<F: PrimeField, I: IopInstance<F>> FriIop<F> for CosetCombiningFriIop<F, I> 
         for root in proof.roots.iter() {
             let iop_challenge = {
                 prng.commit_input(&root);
+                
                 prng.get_challenge()
             };
 

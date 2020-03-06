@@ -1,7 +1,8 @@
 use crate::pairing::ff::PrimeField;
 use crate::multicore::*;
-use crate::plonk::domains::*;
-use crate::plonk::transparent_engine::PartialTwoBitReductionField;
+use crate::redshift::domains::*;
+use crate::redshift::partial_reduction_field::proth::Fr;
+use crate::redshift::partial_reduction_field::PartialTwoBitReductionField;
 
 use super::CTPrecomputations;
 use super::log2_floor;
@@ -482,12 +483,12 @@ pub(crate) fn parallel_ct_ntt_partial_reduction<F: PartialTwoBitReductionField, 
 
 #[cfg(test)]
 mod test {
-    use crate::plonk::fft::cooley_tukey_ntt::*;
+    use crate::redshift::fft::cooley_tukey_ntt::*;
 
     #[test]
     fn test_bench_ct_serial_fft() {
         use rand::{XorShiftRng, SeedableRng, Rand, Rng};
-        use crate::plonk::transparent_engine::proth::Fr;
+        use crate::redshift::partial_reduction_field::proth::Fr;
         use crate::plonk::polynomials::*;
         use std::time::Instant;
         use super::*;
