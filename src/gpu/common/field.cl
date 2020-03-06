@@ -1,8 +1,6 @@
 // FinalityLabs - 2019
 // Arbitrary size prime-field arithmetic library (add, sub, mul, pow)
 
-typedef struct { limb val[FIELD_LIMBS]; } FIELD;
-
 // Greater than or equal
 bool FIELD_gte(FIELD a, FIELD b) {
   for(char i = FIELD_LIMBS - 1; i >= 0; i--){
@@ -20,28 +18,6 @@ bool FIELD_eq(FIELD a, FIELD b) {
     if(a.val[i] != b.val[i])
       return false;
   return true;
-}
-
-// Normal addition
-FIELD FIELD_add_(FIELD a, FIELD b) {
-  bool carry = 0;
-  for(uchar i = 0; i < FIELD_LIMBS; i++) {
-    limb old = a.val[i];
-    a.val[i] += b.val[i] + carry;
-    carry = carry ? old >= a.val[i] : old > a.val[i];
-  }
-  return a;
-}
-
-// Normal subtraction
-FIELD FIELD_sub_(FIELD a, FIELD b) {
-  bool borrow = 0;
-  for(uchar i = 0; i < FIELD_LIMBS; i++) {
-    limb old = a.val[i];
-    a.val[i] -= b.val[i] + borrow;
-    borrow = borrow ? old <= a.val[i] : old < a.val[i];
-  }
-  return a;
 }
 
 /*
