@@ -1,7 +1,6 @@
 use crate::pairing::ff::{PrimeField, PrimeFieldRepr};
 use blake2s_const::blake2s_const;
 use crate::multicore::Worker;
-use super::super::utils::log2_floor;
 use super::*;
 use std::convert::From;
 
@@ -83,7 +82,7 @@ impl<F: PrimeField> FriSpecificBlake2sTree<F> {
     }
 }
 
-impl<F: PrimeField> IopInstance<F> for FriSpecificBlake2sTree<F> {
+impl<F: PrimeField> Oracle<F> for FriSpecificBlake2sTree<F> {
     type Commitment = [u8; 32];
     type Params = FriSpecificBlake2sTreeParams;
     type Query = CosetCombinedQuery<F>;
@@ -274,7 +273,7 @@ impl<F: PrimeField> IopQuery<F> for CosetCombinedQuery<F> {
 #[test]
 fn make_small_iop() {
     use crate::ff::Field;
-    use crate::plonk::transparent_engine::Fr;
+    use crate::redshift::partial_reduction_field::Fr;
 
     const SIZE: usize = 16;
     const VALUES_PER_LEAF: usize = 4;
@@ -307,7 +306,7 @@ fn make_small_iop() {
 #[test]
 fn test_bench_large_fri_specific_iop() {
     use crate::ff::Field;
-    use crate::plonk::transparent_engine::Fr;
+    use crate::redshift::partial_reduction_field::Fr;
 
     const SIZE: usize = 1 << (20 + 4);
     const VALUES_PER_LEAF: usize = 8;

@@ -1,16 +1,16 @@
 use crate::pairing::ff::PrimeField;
-use crate::plonk::domains::*;
+use crate::redshift::domains::*;
 use crate::SynthesisError;
 use crate::multicore::*;
-use crate::plonk::fft::*;
-use crate::plonk::fft::with_precomputation;
-use crate::plonk::fft::with_precomputation::FftPrecomputations;
+use crate::redshift::fft::*;
+use crate::redshift::fft::with_precomputation;
+use crate::redshift::fft::with_precomputation::FftPrecomputations;
 
-use crate::plonk::fft::cooley_tukey_ntt;
-use crate::plonk::fft::cooley_tukey_ntt::CTPrecomputations;
-use crate::plonk::fft::cooley_tukey_ntt::partial_reduction;
+use crate::redshift::fft::cooley_tukey_ntt;
+use crate::redshift::fft::cooley_tukey_ntt::CTPrecomputations;
+use crate::redshift::fft::cooley_tukey_ntt::partial_reduction;
 
-use crate::plonk::transparent_engine::PartialTwoBitReductionField;
+use crate::redshift::partial_reduction_field::PartialTwoBitReductionField;
 
 pub trait PolynomialForm: Sized + Copy + Clone {}
 
@@ -1991,6 +1991,18 @@ impl<F: PrimeField> Polynomial<F, Values> {
     }
 }
 
+pub fn log2_floor(num: usize) -> u32 {
+    assert!(num > 0);
+
+    let mut pow = 0;
+
+    while (1 << (pow+1)) <= num {
+        pow += 1;
+    }
+
+    pow
+}
+
 impl<F: PartialTwoBitReductionField> Polynomial<F, Coefficients> {
     pub fn bitreversed_lde_using_bitreversed_ntt_with_partial_reduction<P: CTPrecomputations<F>>(
         self, 
@@ -2064,9 +2076,6 @@ impl<F: PartialTwoBitReductionField> Polynomial<F, Coefficients> {
 
         let to_spawn = factor;
         let coset_size = current_size;
-
-        use crate::plonk::commitments::transparent::utils::log2_floor;
-
         let factor_log = log2_floor(factor) as usize;
 
         // let chunk = Worker::chunk_size_for_num_spawned_threads(factor, to_spawn);
@@ -2247,9 +2256,6 @@ impl<F: PrimeField> Polynomial<F, Coefficients> {
 
         let to_spawn = factor;
         let coset_size = current_size;
-
-        use crate::plonk::commitments::transparent::utils::log2_floor;
-
         let factor_log = log2_floor(factor) as usize;
 
         // let chunk = Worker::chunk_size_for_num_spawned_threads(factor, to_spawn);

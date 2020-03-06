@@ -489,15 +489,14 @@ mod test {
     fn test_bench_ct_serial_fft() {
         use rand::{XorShiftRng, SeedableRng, Rand, Rng};
         use crate::redshift::partial_reduction_field::proth::Fr;
-        use crate::plonk::polynomials::*;
+        use crate::redshift::polynomials::*;
         use std::time::Instant;
         use super::*;
         use crate::multicore::*;
-        use crate::plonk::commitments::transparent::utils::*;
-        use crate::plonk::fft::fft::serial_fft;
+        use crate::redshift::fft::fft::serial_fft;
         use super::CTPrecomputations;
         use super::super::BitReversedOmegas;
-        use crate::plonk::domains::Domain;
+        use crate::redshift::domains::Domain;
 
         let poly_sizes = if cfg!(debug_assertions) {
             vec![10_000]
@@ -630,16 +629,15 @@ mod test {
     #[test]
     fn test_bench_ct_parallel_fft() {
         use rand::{XorShiftRng, SeedableRng, Rand, Rng};
-        use crate::plonk::transparent_engine::proth::Fr;
-        use crate::plonk::polynomials::*;
+        use crate::redshift::partial_reduction_field::proth::Fr;
+        use crate::redshift::polynomials::*;
         use std::time::Instant;
         use super::*;
         use crate::multicore::*;
-        use crate::plonk::commitments::transparent::utils::*;
-        use crate::plonk::fft::fft::parallel_fft;
+        use crate::redshift::fft::fft::parallel_fft;
         use super::CTPrecomputations;
         use super::super::BitReversedOmegas;
-        use crate::plonk::domains::Domain;
+        use crate::redshift::domains::Domain;
 
         let poly_sizes = if cfg!(debug_assertions) {
             vec![10_000]

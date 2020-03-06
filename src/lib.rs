@@ -28,9 +28,9 @@ pub mod gm17;
 #[cfg(feature = "sonic")]
 pub mod sonic;
 
-#[macro_use]
 #[cfg(feature = "redshift")]
 pub mod redshift;
+#[macro_use]
 extern crate lazy_static;
 
 mod group;

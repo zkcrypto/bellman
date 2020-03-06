@@ -1,8 +1,7 @@
 use crate::pairing::ff::{PrimeField, PrimeFieldRepr};
 use crate::multicore::Worker;
-use super::super::utils::log2_floor;
-use super::rescue::*;
 use super::*;
+use crate::redshift::IOP::hashes::rescue::Rescue;
 use std::convert::From;
 
 #[derive(Debug)]
@@ -57,7 +56,7 @@ impl<F: PrimeField> FriSpecificRescueTree<F> {
     }
 }
 
-impl<F: PrimeField> IopInstance<F> for FriSpecificRescueTree<F> {
+impl<F: PrimeField> Oracle<F> for FriSpecificRescueTree<F> {
     type Commitment = F;
     type Params = FriSpecificRescueTreeParams;
     type Query = CosetCombinedQuery<F>;
@@ -250,7 +249,7 @@ impl<F: PrimeField> IopQuery<F> for CosetCombinedQuery<F> {
 #[test]
 fn make_small_iop() {
     use crate::ff::Field;
-    use crate::plonk::transparent_engine::Fr;
+    use crate::redshift::partial_reduction_field::Fr;
 
     const SIZE: usize = 16;
     const VALUES_PER_LEAF: usize = 4;
@@ -283,7 +282,7 @@ fn make_small_iop() {
 #[test]
 fn test_bench_large_fri_specific_iop() {
     use crate::ff::Field;
-    use crate::plonk::transparent_engine::Fr;
+    use crate::redshift::partial_reduction_field::Fr;
 
     const SIZE: usize = 1 << (20 + 4);
     const VALUES_PER_LEAF: usize = 8;
