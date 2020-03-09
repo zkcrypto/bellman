@@ -42,10 +42,11 @@ __kernel void POINT_bellman_multiexp(
   for(uint i = nstart; i < nend; i++) {
     uint ind = EXPONENT_get_bits(exps[i], bits, w);
 
-    // Special case where it is faster to add the base into `res` instead of
-    // `bucket[0]`.
-    if(ind == 1) res = POINT_add_mixed(res, bases[i]);
-
+    // O_o, weird optimization, having a single special case makes it
+    // tremendously faster!
+    // 511 is chosen because it's half of the maximum bucket len, but
+    // any other number works... Bigger indices seems to be better...
+    if(ind == 511) buckets[510] = POINT_add_mixed(buckets[510], bases[i]);
     else if(ind--) buckets[ind] = POINT_add_mixed(buckets[ind], bases[i]);
   }
 
