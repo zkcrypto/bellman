@@ -4,7 +4,8 @@ use crate::pairing::{Engine};
 use crate::{SynthesisError};
 use std::marker::PhantomData;
 
-pub use crate::cs::Variable;
+pub use crate::cs::{Variable, Index};
+pub use Index::*;
 
 pub trait Circuit<E: Engine> {
     fn synthesize<CS: ConstraintSystem<E>>(&self, cs: &mut CS) -> Result<(), SynthesisError>;

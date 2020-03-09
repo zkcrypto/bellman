@@ -157,7 +157,8 @@ impl<F: PrimeField, Params: FriParams<F>> CosetCombiningFriIop<F, Params> {
         let mut commitments = Vec::with_capacity(num_steps);
         let mut challenges = Vec::with_capacity(num_steps);
 
-        let initial_oracle: Self::Params::OracleType::create(lde_values.as_ref());
+        //TODO: locate al of them in LDE order
+        let initial_oracle = Self::Params::OracleType::create(lde_values.as_ref());
         commitments.push(initial_oracle.get_commitment());
 
         // if we would precompute all N we would have

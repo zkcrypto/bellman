@@ -6,13 +6,10 @@ use std::marker::PhantomData;
 use super::cs::*;
 use crate::multicore::*;
 
-use crate::plonk::polynomials::*;
-use crate::plonk::domains::*;
-use crate::plonk::fft::cooley_tukey_ntt::CTPrecomputations;
-use crate::plonk::commitments::transcript::*;
-use crate::plonk::commitments::transparent::iop_compiler::coset_combining_blake2s_tree::*;
-use crate::plonk::commitments::transparent::iop_compiler::*;
-use crate::plonk::transparent_engine::PartialTwoBitReductionField;
+use crate::redshift::polynomials::*;
+use crate::redshift::domains::*;
+use crate::redshift::fft::cooley_tukey_ntt::CTPrecomputations;
+use crate::redshift::partial_reduction_field::PartialTwoBitReductionField;
 
 use super::gates::*;
 use super::data_structures::*;
