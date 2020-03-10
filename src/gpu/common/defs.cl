@@ -42,25 +42,3 @@ limb add_with_carry(limb a, limb *b) {
     return lo;
   #endif
 }
-
-// Returns a + b + c, puts the carry in c
-limb add2_with_carry(limb a, limb b, bool *c) {
-  #ifdef NVIDIA
-    limb lo, hi, cc = *c;
-    asm("add.cc.u64 %0, %2, %3;\r\n"
-        "addc.u64 %1, 0, 0;\r\n"
-        "add.cc.u64 %0, %0, %4;\r\n"
-        "addc.u64 %1, %1, 0;\r\n"
-        : "=l"(lo), "=l"(hi) : "l"(a), "l"(b), "l"(cc));
-    *c = hi;
-    return lo;
-  #else
-    limb lo = a + b;
-    limb hi = lo < a;
-    a = lo;
-    lo += *c;
-    hi += (lo < a);
-    *c = hi;
-    return lo;
-  #endif
-}
