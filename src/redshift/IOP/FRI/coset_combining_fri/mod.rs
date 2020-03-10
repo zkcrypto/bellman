@@ -12,18 +12,45 @@ use crate::redshift::polynomials::*;
 use crate::redshift::IOP::channel::Channel;
 
 //proof prototype is just a series of FRI-oracles (FRI setup phase)
-pub trait FriProofPrototype<F: PrimeField, I: Oracle<F>> {
-    fn get_commitments(&self) -> Vec<I::Commitment>;
-    fn get_final_root(&self) -> I::Commitment;
+#[derive(PartialEq, Eq, Clone)]
+pub struct FriProofPrototype<F: PrimeField, I: Oracle<F>> {
+    pub intermediate_oracles: Vec<I>,
+    pub challenges: Vec<Vec<F>>,
     //coefficients of the polynomials on the bottom letter of FRI
-    fn get_final_coefficients(&self) -> Vec<F>;
+    pub final_coefficients: Vec<F>,
+}
+
+impl<F: PrimeField, I: Oracle<F>> FriProofPrototype<F, I> {
+    fn get_roots(&self) -> Vec<I::Commitment> {
+        let mut roots = vec![];
+        for c in self.intermediate_oracles.iter() {
+            roots.push(c.get_commitment().clone());
+        }
+        roots
+    }
+
+    fn get_final_coefficients(&self) -> Vec<F> {
+        self.final_coefficients.clone()
+    }
 }
 
 //result of FRI query phase (r iterations)
-//the parameter r is defined in FRI params  
-pub trait FriProof<F: PrimeField, I: Oracle<F>> {
-    fn get_final_coefficients(&self) -> &[F];
-    fn get_queries(&self) -> &Vec<Vec<I::Query>>;
+//the parameter r is defined in FRI params 
+#[derive(PartialEq, Eq, Clone)]
+pub struct FriProof<F: PrimeField, I: Oracle<F>> {
+    pub queries: Vec<Vec<I::Query>>,
+    pub commitments: Vec<I::Commitment>,
+    pub final_coefficients: Vec<F>,
+}
+
+impl<F: PrimeField, I: Oracle<F>> FriProof<F, I> {
+    fn get_final_coefficients(&self) -> &[F] {
+        &self.final_coefficients
+    }
+
+    fn get_queries(&self) -> &Vec<Vec<I::Query>> {
+        &self.queries
+    }
 }
 
 pub trait FriPrecomputations<F: PrimeField> {
@@ -39,57 +66,11 @@ pub trait FriParams<F: PrimeField> : Clone + std::fmt::Debug {
     const R : usize;
     //the degree of the resulting polynomial at the bottom level of FRI
     const OUTPUT_POLY_DEGREE : usize;
-
-    type OracleType: Oracle<F>;
-    type Channel: Channel<F, Input = Self::OracleType::Commitment>;
-    type ProofPrototype: FriProofPrototype<F, Self::OracleType>;
-    type Proof: FriProof<F, Self::OracleType>;
 }
 
-pub trait FriIop<F: PrimeField> {
-    type Params : FriParams<F>;
-
-    fn proof_from_lde<C: FriPrecomputations<F>>
-    (
-        //valuse of the polynomial on FRI domain
-        lde_values: &Polynomial<F, Values>,
-        lde_factor: usize,
-        precomputations: &C,
-        worker: &Worker,
-        channel: &mut <Self::Params as FriParams<F>>::Channel,
-        params: &Self::Params
-    ) -> Result<<Self::Params as FriParams<F>>::ProofPrototype, SynthesisError>;
-
-    // fn prototype_into_proof(
-    //     prototype: Self::Params::ProofPrototype,
-    //     iop_values: &Polynomial<F, Values>,
-    //     natural_first_element_indexes: Vec<usize>,
-    //     params: &Self::Params
-    // ) -> Result<Self::Proof, SynthesisError>;
-
-    // fn get_fri_challenges<P: Prng<F, Input = <Self::IopType as IopInstance<F>>::Commitment>>(
-    //     proof: &Self::Proof,
-    //     prng: &mut P,
-    //     params: &Self::Params
-    // ) -> Vec<F>;
-
-    // fn verify_proof_with_challenges(
-    //     proof: &Self::Proof,
-    //     natural_element_indexes: Vec<usize>,
-    //     expected_value: &[F],
-    //     fri_challenges: &[F],
-    //     params: &Self::Params
-    // ) -> Result<bool, SynthesisError>;
-}
-
-pub fn log2_floor(num: usize) -> u32 {
-    assert!(num > 0);
-
-    let mut pow = 0;
-
-    while (1 << (pow+1)) <= num {
-        pow += 1;
-    }
-
-    pow
+pub struct FriIop<F: PrimeField, Params: FriParams<F>, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> {
+    _marker_f: std::marker::PhantomData<F>,
+    _marker_params: std::marker::PhantomData<Params>,
+    _marker_oracle: std::marker::PhantomData<O>,
+    _marker_channel: std::marker::PhantomData<C>,
 }

@@ -1,20 +1,12 @@
 use crate::pairing::ff::{Field, PrimeField};
 use crate::pairing::{Engine};
 
-use crate::plonk::commitments::transparent::fri::coset_combining_fri::fri::*;
+use crate::redshift::commitments::transparent::fri::coset_combining_fri::fri::*;
 use crate::plonk::commitments::transparent::iop_compiler::*;
 use crate::plonk::polynomials::*;
 use crate::plonk::fft::cooley_tukey_ntt::*;
 use crate::multicore::*;
 
-//NB: this structure should be better called FRI parameters
-#[derive(Debug, Clone)]
-pub struct RedshiftParameters<F: PrimeField>{
-    pub lde_factor: usize,
-    pub num_queries: usize,
-    pub output_coeffs_at_degree_plus_one: usize,
-    pub coset_params: CosetFriParams<F>,
-}
 
 #[derive(Debug)]
 pub struct RedshiftSetup<F: PrimeField, I: IopInstance<F>>{
