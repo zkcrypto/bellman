@@ -1,15 +1,12 @@
 use crate::pairing::ff::PrimeField;
-use crate::plonk::commitments::transparent::iop::*;
-use crate::plonk::polynomials::*;
-use crate::plonk::domains::*;
+use crate::redshift::polynomials::*;
+use crate::redshift::domains::*;
 use crate::multicore::*;
 use crate::SynthesisError;
-use crate::plonk::commitments::transparent::iop::*;
-use crate::plonk::commitments::transparent::utils::log2_floor;
-use super::fri::*;
-use super::super::*;
+use super::coset_combining_fri::*;
+use super::*;
 
-impl<F: PrimeField> CosetCombiningFriIop<F> {
+impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F, O, C> {
     pub fn verify_prototype(
         proof: & FRIProofPrototype<F, <Self as FriIop<F>>>,
         leaf_values: & Polynomial<F, Values>, 

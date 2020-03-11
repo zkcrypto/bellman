@@ -79,7 +79,7 @@ impl<F: PrimeField> Oracle<F> for FriSpecificRescueTree<F> {
 
         let mut nodes = vec![F::zero(); num_nodes];
 
-        let hasher = Rescue::new();
+        let hasher = Rescue::default();
 
         let worker = Worker::new();
 
@@ -196,7 +196,7 @@ impl<F: PrimeField> Oracle<F> for FriSpecificRescueTree<F> {
             return false;
         }
 
-        let hasher = Rescue::new();
+        let hasher = Rescue::default();
 
         let mut hash = Self::hash_into_leaf(query.values(), hasher.clone());
         let mut idx = query.indexes()[0] / params.values_per_leaf;

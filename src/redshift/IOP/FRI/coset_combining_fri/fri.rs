@@ -9,11 +9,7 @@ use crate::redshift::IOP::oracle::*;
 use crate::redshift::fft::cooley_tukey_ntt::log2_floor;
 
 
-impl<F: PrimeField, Params: FriParams<F>, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F, Params, O, C> {
-    type Params = Params;
-    type OracleType = O;
-    type Channel = C;
-    type Proof = FriProof<F, Self::OracleType>;
+impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F, O, C> {
 
     fn proof_from_lde<T: FriPrecomputations<F>
     >(
@@ -21,9 +17,9 @@ impl<F: PrimeField, Params: FriParams<F>, O: Oracle<F>, C: Channel<F, Input = O:
         lde_factor: usize,
         precomputations: &T,
         worker: &Worker,
-        channel: &mut Self::Channel,
-        params: &Self::Params
-    ) -> Result<FriProofPrototype<F, Self::Oracle>, SynthesisError> {
+        channel: &mut C,
+        params: &FriParams,
+    ) -> Result<FriProofPrototype<F, O>, SynthesisError> {
         Self::proof_from_lde_by_values(
             lde_values, 
             lde_factor,
@@ -35,24 +31,24 @@ impl<F: PrimeField, Params: FriParams<F>, O: Oracle<F>, C: Channel<F, Input = O:
     }
 
     fn prototype_into_proof(
-        prototype: FriProofPrototype<F, Self::Oracle>,
+        prototype: FriProofPrototype<F, O>,
         natural_first_element_indexes: Vec<usize>,
-        params: &Self::Params
-    ) -> Result<Self::Params::Proof, SynthesisError> {
+        params: &FriParams,
+    ) -> Result<FriProof<F, O>, SynthesisError> {
         prototype.produce_proof(natural_first_element_indexes)
     }
 
     fn get_fri_challenges(
-        proof: &Self::Proof,
-        channel: &mut Self::Channel,
-        params: &Self::Params
+        proof: &FriProof<F, O>,
+        channel: &mut C,
+        params: &FriParams
     ) -> Vec<F> {
         let mut fri_challenges = vec![];
 
         for commitment in proof.commitments.iter() {
             let iop_challenge = {
                 channel.consume(&commitment);
-                channel.get_field_element()
+                channel.produce_field_element_challenge()
             };
 
             fri_challenges.push(iop_challenge);
@@ -61,25 +57,25 @@ impl<F: PrimeField, Params: FriParams<F>, O: Oracle<F>, C: Channel<F, Input = O:
         fri_challenges
     }
 
-    fn verify_proof_with_challenges(
-        proof: &Self::Proof,
-        natural_element_indexes: Vec<usize>,
-        fri_challenges: &[F],
-        params: &Self::Params
-    ) -> Result<bool, SynthesisError> {
-        Self::verify_proof_queries(proof, natural_element_indexes, fri_challenges, params)
-    }
+    // fn verify_proof_with_challenges(
+    //     proof: &FriProof<F, O>,
+    //     natural_element_indexes: Vec<usize>,
+    //     fri_challenges: &[F],
+    //     params: &FriParams,
+    // ) -> Result<bool, SynthesisError> {
+    //     Self::verify_proof_queries(proof, natural_element_indexes, fri_challenges, params)
+    // }
 
     pub fn proof_from_lde_by_values<T: FriPrecomputations<F>>
     (
         // we assume lde_values to be in bitreversed order
         lde_values: &Polynomial<F, Values>,
         lde_factor: usize,
-        precomputations: &C,
+        precomputations: &T,
         worker: &Worker,
-        channel: &mut Self::Channel,
-        params: &Self::Params
-    ) -> Result<FriProofPrototype<F, Self::Oracle>, SynthesisError> {
+        channel: &mut C,
+        params: &FriParams
+    ) -> Result<FriProofPrototype<F, O>, SynthesisError> {
         
         let initial_domain_size = lde_values.size();
         assert_eq!(precomputations.domain_size(), initial_domain_size);
@@ -87,22 +83,22 @@ impl<F: PrimeField, Params: FriParams<F>, O: Oracle<F>, C: Channel<F, Input = O:
         let mut two = F::one();
         two.double();
         let two_inv = two.inverse().expect("should exist");
-        let final_degree_plus_one = params.OUTPUT_POLY_DEGREE + 1;
+        let final_degree_plus_one = params.output_poly_degree + 1;
         
         assert!(final_degree_plus_one.is_power_of_two());
         assert!(lde_factor.is_power_of_two());
 
         let initial_degree_plus_one = initial_domain_size / lde_factor;
-        let wrapping_factor = params.COLLAPSING_FACTOR;
+        let wrapping_factor = params.collapsing_factor;
         let num_steps = log2_floor(initial_degree_plus_one / final_degree_plus_one) / log2_floor(wrapping_factor) as u32;
     
-        let mut oracles = Vec::with_capacity(num_steps);
-        let mut challenges = Vec::with_capacity(num_steps);
-        let mut intermediate_values = Vec::with_capacity(num_steps);
+        let mut oracles = Vec::with_capacity(num_steps as usize);
+        let mut challenges = Vec::with_capacity(num_steps as usize);
+        let mut intermediate_values = Vec::with_capacity(num_steps as usize);
 
         //TODO: locate all of them in LDE order
-        let oracle_params = <Self::OracleType as Oracle<F>>::Params::from(1 << wrapping_factor);
-        let initial_oracle = <Self::OracleType as Oracle<F>>::create(lde_values.as_ref(), &oracle_params);
+        let oracle_params = <O as Oracle<F>>::Params::from(1 << wrapping_factor);
+        let initial_oracle = <O as Oracle<F>>::create(lde_values.as_ref(), &oracle_params);
         oracles.push(initial_oracle);
         
         // if we would precompute all N we would have
@@ -118,8 +114,8 @@ impl<F: PrimeField, Params: FriParams<F>, O: Oracle<F>, C: Channel<F, Input = O:
             let next_domain_size = this_domain_size / wrapping_factor;
             let mut next_values = vec![F::zero(); next_domain_size];
 
-            channel.consume(oracles.last().as_ref().expect("should not be empty").get_commitment());
-            let mut challenge = channel.get_field_element();
+            channel.consume(&oracles.last().expect("should not be empty").get_commitment());
+            let mut challenge = channel.produce_field_element_challenge();
             challenges.push(challenge.clone());
 
             // we combine like this with FRI trees being aware of the FRI computations
@@ -206,7 +202,7 @@ impl<F: PrimeField, Params: FriParams<F>, O: Oracle<F>, C: Channel<F, Input = O:
             
             if fri_step < num_steps - 1 {
                 this_domain_size = next_domain_size;
-                let intermediate_oracle = <Self::OracleType as Oracle<F>>::create(next_values.as_ref(), &oracle_params);
+                let intermediate_oracle = <O as Oracle<F>>::create(next_values.as_ref(), &oracle_params);
                 oracles.push(intermediate_oracle);             
             } 
 
@@ -216,9 +212,9 @@ impl<F: PrimeField, Params: FriParams<F>, O: Oracle<F>, C: Channel<F, Input = O:
             values_slice = intermediate_values.last().expect("is something").as_ref();      
         }
 
-        assert_eq!(challenges.len(), num_steps);
-        assert_eq!(oracles.len(), num_steps);
-        assert_eq!(intermediate_values.len(), num_steps);
+        assert_eq!(challenges.len(), num_steps as usize);
+        assert_eq!(oracles.len(), num_steps as usize);
+        assert_eq!(intermediate_values.len(), num_steps as usize);
 
         let mut final_poly_values = Polynomial::from_values(values_slice.to_vec())?;
         final_poly_values.bitreverse_enumeration(&worker);
@@ -244,6 +240,8 @@ impl<F: PrimeField, Params: FriParams<F>, O: Oracle<F>, C: Channel<F, Input = O:
             challenges,
             intermediate_values,
             final_coefficients: final_poly_coeffs,
+            initial_degree_plus_one,
+            lde_factor,
         })
     }
 }
@@ -264,9 +262,14 @@ mod test {
         use crate::redshift::IOP::FRI::coset_combining_fri::precomputation::*;
         use crate::redshift::IOP::FRI::coset_combining_fri::FriPrecomputations;
         use crate::redshift::IOP::FRI::coset_combining_fri::fri;
+        use crate::redshift::IOP::FRI::coset_combining_fri::{FriParams, FriIop};
+        use crate::redshift::IOP::channel::blake_channel::*;
+        use crate::redshift::IOP::channel::*;
+        use crate::redshift::IOP::oracle::coset_combining_blake2s_tree::*;
 
         const SIZE: usize = 1024;
         let worker = Worker::new_with_cpus(1);
+        let mut channel = StatelessBlake2sChannel::new();
 
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
         let coeffs = (0..SIZE).map(|_| Fr::rand(rng)).collect::<Vec<_>>();
@@ -280,14 +283,18 @@ mod test {
 
         let fri_precomp = <OmegasInvBitreversed::<Fr> as FriPrecomputations<Fr>>::new_for_domain_size(eval_result.size());
 
-
-        let fri_proto = CosetCombiningFriIop::<Fr>::proof_from_lde(
+        let params = FriParams {
+            collapsing_factor: 2,
+            R: 80,
+            output_poly_degree: 1,
+        };
+        
+        let fri_proto = FriIop::<Fr, FriSpecificBlake2sTree<Fr>, StatelessBlake2sChannel<Fr>>::proof_from_lde(
             &eval_result, 
             16, 
-            2, 
             &fri_precomp, 
             &worker, 
-            &mut transcript,
+            &mut channel,
             &params
         ).expect("FRI must succeed");
     }
@@ -298,23 +305,24 @@ mod test {
         use crate::ff::Field;
         use crate::ff::PrimeField;
         use rand::{XorShiftRng, SeedableRng, Rand, Rng};
-        use crate::plonk::transparent_engine::proth_engine::Fr;
-        use crate::plonk::transparent_engine::PartialTwoBitReductionField;
-        use crate::plonk::polynomials::*;
+        use crate::redshift::partial_reduction_field::PartialTwoBitReductionField;
+        use crate::redshift::partial_reduction_field::Fr;
+        use crate::redshift::polynomials::*;
         use std::time::Instant;
         use crate::multicore::*;
-        use crate::plonk::commitments::transparent::utils::*;
-        use crate::plonk::fft::cooley_tukey_ntt::{CTPrecomputations, BitReversedOmegas};
-        use crate::plonk::commitments::transparent::fri::coset_combining_fri::FriPrecomputations;
-        use crate::plonk::commitments::transparent::fri::coset_combining_fri::fri::*;
-        use crate::plonk::commitments::transparent::fri::coset_combining_fri::precomputation::OmegasInvBitreversed;
-        use crate::plonk::commitments::transcript::*;
+        use crate::redshift::fft::cooley_tukey_ntt::{CTPrecomputations, BitReversedOmegas};
+        use crate::redshift::IOP::FRI::coset_combining_fri::precomputation::*;
+        use crate::redshift::IOP::FRI::coset_combining_fri::FriPrecomputations;
+        use crate::redshift::IOP::FRI::coset_combining_fri::fri;
+        use crate::redshift::IOP::FRI::coset_combining_fri::{FriParams, FriIop};
+        use crate::redshift::IOP::channel::blake_channel::*;
+        use crate::redshift::IOP::channel::*;
+        use crate::redshift::IOP::oracle::coset_combining_blake2s_tree::*;
 
         const SIZE: usize = 1024;
 
-        let mut transcript = Blake2sTranscript::<Fr>::new();
-
         let worker = Worker::new_with_cpus(1);
+        let mut channel = StatelessBlake2sChannel::new();
 
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
         let coeffs = (0..SIZE).map(|_| Fr::rand(rng)).collect::<Vec<_>>();
@@ -329,18 +337,18 @@ mod test {
 
         let fri_precomp = <OmegasInvBitreversed::<Fr> as FriPrecomputations<Fr>>::new_for_domain_size(eval_result.size());
 
-        let params = CosetParams::<Fr> {
-            cosets_schedule: vec![3, 3, 3],
-            coset_factor: coset_factor
+        let params = FriParams {
+            collapsing_factor: 2,
+            R: 80,
+            output_poly_degree: 2,
         };
 
-        let fri_proto = CosetCombiningFriIop::<Fr>::proof_from_lde(
+        let fri_proto = FriIop::<Fr, FriSpecificBlake2sTree<Fr>, StatelessBlake2sChannel<Fr>>::proof_from_lde(
             &eval_result, 
             16, 
-            2, 
             &fri_precomp, 
             &worker, 
-            &mut transcript,
+            &mut channel,
             &params
         ).expect("FRI must succeed");
     }

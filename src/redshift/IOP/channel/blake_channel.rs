@@ -37,7 +37,7 @@ impl<F: PrimeField> Channel<F> for StatelessBlake2sChannel<F> {
     }
 
     fn consume(&mut self, bytes: &Self::Input) {
-        self.state.update(&bytes);
+        self.state.update(bytes);
     }
 
     fn produce_field_element_challenge(&mut self) -> F {

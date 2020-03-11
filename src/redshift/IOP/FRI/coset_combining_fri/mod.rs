@@ -1,6 +1,6 @@
 pub mod fri;
 pub mod query_producer;
-pub mod verifier;
+//pub mod verifier;
 pub mod precomputation;
 
 use crate::SynthesisError;
@@ -16,17 +16,19 @@ use crate::redshift::IOP::channel::Channel;
 pub struct FriProofPrototype<F: PrimeField, I: Oracle<F>> {
     //including the initial one
     pub oracles: Vec<I>,
-    pub challenges: Vec<Vec<F>>,
-    //this vector doesn't include the initial one
+    pub challenges: Vec<F>,
+    //this vector doesn't include the initial one but include the final one
     pub intermediate_values: Vec<Polynomial<F, Values>>,
     //coefficients of the polynomials on the bottom letter of FRI
     pub final_coefficients: Vec<F>,
+    pub initial_degree_plus_one : usize,
+    pub lde_factor: usize,
 }
 
 impl<F: PrimeField, I: Oracle<F>> FriProofPrototype<F, I> {
     fn get_roots(&self) -> Vec<I::Commitment> {
         let mut roots = vec![];
-        for c in self.intermediate_oracles.iter() {
+        for c in self.oracles.iter() {
             roots.push(c.get_commitment().clone());
         }
         roots
@@ -62,18 +64,18 @@ pub trait FriPrecomputations<F: PrimeField> {
     fn domain_size(&self) -> usize;
 }
 
-pub trait FriParams<F: PrimeField> : Clone + std::fmt::Debug {
+#[derive(Debug, Clone)]
+pub struct FriParams {
     //it measures how much nearby levels of FRI differ in size (nu in the paper)
-    const COLLAPSING_FACTOR : usize;
+    pub collapsing_factor : usize,
     //number of iterations done during FRI query phase
-    const R : usize;
+    pub R : usize,
     //the degree of the resulting polynomial at the bottom level of FRI
-    const OUTPUT_POLY_DEGREE : usize;
+    pub output_poly_degree : usize,
 }
 
-pub struct FriIop<F: PrimeField, Params: FriParams<F>, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> {
+pub struct FriIop<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> {
     _marker_f: std::marker::PhantomData<F>,
-    _marker_params: std::marker::PhantomData<Params>,
     _marker_oracle: std::marker::PhantomData<O>,
     _marker_channel: std::marker::PhantomData<C>,
 }

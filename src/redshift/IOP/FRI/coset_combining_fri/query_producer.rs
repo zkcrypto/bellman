@@ -4,22 +4,21 @@ use crate::redshift::domains::*;
 use crate::multicore::*;
 use crate::SynthesisError;
 use super::fri::*;
-use super::super::*;
+use super::*;
+use crate::redshift::IOP::oracle::*;
 
-impl<F: PrimeField, I: IopInstance<F>> FRIProofPrototype<F, I> 
-where I: crate::plonk::commitments::transparent::iop_compiler::IopInstance<F> 
+impl<F: PrimeField, I: Oracle<F>> FriProofPrototype<F, I>
 {
     pub fn produce_proof(
         self,
-        iop_values: &Polynomial<F, Values>,
         natural_first_element_indexes: Vec<usize>,
-    ) -> Result<FRIProof<F, I>, SynthesisError> {
+    ) -> Result<FriProof<F, I>, SynthesisError> {
+
         let domain_size = self.initial_degree_plus_one * self.lde_factor;
+        let mut commitments = vec![];
 
-        let mut roots = vec![];
-
-        for iop in &self.intermediate_commitments {
-            roots.push(iop.get_commitment());
+        for iop in &self.oracles {
+            commitments.push(iop.get_commitment());
         }
 
         let mut rounds = vec![];
@@ -29,7 +28,7 @@ where I: crate::plonk::commitments::transparent::iop_compiler::IopInstance<F>
             let mut domain_idx = natural_first_element_index;
             let mut domain_size = domain_size;
 
-            for (iop, leaf_values) in self.intermediate_commitments.into_iter()
+            for (commitment, leaf_values) in self.intermediate_commitments.into_iter()
                                         .zip(Some(iop_values).into_iter().chain(&self.intermediate_values)) {
                 
                 let coset_values = <I::Combiner as CosetCombiner<F>>::get_coset_for_natural_index(domain_idx, domain_size);
@@ -51,9 +50,9 @@ where I: crate::plonk::commitments::transparent::iop_compiler::IopInstance<F>
             rounds.push(queries);
         }
 
-        let proof = FRIProof::<F, I> {
+        let proof = FriProof::<F, I> {
             queries: rounds,
-            roots,
+            commitments,
             final_coefficients: self.final_coefficients,
             initial_degree_plus_one: self.initial_degree_plus_one,
             output_coeffs_at_degree_plus_one: self.output_coeffs_at_degree_plus_one,
