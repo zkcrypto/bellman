@@ -6,6 +6,7 @@ use crate::SynthesisError;
 use super::fri::*;
 use super::*;
 use crate::redshift::IOP::oracle::*;
+use super::coset_combiner::*;
 
 impl<F: PrimeField, I: Oracle<F>> FriProofPrototype<F, I>
 {

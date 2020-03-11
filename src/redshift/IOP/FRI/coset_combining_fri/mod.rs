@@ -1,4 +1,5 @@
 pub mod fri;
+pub mod coset_combiner;
 pub mod query_producer;
 //pub mod verifier;
 pub mod precomputation;
@@ -67,6 +68,7 @@ pub trait FriPrecomputations<F: PrimeField> {
 #[derive(Debug, Clone)]
 pub struct FriParams {
     //it measures how much nearby levels of FRI differ in size (nu in the paper)
+    // it is 1 for 2 -> 1 mapping, 2 for 4 -> 1 mapping, etc.
     pub collapsing_factor : usize,
     //number of iterations done during FRI query phase
     pub R : usize,
@@ -74,6 +76,7 @@ pub struct FriParams {
     pub output_poly_degree : usize,
 }
 
+//TODO: paranetrize FriIop with coset combiner also
 pub struct FriIop<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> {
     _marker_f: std::marker::PhantomData<F>,
     _marker_oracle: std::marker::PhantomData<O>,

@@ -89,7 +89,7 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
         assert!(lde_factor.is_power_of_two());
 
         let initial_degree_plus_one = initial_domain_size / lde_factor;
-        let wrapping_factor = params.collapsing_factor;
+        let wrapping_factor = 1 << params.collapsing_factor;
         let num_steps = log2_floor(initial_degree_plus_one / final_degree_plus_one) / log2_floor(wrapping_factor) as u32;
     
         let mut oracles = Vec::with_capacity(num_steps as usize);
@@ -284,7 +284,7 @@ mod test {
         let fri_precomp = <OmegasInvBitreversed::<Fr> as FriPrecomputations<Fr>>::new_for_domain_size(eval_result.size());
 
         let params = FriParams {
-            collapsing_factor: 2,
+            collapsing_factor: 1,
             R: 80,
             output_poly_degree: 1,
         };
@@ -338,7 +338,7 @@ mod test {
         let fri_precomp = <OmegasInvBitreversed::<Fr> as FriPrecomputations<Fr>>::new_for_domain_size(eval_result.size());
 
         let params = FriParams {
-            collapsing_factor: 2,
+            collapsing_factor: 1,
             R: 80,
             output_poly_degree: 2,
         };
