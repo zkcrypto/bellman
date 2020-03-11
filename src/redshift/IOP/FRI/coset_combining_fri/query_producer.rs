@@ -7,6 +7,7 @@ use super::fri::*;
 use super::*;
 use crate::redshift::IOP::oracle::*;
 use super::coset_combiner::*;
+use crate::redshift::fft::cooley_tukey_ntt::log2_floor;
 
 impl<F: PrimeField, I: Oracle<F>> FriProofPrototype<F, I>
 {
@@ -23,29 +24,27 @@ impl<F: PrimeField, I: Oracle<F>> FriProofPrototype<F, I>
         }
 
         let mut rounds = vec![];
+        let collapsing_factor = self.collapsing_factor;
+        let coset_size = 1 << collapsing_factor;
 
         for natural_first_element_index in natural_first_element_indexes.into_iter() {
             let mut queries = vec![];
-            let mut domain_idx = natural_first_element_index;
             let mut domain_size = domain_size;
+            let mut log_domain_size = log2_floor(domain_size) as usize;
+            let mut elem_index = natural_first_element_index;
 
-            for (commitment, leaf_values) in self.intermediate_commitments.into_iter()
-                                        .zip(Some(iop_values).into_iter().chain(&self.intermediate_values)) {
+            for (oracle, leaf_values) in self.oracles.into_iter().zip(&self.intermediate_values) {
+
+                let coset_indexes = CosetCombiner::get_coset_idx_for_natural_index(
+                    elem_index, domain_size, log_domain_size, collapsing_factor);
                 
-                let coset_values = <I::Combiner as CosetCombiner<F>>::get_coset_for_natural_index(domain_idx, domain_size);
-                if coset_values.len() != <I::Combiner as CosetCombiner<F>>::COSET_SIZE {
-                    return Err(SynthesisError::PolynomialDegreeTooLarge);
-                }
+                assert_eq!(coset_indexes.len(), coset_size);
+                let query = oracle.produce_query(coset_indexes, leaf_values.as_ref());
+                queries.push(query);
 
-                for idx in coset_values.into_iter() {
-                    let query = iop.query(idx, leaf_values.as_ref());
-                    queries.push(query);
-                }
-
-                let (next_idx, next_size) = Domain::<F>::index_and_size_for_next_domain(domain_idx, domain_size);
-
-                domain_idx = next_idx;
-                domain_size = next_size;
+                domain_size >>= collapsing_factor;
+                log_domain_size -= collapsing_factor;
+                elem_index = (elem_index << collapsing_factor) % domain_size;
             }
 
             rounds.push(queries);
@@ -56,8 +55,8 @@ impl<F: PrimeField, I: Oracle<F>> FriProofPrototype<F, I>
             commitments,
             final_coefficients: self.final_coefficients,
             initial_degree_plus_one: self.initial_degree_plus_one,
-            output_coeffs_at_degree_plus_one: self.output_coeffs_at_degree_plus_one,
             lde_factor: self.lde_factor,
+            collapsing_factor: self.collapsing_factor,
         };
 
         Ok(proof)

@@ -1,5 +1,6 @@
 use crate::ff::PrimeField;
 use std::convert::From;
+use std::ops::Range;
 
 pub mod coset_combining_blake2s_tree;
 pub mod coset_combining_rescue_tree;
@@ -20,26 +21,12 @@ pub trait Oracle<F: PrimeField>: PartialEq + Eq {
     // we allow several values to be stored in the same leaf
     // that's why query may be produced to the whole range of nearby values (but they must be fit in the same leaf)
     fn verify_query(commitment: &Self::Commitment, query: &Self::Query, params: &Self::Params) -> bool;
-    fn produce_query(&self, indexes: Vec<usize>, values: &[F]) -> Self::Query;
+    fn produce_query(&self, indexes: Range<usize>, values: &[F]) -> Self::Query;
 }
 
 pub trait IopQuery<F: PrimeField>: 'static + PartialEq + Eq + Clone + std::fmt::Debug {
-    fn indexes(&self) -> Vec<usize>;
+    fn indexes(&self) -> Range<usize>;
     fn values(&self) -> &[F];
-}
-
-// TODO: understand it better
-// I think, this structure is used to combine (and order) values of the domain into the same coset
-pub trait CosetCombiner<F: PrimeField> {
-    const EXPECTED_DEGREE: usize;
-    const COSET_SIZE: usize;
-    
-    fn get_for_natural_index(leafs: &[F], natural_index: usize) -> &F;
-    fn get_for_tree_index(leafs: &[F], tree_index: usize) -> &F;
-    fn tree_index_into_natural_index(tree_index: usize) -> usize;
-    fn natural_index_into_tree_index(natural_index: usize) -> usize;
-    fn get_coset_for_natural_index(natural_index: usize, domain_size: usize) -> Vec<usize>;
-    fn get_coset_for_tree_index(tree_index: usize, domain_size: usize) -> Vec<usize>;
 }
 
 pub fn log2_floor(num: usize) -> u32 {

@@ -13,7 +13,7 @@ pub struct CosetCombiner {}
 
 impl CosetCombiner {
     //wrapping factor here is size of coset: 1 << collapsing_factor
-    pub fn get_coset_for_natural_index(
+    pub fn get_coset_idx_for_natural_index(
         natural_index: usize, 
         domain_size: usize,
         log_domain_size: usize, 

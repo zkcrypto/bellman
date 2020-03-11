@@ -13,7 +13,8 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
 
     fn proof_from_lde<T: FriPrecomputations<F>
     >(
-        lde_values: &Polynomial<F, Values>,
+        //NB: we consume the polynomial here!
+        lde_values: Polynomial<F, Values>,
         lde_factor: usize,
         precomputations: &T,
         worker: &Worker,
@@ -68,8 +69,8 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
 
     pub fn proof_from_lde_by_values<T: FriPrecomputations<F>>
     (
-        // we assume lde_values to be in bitreversed order
-        lde_values: &Polynomial<F, Values>,
+        // we assume lde_values to be in bitreversed order - they are moved to the first oracle
+        lde_values: Polynomial<F, Values>,
         lde_factor: usize,
         precomputations: &T,
         worker: &Worker,
@@ -108,11 +109,15 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
 
         let omegas_inv_bitreversed: &[F] = precomputations.omegas_inv_bitreversed();
         let this_domain_size = initial_domain_size;
-        let mut values_slice = lde_values.as_ref();
+
+
+        intermediate_values.push(lde_values);
+        let mut values_slice = intermediate_values.last().expect("is something").as_ref();
+        let mut next_values;  
         
         for fri_step in 0..num_steps {
             let next_domain_size = this_domain_size / wrapping_factor;
-            let mut next_values = vec![F::zero(); next_domain_size];
+            next_values = vec![F::zero(); next_domain_size];
 
             channel.consume(&oracles.last().expect("should not be empty").get_commitment());
             let mut challenge = channel.produce_field_element_challenge();
@@ -188,9 +193,11 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
                                     *o = tmp;
                                 }
 
-                                this_level_values.clear();
-                                this_level_values.clone_from(&next_level_values);
-                                challenge.double();
+                                if wrapping_step != wrapping_factor - 1 {
+                                    this_level_values.clear();
+                                    this_level_values.clone_from(&next_level_values);
+                                    challenge.double();
+                                }
                             }
 
                             *v = next_level_values[0];
@@ -203,20 +210,19 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
             if fri_step < num_steps - 1 {
                 this_domain_size = next_domain_size;
                 let intermediate_oracle = <O as Oracle<F>>::create(next_values.as_ref(), &oracle_params);
-                oracles.push(intermediate_oracle);             
+                oracles.push(intermediate_oracle);      
+
+                let next_values_as_poly = Polynomial::from_values(next_values)?;
+                intermediate_values.push(next_values_as_poly);
+                values_slice = intermediate_values.last().expect("is something").as_ref();         
             } 
-
-            let next_values_as_poly = Polynomial::from_values(next_values)?;
-            intermediate_values.push(next_values_as_poly);
-
-            values_slice = intermediate_values.last().expect("is something").as_ref();      
         }
 
         assert_eq!(challenges.len(), num_steps as usize);
         assert_eq!(oracles.len(), num_steps as usize);
         assert_eq!(intermediate_values.len(), num_steps as usize);
 
-        let mut final_poly_values = Polynomial::from_values(values_slice.to_vec())?;
+        let mut final_poly_values = Polynomial::from_values(next_values)?;
         final_poly_values.bitreverse_enumeration(&worker);
         let final_poly_coeffs = final_poly_values.icoset_fft_for_generator(&worker, &F::multiplicative_generator());
        
@@ -242,6 +248,7 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
             final_coefficients: final_poly_coeffs,
             initial_degree_plus_one,
             lde_factor,
+            collapsing_factor: params.collapsing_factor,
         })
     }
 }
@@ -290,7 +297,7 @@ mod test {
         };
         
         let fri_proto = FriIop::<Fr, FriSpecificBlake2sTree<Fr>, StatelessBlake2sChannel<Fr>>::proof_from_lde(
-            &eval_result, 
+            eval_result, 
             16, 
             &fri_precomp, 
             &worker, 
@@ -344,7 +351,7 @@ mod test {
         };
 
         let fri_proto = FriIop::<Fr, FriSpecificBlake2sTree<Fr>, StatelessBlake2sChannel<Fr>>::proof_from_lde(
-            &eval_result, 
+            eval_result, 
             16, 
             &fri_precomp, 
             &worker, 

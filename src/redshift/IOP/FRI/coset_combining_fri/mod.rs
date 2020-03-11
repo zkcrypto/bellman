@@ -1,7 +1,7 @@
 pub mod fri;
 pub mod coset_combiner;
 pub mod query_producer;
-//pub mod verifier;
+pub mod verifier;
 pub mod precomputation;
 
 use crate::SynthesisError;
@@ -18,12 +18,13 @@ pub struct FriProofPrototype<F: PrimeField, I: Oracle<F>> {
     //including the initial one
     pub oracles: Vec<I>,
     pub challenges: Vec<F>,
-    //this vector doesn't include the initial one but include the final one
+    //this vector include the initial and doesn't include the last one
     pub intermediate_values: Vec<Polynomial<F, Values>>,
     //coefficients of the polynomials on the bottom letter of FRI
     pub final_coefficients: Vec<F>,
     pub initial_degree_plus_one : usize,
     pub lde_factor: usize,
+    pub collapsing_factor: usize,
 }
 
 impl<F: PrimeField, I: Oracle<F>> FriProofPrototype<F, I> {
@@ -47,6 +48,9 @@ pub struct FriProof<F: PrimeField, I: Oracle<F>> {
     pub queries: Vec<Vec<I::Query>>,
     pub commitments: Vec<I::Commitment>,
     pub final_coefficients: Vec<F>,
+    pub initial_degree_plus_one : usize,
+    pub lde_factor: usize,
+    pub collapsing_factor: usize,
 }
 
 impl<F: PrimeField, I: Oracle<F>> FriProof<F, I> {
