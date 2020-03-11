@@ -1,10 +1,8 @@
 use crate::pairing::ff::PrimeField;
-use crate::plonk::polynomials::*;
-use crate::plonk::domains::*;
+use crate::redshift::polynomials::*;
+use crate::redshift::domains::*;
 use crate::multicore::*;
 use crate::SynthesisError;
-use crate::plonk::commitments::transparent::utils::log2_floor;
-use crate::plonk::commitments::transparent::iop_compiler::*;
 use super::fri::*;
 use super::super::*;
 

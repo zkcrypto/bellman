@@ -14,8 +14,11 @@ use crate::redshift::IOP::channel::Channel;
 //proof prototype is just a series of FRI-oracles (FRI setup phase)
 #[derive(PartialEq, Eq, Clone)]
 pub struct FriProofPrototype<F: PrimeField, I: Oracle<F>> {
-    pub intermediate_oracles: Vec<I>,
+    //including the initial one
+    pub oracles: Vec<I>,
     pub challenges: Vec<Vec<F>>,
+    //this vector doesn't include the initial one
+    pub intermediate_values: Vec<Polynomial<F, Values>>,
     //coefficients of the polynomials on the bottom letter of FRI
     pub final_coefficients: Vec<F>,
 }
@@ -60,7 +63,7 @@ pub trait FriPrecomputations<F: PrimeField> {
 }
 
 pub trait FriParams<F: PrimeField> : Clone + std::fmt::Debug {
-    //power of 2 - it measures how much nearby levels of FRI differ in size (nu in the paper)
+    //it measures how much nearby levels of FRI differ in size (nu in the paper)
     const COLLAPSING_FACTOR : usize;
     //number of iterations done during FRI query phase
     const R : usize;
