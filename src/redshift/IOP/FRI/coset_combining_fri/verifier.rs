@@ -4,6 +4,7 @@ use crate::redshift::domains::*;
 use crate::multicore::*;
 use crate::SynthesisError;
 use super::*;
+use crate::redshift::fft::cooley_tukey_ntt::log2_floor;
 
 impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F, O, C> {
     
@@ -13,6 +14,10 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
         fri_challenges: &[F],
         params: &FriParams,
     ) -> Result<bool, SynthesisError> {
+
+        assert!(fri_challenges.len() == proof.commitments.len());
+        assert!(proof.queries.len() == proof.commitments.len());
+        assert!(natural_element_indexes.len() == proof.queries.len());
 
         let mut two = F::one();
         two.double();
@@ -28,37 +33,16 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
             SynthesisError::DivisionByZero
         )?;
 
-        assert!(fri_challenges.len() == proof.commitments.len());
-        assert!(proof.queries.len() == proof.commitments.len());
-        assert!(natural_element_indexes.len() == proof.queries.len());
+        let collapsing_factor = proof.collapsing_factor;
+        let coset_size = 1 << collapsing_factor;
+        let initial_domain_size = domain.size as usize;
+        let log_initial_domain_size = log2_floor(initial_domain_size) as usize;
 
-        for ((query, natural_element_index), expected_value_from_oracle) in proof.queries.iter()
-                                                                            .zip(natural_element_indexes.into_iter())
-                                                                            .zip(expected_values_from_oracle.iter()) 
-        {
+        // here round means a vector of queries - one for each intermediate oracle 
+        // including the first, and excluding the last
+        for (round, natural_element_index) in proof.queries.iter().zip(natural_element_indexes.into_iter()) {
 
-            let domain_element = domain.generator.pow([natural_element_index as u64]);
-
-            let el = domain_element.pow([domain.size]);
-            if el != F::one() {
-                return Err(SynthesisError::UnexpectedIdentity);
-            }
-            // let next_domain_size = domain.size / 2;
-            // let el = domain_element.pow([next_domain_size]);
-            // if el == F::one() {
-            //     return Err(SynthesisError::UnexpectedIdentity);
-            // }
-
-            let mut expected_value: Option<F> = None;
-            let mut domain_size = domain.size as usize;
-            let mut domain_idx = natural_element_index;
-            let mut omega = omega;
-            let mut omega_inv = omega_inv;
-
-            if query.len() % degree != 0 {
-                return Err(SynthesisError::PolynomialDegreeTooLarge);
-            }
-
+            
             for (round, ((root, queries), iop_challenge)) in proof.roots.iter()
                                     .zip(query.chunks_exact(degree)) 
                                     .zip(fri_challenges.iter())
