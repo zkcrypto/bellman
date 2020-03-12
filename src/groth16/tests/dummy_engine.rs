@@ -299,7 +299,7 @@ impl CurveProjective for Fr {
     type Scalar = Fr;
     type Engine = DummyEngine;
 
-    fn random<R: RngCore>(rng: &mut R) -> Self {
+    fn random<R: RngCore + ?std::marker::Sized>(rng: &mut R) -> Self {
         <Fr as Field>::random(rng)
     }
 
