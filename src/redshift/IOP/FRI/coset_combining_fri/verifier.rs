@@ -33,7 +33,7 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
         let domain = Domain::<F>::new_for_size((params.initial_degree_plus_one * params.lde_factor) as u64)?;
 
         let omega = domain.generator;
-        let omega_inv = omega.inverse().ok_or(
+        let mut omega_inv = omega.inverse().ok_or(
             SynthesisError::DivisionByZero
         )?;
 
@@ -56,8 +56,8 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
             let mut elem_index = natural_first_element_index;
             let mut previous_layer_element;
 
-            for ((query, commitment), challenge) 
-                in round.into_iter().zip(proof.commitments.iter()).zip(fri_challenges.iter()) {
+            for (round_number, ((query, commitment), challenge)) 
+                in round.into_iter().zip(proof.commitments.iter()).zip(fri_challenges.iter()).enumerate() {
 
                 //check query cardinality here!
                 if query.card() != domain_size {
@@ -76,73 +76,46 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
                 <O as Oracle<F>>::verify_query(commitment, query, &oracle_params);
               
                 //round consistency check
-                let this_level_values = query.values();
-                let mut next_level_values = Vec::with_capacity(wrapping_factor / 2);
+                let inputs = query.values();
+                let mut next_level_values = Vec::with_capacity(coset_size / 2);
                 let mut challenge = challenge.clone();
-                for (pair_idx, (pair, o)) in inputs.chunks(2).zip(next_level_values[..expected_next_level_values].iter_mut()).enumerate() {
-                                    debug_assert!(base_omega_idx & pair_idx == 0);
-                                    let omega_idx = base_omega_idx + pair_idx;
-                                    let omega_inv = omegas_inv_bitreversed[omega_idx];
-                                    let f_at_omega = pair[0];
-                                    let f_at_minus_omega = pair[1];
-                                    let mut v_even_coeffs = f_at_omega;
-                                    v_even_coeffs.add_assign(&f_at_minus_omega);
-
-                                    let mut v_odd_coeffs = f_at_omega;
-                                    v_odd_coeffs.sub_assign(&f_at_minus_omega);
-                                    v_odd_coeffs.mul_assign(&omega_inv);
-
-                                    let mut tmp = v_odd_coeffs;
-                                    tmp.mul_assign(&challenge);
-                                    tmp.add_assign(&v_even_coeffs);
-                                    tmp.mul_assign(&two_inv);
-
-                                    *o = tmp;
-                                }
-
                 for wrapping_step in 0..params.collapsing_factor {
-                    let f_at_omega = (&queries[0]).value();
-                let f_at_minus_omega = (&queries[1]).value();
-                let divisor = omega_inv.pow([coset_values[0] as u64]);
+                    for (pair_idx, (pair, o)) in inputs.chunks(2).zip(next_level_values.iter_mut()).enumerate() {
+                        
+                        //NB: should we also invert the index of omega?
+                        let divisor = omega_inv.pow([coset_idx_range.start + pair_idx as u64]);
+                        let f_at_omega = pair[0];
+                        let f_at_minus_omega = pair[1];
+                        let mut v_even_coeffs = f_at_omega;
+                        v_even_coeffs.add_assign(&f_at_minus_omega);
 
-                let mut v_even_coeffs = f_at_omega;
-                v_even_coeffs.add_assign(&f_at_minus_omega);
+                        let mut v_odd_coeffs = f_at_omega;
+                        v_odd_coeffs.sub_assign(&f_at_minus_omega);
+                        v_odd_coeffs.mul_assign(&divisor);
 
-                let mut v_odd_coeffs = f_at_omega;
-                v_odd_coeffs.sub_assign(&f_at_minus_omega);
-                v_odd_coeffs.mul_assign(&divisor);
-                               
-                    if wrapping_step != params.collapsing_factor - 1
-                                    challenge.double();
-                                }
+                        let mut tmp = v_odd_coeffs;
+                        tmp.mul_assign(&challenge);
+                        tmp.add_assign(&v_even_coeffs);
+                        tmp.mul_assign(&two_inv);
+
+                        *o = tmp;
+                    }
+
+                    if wrapping_step != params.collapsing_factor - 1 {
+                        challenge.double();
+                        inputs = next_level_values;
+                        next_level_values = Vec::with_capacity(inputs.len() / 2);
+                    }
+                    
+                    omega_inv.square();
                 }
-                
 
-                // those can be treated as (doubled) evaluations of polynomials that
-                // are themselves made only from even or odd coefficients of original poly 
-                // (with reduction of degree by 2) on a domain of the size twice smaller
-                // with an extra factor of "omega" in odd coefficients
+                match round_number {
+                    0 => previous_layer_element = next_level_values[0];
+                    1 <
 
-                // to do assemble FRI step we just need to add them with a random challenge
-
-                let mut tmp = v_odd_coeffs;
-                tmp.mul_assign(&iop_challenge);
-                tmp.add_assign(&v_even_coeffs);
-                tmp.mul_assign(&two_inv);
-
-                expected_value = Some(tmp);
-
-                domain_size >>= collapsing_factor;
-                log_domain_size -= collapsing_factor;
-                elem_index = (elem_index << collapsing_factor) % domain_size;
-
-                 domain_idx = next_idx;
-                domain_size = next_size;
-
-                omega.square();
-                omega_inv.square();
-
-                 // finally we need to get expected value from coefficients
+                    // last one
+                    // finally we need to get expected value from coefficients
 
             let mut expected_value_from_coefficients = F::zero();
             let mut power = F::one();
@@ -165,6 +138,18 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
                 println!("Final coefficients = {:?}", proof.final_coefficients);
                 return Ok(false);
             }
+                }
+
+
+
+                
+                                }
+                }
+                
+
+                
+
+                 
 
             }
         }

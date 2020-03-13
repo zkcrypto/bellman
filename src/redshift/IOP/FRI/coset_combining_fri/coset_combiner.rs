@@ -6,6 +6,7 @@
 /// note, that this depends only on the number of elements in each coset i.e. "collapsing factor"
 
 use std::ops::Range;
+use crate::redshift::fft::cooley_tukey_ntt::bitreverse;
 
 
 pub struct CosetCombiner {}
@@ -46,9 +47,10 @@ impl CosetCombiner {
         let start_idx = (natural_index & mask) << collapsing_factor;
         let coset_size = 1 << collapsing_factor;
         let coset_idx_range = start_idx..(start_idx + coset_size);
-        let shift =  (natural_index >> (log_domain_size - collapsing_factor)) & endpoint_mask;
-
-        (coset_idx_range, start_idx + shift);
+        
+        // NB: shift should be bitreversed
+        let shift = bitreverse(natural_index, log_domain_size as usize) & endpoint_mask;
+        (coset_idx_range, start_idx + shift)
     }
 }
     
