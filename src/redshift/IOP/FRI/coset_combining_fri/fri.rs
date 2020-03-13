@@ -13,9 +13,8 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
 
     fn proof_from_lde<T: FriPrecomputations<F>
     >(
-        //NB: we consume the polynomial here!
+        //NB: we consume the polynomial here! we also assume that the polynomial is already after lde!
         lde_values: Polynomial<F, Values>,
-        lde_factor: usize,
         precomputations: &T,
         worker: &Worker,
         channel: &mut C,
@@ -23,7 +22,6 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
     ) -> Result<FriProofPrototype<F, O>, SynthesisError> {
         Self::proof_from_lde_by_values(
             lde_values, 
-            lde_factor,
             precomputations,
             worker,
             channel,
@@ -36,7 +34,7 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
         natural_first_element_indexes: Vec<usize>,
         params: &FriParams,
     ) -> Result<FriProof<F, O>, SynthesisError> {
-        prototype.produce_proof(natural_first_element_indexes)
+        prototype.produce_proof(natural_first_element_indexes, params)
     }
 
     fn get_fri_challenges(
@@ -71,7 +69,6 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
     (
         // we assume lde_values to be in bitreversed order - they are moved to the first oracle
         lde_values: Polynomial<F, Values>,
-        lde_factor: usize,
         precomputations: &T,
         worker: &Worker,
         channel: &mut C,
@@ -79,26 +76,26 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
     ) -> Result<FriProofPrototype<F, O>, SynthesisError> {
         
         let initial_domain_size = lde_values.size();
+        assert_eq!(params.initial_degree_plus_one * params.lde_factor, initial_domain_size);
         assert_eq!(precomputations.domain_size(), initial_domain_size);
+
+        assert!(params.initial_degree_plus_one.is_power_of_two());
+        assert!(params.final_degree_plus_one.is_power_of_two());
+        assert!(params.lde_factor.is_power_of_two());
 
         let mut two = F::one();
         two.double();
         let two_inv = two.inverse().expect("should exist");
-        let final_degree_plus_one = params.output_poly_degree + 1;
         
-        assert!(final_degree_plus_one.is_power_of_two());
-        assert!(lde_factor.is_power_of_two());
-
-        let initial_degree_plus_one = initial_domain_size / lde_factor;
         let wrapping_factor = 1 << params.collapsing_factor;
-        let num_steps = log2_floor(initial_degree_plus_one / final_degree_plus_one) / log2_floor(wrapping_factor) as u32;
+        let num_steps = log2_floor(params.initial_degree_plus_one / params.final_degree_plus_one) / params.collapsing_factor as u32;
     
         let mut oracles = Vec::with_capacity(num_steps as usize);
         let mut challenges = Vec::with_capacity(num_steps as usize);
         let mut intermediate_values = Vec::with_capacity(num_steps as usize);
 
         //TODO: locate all of them in LDE order
-        let oracle_params = <O as Oracle<F>>::Params::from(1 << wrapping_factor);
+        let oracle_params = <O as Oracle<F>>::Params::from(wrapping_factor);
         let initial_oracle = <O as Oracle<F>>::create(lde_values.as_ref(), &oracle_params);
         oracles.push(initial_oracle);
         
@@ -148,7 +145,7 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
                         for (j, v) in v.iter_mut().enumerate() {
                             let batch_id = initial_k + j;
                             let values_offset = batch_id*wrapping_factor;
-                            for wrapping_step in 0..wrapping_factor {
+                            for wrapping_step in 0..params.collapsing_factor {
                                 let base_omega_idx = (batch_id * wrapping_factor) >> (1 + wrapping_step);
                                 let expected_this_level_values = wrapping_factor >> wrapping_step;
                                 let expected_next_level_values = wrapping_factor >> (wrapping_step + 1);
@@ -193,7 +190,7 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
                                     *o = tmp;
                                 }
 
-                                if wrapping_step != wrapping_factor - 1 {
+                                if wrapping_step != params.collapsing_factor - 1 {
                                     this_level_values.clear();
                                     this_level_values.clone_from(&next_level_values);
                                     challenge.double();
@@ -237,18 +234,15 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
             }
         }
 
-        assert!(degree < final_degree_plus_one, "polynomial degree is too large, coeffs = {:?}", final_poly_coeffs);
+        assert!(degree < params.final_degree_plus_one, "polynomial degree is too large, coeffs = {:?}", final_poly_coeffs);
 
-        final_poly_coeffs.truncate(final_degree_plus_one);
+        final_poly_coeffs.truncate(params.final_degree_plus_one);
 
         Ok(FriProofPrototype {
             oracles,
             challenges,
             intermediate_values,
             final_coefficients: final_poly_coeffs,
-            initial_degree_plus_one,
-            lde_factor,
-            collapsing_factor: params.collapsing_factor,
         })
     }
 }
@@ -293,12 +287,13 @@ mod test {
         let params = FriParams {
             collapsing_factor: 1,
             R: 80,
-            output_poly_degree: 1,
+            initial_degree_plus_one: 1024,
+            lde_factor: 16,
+            final_degree_plus_one: 2,
         };
-        
+
         let fri_proto = FriIop::<Fr, FriSpecificBlake2sTree<Fr>, StatelessBlake2sChannel<Fr>>::proof_from_lde(
             eval_result, 
-            16, 
             &fri_precomp, 
             &worker, 
             &mut channel,
@@ -347,12 +342,13 @@ mod test {
         let params = FriParams {
             collapsing_factor: 1,
             R: 80,
-            output_poly_degree: 2,
+            initial_degree_plus_one: 1024,
+            lde_factor: 16,
+            final_degree_plus_one: 2,
         };
 
         let fri_proto = FriIop::<Fr, FriSpecificBlake2sTree<Fr>, StatelessBlake2sChannel<Fr>>::proof_from_lde(
             eval_result, 
-            16, 
             &fri_precomp, 
             &worker, 
             &mut channel,

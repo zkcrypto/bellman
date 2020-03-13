@@ -14,9 +14,10 @@ impl<F: PrimeField, I: Oracle<F>> FriProofPrototype<F, I>
     pub fn produce_proof(
         self,
         natural_first_element_indexes: Vec<usize>,
+        params: &FriParams,
     ) -> Result<FriProof<F, I>, SynthesisError> {
 
-        let domain_size = self.initial_degree_plus_one * self.lde_factor;
+        let domain_size = params.initial_degree_plus_one * params.lde_factor;
         let mut commitments = vec![];
 
         for iop in &self.oracles {
@@ -24,7 +25,7 @@ impl<F: PrimeField, I: Oracle<F>> FriProofPrototype<F, I>
         }
 
         let mut rounds = vec![];
-        let collapsing_factor = self.collapsing_factor;
+        let collapsing_factor = params.collapsing_factor;
         let coset_size = 1 << collapsing_factor;
 
         for natural_first_element_index in natural_first_element_indexes.into_iter() {
@@ -54,9 +55,6 @@ impl<F: PrimeField, I: Oracle<F>> FriProofPrototype<F, I>
             queries: rounds,
             commitments,
             final_coefficients: self.final_coefficients,
-            initial_degree_plus_one: self.initial_degree_plus_one,
-            lde_factor: self.lde_factor,
-            collapsing_factor: self.collapsing_factor,
         };
 
         Ok(proof)
