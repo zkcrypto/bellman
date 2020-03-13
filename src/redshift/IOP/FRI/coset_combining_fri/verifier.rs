@@ -40,12 +40,20 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
 
         // here round means a vector of queries - one for each intermediate oracle 
         // including the first, and excluding the last
-        for (round, natural_element_index) in proof.queries.iter().zip(natural_element_indexes.into_iter()) {
+        for (round, natural_first_element_index) in proof.queries.iter().zip(natural_element_indexes.into_iter()) {
+            
+            let mut domain_size = initial_domain_size;
+            let mut log_domain_size = log_initial_domain_size;
+            let mut elem_index = natural_first_element_index;
 
+            for (query, commitment) in round.iter()..zip(fri_challenges.iter()) {
+
+                //check query cardinality here!
+            }
             
             for (round, ((root, queries), iop_challenge)) in proof.roots.iter()
                                     .zip(query.chunks_exact(degree)) 
-                                    .zip(fri_challenges.iter())
+                                    
                                     .enumerate()
             {
                 let coset_values = <I::Combiner as CosetCombiner<F>>::get_coset_for_natural_index(domain_idx, domain_size);

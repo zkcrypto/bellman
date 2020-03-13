@@ -270,7 +270,7 @@ impl<F: PrimeField> IopQuery<F> for CosetCombinedQuery<F> {
     }
 
     fn card(&self) -> usize {
-        &self.path.len()
+        self.path.len()
     }
 }
 

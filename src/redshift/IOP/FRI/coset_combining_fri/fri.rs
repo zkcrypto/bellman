@@ -58,14 +58,14 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
         fri_challenges
     }
 
-    // fn verify_proof_with_challenges(
-    //     proof: &FriProof<F, O>,
-    //     natural_element_indexes: Vec<usize>,
-    //     fri_challenges: &[F],
-    //     params: &FriParams,
-    // ) -> Result<bool, SynthesisError> {
-    //     Self::verify_proof_queries(proof, natural_element_indexes, fri_challenges, params)
-    // }
+    fn verify_proof_with_challenges(
+        proof: &FriProof<F, O>,
+        natural_element_indexes: Vec<usize>,
+        fri_challenges: &[F],
+        params: &FriParams,
+    ) -> Result<bool, SynthesisError> {
+        Self::verify_proof_queries(proof, natural_element_indexes, fri_challenges, params)
+    }
 
     pub fn proof_from_lde_by_values<T: FriPrecomputations<F>>
     (

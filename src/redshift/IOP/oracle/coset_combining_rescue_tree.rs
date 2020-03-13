@@ -244,6 +244,10 @@ impl<F: PrimeField> IopQuery<F> for CosetCombinedQuery<F> {
         &self.values
     }
 
+    fn card(&self) -> usize {
+        self.path.len()
+    }
+
 }
 
 #[test]

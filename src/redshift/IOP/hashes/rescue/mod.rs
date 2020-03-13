@@ -10,11 +10,15 @@ use num::bigint::BigUint;
 use num::{Zero, One};
 use num::ToPrimitive;
 
+use tiny_keccak::Keccak;
+
 pub(crate) const RESCUE_ROUNDS: usize = 10;
 pub(crate) const RESCUE_M: usize = 13;
 
-// Set sponge capacity to 1
-pub(crate) const SPONGE_RATE: usize = RESCUE_M - 1;
+// Set sponge capacity to 11
+pub(crate) const SPONGE_RATE: usize = 2;
+//initialization vector for constants
+pub(crate) const RESCUE_CONST_IV: &str = "qwerty";
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct RescueParams<F>
@@ -87,16 +91,61 @@ impl<F: PrimeField> RescueParams<F>
     }
 }
 
+// # generate a mxm MDS matrix over F
+//     @staticmethod
+//     def MDS_matrix( F, m ):
+//         z = F.primitive_element()
+//         mat = matrix([[z^(i*j) for j in range(0, 2*m)] for i in range(0, m)])
+//         return mat.echelon_form()[:, m:]
+
+/// generation of mds_matrix is taken from https://github.com/KULeuven-COSIC/Marvellous/blob/master/instance_generator.sage
 pub(crate) fn generate_mds_matrix<F: PrimeField>(_params: &RescueParams<F>) -> [[F; RESCUE_M]; RESCUE_M] {
     // TODO: Correct MDS generation; this causes horribly-biased output
-    let mut mds_matrix = [[F::zero(); RESCUE_M]; RESCUE_M];
-    for i in (0..RESCUE_M).rev() {
-        for j in (0..RESCUE_M).rev() {
-            let repr = <F::Repr as From<u64>>::from(((i + 1) * j) as u64);
-            mds_matrix[i][j] = F::from_repr(repr).unwrap();
+    // in order to simplify output - the first index is column, the second is row
+    let mut mds_matrix = [[F::zero(); RESCUE_M]; RESCUE_M * 2];
+    for i in 0..RESCUE_M {
+        for j in 0..(RESCUE_M * 2) {
+            mds_matrix[j][i] = F::multiplicative_generator().pow([(i*j) as u64]);
         }
     }
-    mds_matrix
+
+    fn swap_rows<F: PrimeField>(matrix: &mut[[F; RESCUE_M]; RESCUE_M * 2], i: usize, j: usize ) -> () {
+        if i == j {
+            return;
+        }
+
+        for k in 0..(RESCUE_M * 2) {
+            let temp = matrix[k][i];
+            matrix[k][i] = matrix[k][j];
+            matrix[k][j] = temp;
+        }
+    }
+
+    //convert the resulting matrix to echelon_form
+    for i in 0..RESCUE_M {
+        let opt_idx = (i..RESCUE_M).find(|&k| ! mds_matrix[i][k].is_zero());
+        if let Some(idx) = opt_idx {
+            swap_rows(&mut mds_matrix, i, idx);
+            let elem_inv = mds_matrix[i][idx].inverse().expect("should be non-zero");
+
+            for j in (i+1)..RESCUE_M {
+                let mut coef = mds_matrix[i][j];
+                coef.mul_assign(&elem_inv);
+                mds_matrix[i][j] = F::zero();
+
+                for k in (i+1)..(RESCUE_M * 2) {
+                    let mut temp = mds_matrix[k][idx].clone();
+                    temp.mul_assign(&coef);
+                    mds_matrix[k][j].sub_assign(&temp);
+                }
+            }
+        }
+    }
+
+    //now we need to return the right half of the matrix
+    let mut res = [[F::zero(); RESCUE_M]; RESCUE_M];
+    res.clone_from_slice(&mds_matrix[RESCUE_M..]);
+    res
 }
 
 fn mds<F: PrimeField>(
@@ -141,14 +190,38 @@ fn rescue_f<F: PrimeField>(
     }
 }
 
+// in https://github.com/KULeuven-COSIC/Marvellous/blob/master/instance_generator.sage there is a condition on some matrix to be invertible
+// do I really need the same restriction here?
+
+fn generate_constants<F: PrimeField>(iv: &str) -> [[F; RESCUE_M]; 2 * RESCUE_ROUNDS + 1] {
+
+    let mut hasher = Keccak::new_shake256();
+    hasher.update(iv.as_bytes());
+    let REPR_SIZE: usize = (((F::NUM_BITS as usize)/ 64) + 1) * 8;
+    let mut buf = Vec::with_capacity(REPR_SIZE);
+
+    let mut res = [[F::zero(); RESCUE_M]; 2 * RESCUE_ROUNDS + 1];
+    for i in 0..RESCUE_M {
+        for j in 0..(2*RESCUE_ROUNDS +1) {
+
+            hasher.squeeze(&mut buf[..]);
+            let mut repr = F::Repr::default();
+            repr.read_be(&buf[..]).expect("will read");
+            res[i][j] = F::from_repr(repr).unwrap();
+        }
+    }
+    
+    res
+}
+
 /// Duplicates [`rescue_f`] in order to extract the key schedule.
 fn generate_key_schedule<F: PrimeField>(
     master_key: [F; RESCUE_M],
     mds_matrix: &[[F; RESCUE_M]; RESCUE_M],
     params: &RescueParams<F>,
 ) -> [[F; RESCUE_M]; 2 * RESCUE_ROUNDS + 1] {
-    // TODO: Generate correct constants
-    let constants = [[F::one(); RESCUE_M]; 2 * RESCUE_ROUNDS + 1];
+    // TODO: Generate correct constants - I have no idea how to do this!
+    let constants = generate_constants(RESCUE_CONST_IV);
 
     let mut key_schedule = vec![];
     let mut state = master_key;

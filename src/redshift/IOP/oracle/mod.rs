@@ -27,13 +27,12 @@ pub trait Oracle<F: PrimeField>: PartialEq + Eq {
 pub trait IopQuery<F: PrimeField>: 'static + PartialEq + Eq + Clone + std::fmt::Debug {
     fn indexes(&self) -> Range<usize>;
     fn values(&self) -> &[F];
-    // "card" (cardinality) is used as a countermeasure to the following kinds of attacks (however, I'm not sure how severe and critical they are)thread::spawn(move || {
+    // "card" (cardinality) is used as a countermeasure to the following kinds of attacks (however, I'm not sure how severe and critical they are)
     // assume, that we generate a query from VectorAccumulator (i.e. Merklee tree of size n), 
     // but later check the query against the oracle of smaller size (but with the same Merklee tree)
     // to protect orselves we will remember the size of oracle from which the query was borrowed 
     //and then compare it explicitely against the size of corresponding oracke during verify_query protocol
     fn card(&self) -> usize;
-    });
 }
 
 pub fn log2_floor(num: usize) -> u32 {

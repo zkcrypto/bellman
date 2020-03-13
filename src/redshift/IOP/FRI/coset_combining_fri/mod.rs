@@ -22,9 +22,6 @@ pub struct FriProofPrototype<F: PrimeField, I: Oracle<F>> {
     pub intermediate_values: Vec<Polynomial<F, Values>>,
     //coefficients of the polynomials on the bottom letter of FRI
     pub final_coefficients: Vec<F>,
-    pub initial_degree_plus_one : usize,
-    pub lde_factor: usize,
-    pub collapsing_factor: usize,
 }
 
 impl<F: PrimeField, I: Oracle<F>> FriProofPrototype<F, I> {
@@ -48,9 +45,6 @@ pub struct FriProof<F: PrimeField, I: Oracle<F>> {
     pub queries: Vec<Vec<I::Query>>,
     pub commitments: Vec<I::Commitment>,
     pub final_coefficients: Vec<F>,
-    pub initial_degree_plus_one : usize,
-    pub lde_factor: usize,
-    pub collapsing_factor: usize,
 }
 
 impl<F: PrimeField, I: Oracle<F>> FriProof<F, I> {
@@ -76,8 +70,10 @@ pub struct FriParams {
     pub collapsing_factor : usize,
     //number of iterations done during FRI query phase
     pub R : usize,
+    pub initial_degree_plus_one : usize,
+    pub lde_factor: usize,
     //the degree of the resulting polynomial at the bottom level of FRI
-    pub output_poly_degree : usize,
+    pub final_degree_plus_one : usize,
 }
 
 //TODO: paranetrize FriIop with coset combiner also
