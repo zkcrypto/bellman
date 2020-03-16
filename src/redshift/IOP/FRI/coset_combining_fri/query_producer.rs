@@ -20,7 +20,7 @@ impl<F: PrimeField, I: Oracle<F>> FriProofPrototype<F, I>
         let domain_size = params.initial_degree_plus_one * params.lde_factor;
         let mut commitments = vec![];
 
-        for iop in &self.oracles {
+        for iop in self.oracles.iter() {
             commitments.push(iop.get_commitment());
         }
 
@@ -34,7 +34,7 @@ impl<F: PrimeField, I: Oracle<F>> FriProofPrototype<F, I>
             let mut log_domain_size = log2_floor(domain_size) as usize;
             let mut elem_index = natural_first_element_index;
 
-            for (oracle, leaf_values) in self.oracles.into_iter().zip(&self.intermediate_values) {
+            for (oracle, leaf_values) in self.oracles.iter().zip(&self.intermediate_values) {
 
                 let coset_indexes = CosetCombiner::get_coset_idx_for_natural_index(
                     elem_index, domain_size, log_domain_size, collapsing_factor);

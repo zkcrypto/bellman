@@ -66,7 +66,7 @@ impl<F: PrimeField> RescueParams<F>
         fn compute_alpha_inapha(a: &BigUint) -> (u64, [u64; 4]) {
             let mut alpha = BigUint::from(3u64);
             loop {
-                let ExtendedGcd{ gcd, x, y, .. } = a.extended_gcd(&alpha); 
+                let ExtendedGcd{ gcd, x: _, y, .. } = a.extended_gcd(&alpha); 
                 if gcd.is_one() {
                     let alpha = alpha.to_u64().expect("Should fit in one machine word");
                     let inalpha = biguint_to_u64_array(y);
@@ -76,9 +76,9 @@ impl<F: PrimeField> RescueParams<F>
             }
         }
 
-        let x = BigUint::from(0u64);
+        let mut x = BigUint::from(0u64);
         for limb in x_inner.as_ref() {
-            x << 64;
+            x <<= 64;
             x += BigUint::from(*limb);
         }
         let (RESCUE_ALPHA, RESCUE_INVALPHA) = compute_alpha_inapha(&x);
@@ -306,7 +306,7 @@ fn rescue_duplex<F: PrimeField>(
     output
 }
 
-#[derive(Clone, Debug)]
+#[derive(Copy, Clone, Debug)]
 enum SpongeState<F: PrimeField> {
     Absorbing([Option<F>; SPONGE_RATE]),
     Squeezing([Option<F>; SPONGE_RATE]),
@@ -320,7 +320,7 @@ impl<F: PrimeField> SpongeState<F> {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct Rescue<F: PrimeField> {
     sponge: SpongeState<F>,
     state: [F; RESCUE_M],

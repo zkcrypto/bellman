@@ -26,7 +26,7 @@ impl From<usize> for FriSpecificRescueTreeParams {
 
 impl<F: PrimeField> FriSpecificRescueTree<F> {
     
-    fn hash_into_leaf(values: &[F], hasher: Rescue<F>) -> F {
+    fn hash_into_leaf(values: &[F], hasher: &mut Rescue<F>) -> F {
         for value in values.iter() {
             hasher.absorb(*value);
         }
@@ -94,7 +94,7 @@ impl<F: PrimeField> Oracle<F> for FriSpecificRescueTree<F> {
                             let idx = base_idx + j;
                             let values_start = idx * values_per_leaf;
                             let values_end = values_start + values_per_leaf;
-                            *lh = Self::hash_into_leaf(&values[values_start..values_end], hasher.clone());
+                            *lh = Self::hash_into_leaf(&values[values_start..values_end], &mut hasher.clone());
                         }
                     });
                 }
@@ -119,7 +119,7 @@ impl<F: PrimeField> Oracle<F> for FriSpecificRescueTree<F> {
                                 .zip(inputs.chunks(chunk*2)) {
                     scope.spawn(move |_| {
                         for (o, i) in o.iter_mut().zip(i.chunks(2)) {
-                            let hasher = hasher.clone();
+                            let mut hasher = hasher.clone();
                             hasher.absorb(i[0]);
                             hasher.absorb(i[1]);
                             *o = hasher.squeeze();
@@ -140,9 +140,8 @@ impl<F: PrimeField> Oracle<F> for FriSpecificRescueTree<F> {
                 for (o, i) in outputs.chunks_mut(chunk)
                                 .zip(inputs.chunks(chunk*2)) {
                     scope.spawn(move |_| {
-                        let mut hash_input = [0u8; 64];
                         for (o, i) in o.iter_mut().zip(i.chunks(2)) {
-                            let hasher = hasher.clone();
+                            let mut hasher = hasher.clone();
                             hasher.absorb(i[0]);
                             hasher.absorb(i[1]);
                             *o = hasher.squeeze();
@@ -173,13 +172,13 @@ impl<F: PrimeField> Oracle<F> for FriSpecificRescueTree<F> {
         debug_assert!(indexes.end < self.size());
         debug_assert!(indexes.end < values.len());
 
-        let query_values = Vec::from(&values[indexes]);
+        let query_values = Vec::from(&values[indexes.start..indexes.end]);
 
         let leaf_index = indexes.start / self.params.values_per_leaf;
 
         let pair_index = leaf_index ^ 1;
 
-        let leaf_pair_hash = Self::hash_into_leaf(&values[(pair_index*self.params.values_per_leaf)..((pair_index+1)*self.params.values_per_leaf)], self.hasher.clone());
+        let leaf_pair_hash = Self::hash_into_leaf(&values[(pair_index*self.params.values_per_leaf)..((pair_index+1)*self.params.values_per_leaf)], &mut self.hasher.clone());
 
         let path = self.make_full_path(leaf_index, leaf_pair_hash);
 
@@ -197,11 +196,11 @@ impl<F: PrimeField> Oracle<F> for FriSpecificRescueTree<F> {
 
         let hasher = Rescue::default();
 
-        let mut hash = Self::hash_into_leaf(query.values(), hasher.clone());
+        let mut hash = Self::hash_into_leaf(query.values(), &mut hasher.clone());
         let mut idx = query.indexes().start / params.values_per_leaf;
 
         for el in query.path.iter() {
-            let temp_hasher = hasher.clone();
+            let mut temp_hasher = hasher.clone();
             {
                 
                 if idx & 1usize == 0 {

@@ -198,7 +198,7 @@ impl<F: PrimeField> Oracle<F> for FriSpecificBlake2sTree<F> {
         debug_assert!(indexes.end < self.size());
         debug_assert!(indexes.end < values.len());
 
-        let query_values = Vec::from(&values[indexes]);
+        let query_values = Vec::from(&values[indexes.start..indexes.end]);
 
         let leaf_index = indexes.start / self.params.values_per_leaf;
 

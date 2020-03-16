@@ -40,7 +40,7 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
     fn get_fri_challenges(
         proof: &FriProof<F, O>,
         channel: &mut C,
-        params: &FriParams
+        _params: &FriParams
     ) -> Vec<F> {
         let mut fri_challenges = vec![];
 
@@ -105,12 +105,14 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
         // [0, N/4, N/8, N/8 + N/4, ...]
 
         let omegas_inv_bitreversed: &[F] = precomputations.omegas_inv_bitreversed();
-        let this_domain_size = initial_domain_size;
+        let mut this_domain_size = initial_domain_size;
 
 
         intermediate_values.push(lde_values);
         let mut values_slice = intermediate_values.last().expect("is something").as_ref();
         let mut next_values;  
+
+        let mut final_poly_coeffs = Vec::<F>::new();
         
         for fri_step in 0..num_steps {
             let next_domain_size = this_domain_size / wrapping_factor;
@@ -202,7 +204,6 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
                     });
                 }
             });
-
             
             if fri_step < num_steps - 1 {
                 this_domain_size = next_domain_size;
@@ -212,18 +213,18 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
                 let next_values_as_poly = Polynomial::from_values(next_values)?;
                 intermediate_values.push(next_values_as_poly);
                 values_slice = intermediate_values.last().expect("is something").as_ref();         
+            }
+            else {
+                let mut final_poly_values = Polynomial::from_values(next_values)?;
+                final_poly_values.bitreverse_enumeration(&worker);
+                let data = final_poly_values.icoset_fft_for_generator(&worker, &F::multiplicative_generator());
+                final_poly_coeffs = data.into_coeffs();
             } 
         }
 
         assert_eq!(challenges.len(), num_steps as usize);
         assert_eq!(oracles.len(), num_steps as usize);
         assert_eq!(intermediate_values.len(), num_steps as usize);
-
-        let mut final_poly_values = Polynomial::from_values(next_values)?;
-        final_poly_values.bitreverse_enumeration(&worker);
-        let final_poly_coeffs = final_poly_values.icoset_fft_for_generator(&worker, &F::multiplicative_generator());
-       
-        let mut final_poly_coeffs = final_poly_coeffs.into_coeffs();
 
         let mut degree = final_poly_coeffs.len() - 1;
         for c in final_poly_coeffs.iter().rev() {
@@ -292,7 +293,7 @@ mod test {
             final_degree_plus_one: 2,
         };
 
-        let fri_proto = FriIop::<Fr, FriSpecificBlake2sTree<Fr>, StatelessBlake2sChannel<Fr>>::proof_from_lde(
+        let _fri_proto = FriIop::<Fr, FriSpecificBlake2sTree<Fr>, StatelessBlake2sChannel<Fr>>::proof_from_lde(
             eval_result, 
             &fri_precomp, 
             &worker, 
@@ -347,7 +348,7 @@ mod test {
             final_degree_plus_one: 2,
         };
 
-        let fri_proto = FriIop::<Fr, FriSpecificBlake2sTree<Fr>, StatelessBlake2sChannel<Fr>>::proof_from_lde(
+        let _fri_proto = FriIop::<Fr, FriSpecificBlake2sTree<Fr>, StatelessBlake2sChannel<Fr>>::proof_from_lde(
             eval_result, 
             &fri_precomp, 
             &worker, 
