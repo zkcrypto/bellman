@@ -112,7 +112,7 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
         if upper_layer_queries.iter().any(|x| x.card() != initial_domain_size || x.indexes() != coset_idx_range) {
             return Ok(false);
         }
-        if !BatchedOracle::verify_query(upper_layer_commitments, upper_layer_queries, oracle_params) {
+        if !BatchedOracle::<F, O>::verify_query(upper_layer_commitments, upper_layer_queries, oracle_params) {
             return Ok(false);
         }
 
@@ -133,13 +133,13 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
             collapsing_factor,
             coset_size,
             &mut domain_size,
-            &mut log_initial_domain_size,
+            &mut log_domain_size,
             &mut elem_index,
             & mut omega_inv,
-            two_inv: &F);
+            two_inv);
 
-        for (round_number, ((query, commitment), challenge)) 
-            in queries.into_iter().zip(commitments.iter()).zip(fri_challenges.iter().skip(1)).enumerate() 
+        for ((query, commitment), challenge) 
+            in queries.into_iter().zip(commitments.iter()).zip(fri_challenges.iter().skip(1)) 
         {
             //check query cardinality here!
             if query.card() != domain_size {
@@ -158,57 +158,36 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
             <O as Oracle<F>>::verify_query(commitment, query, &oracle_params);
             
             //round consistency check
-            let mut previous_layer_element = FriIop::<F, O, C>::coset_interpolant_value(
+            let mut this_layer_element = FriIop::<F, O, C>::coset_interpolant_value(
                 query.values(),
-                &fri_challenge,
-            coset_idx_range,
-            collapsing_factor,
-            coset_size,
-            log_initial_domain_size,
-            & mut omega_inv,
-            two_inv: &F);
-
-            //TODO: change it also!
-            domain_size /= 2;
-                log_domain_size <<= 1;
-                elem_index = (elem_index << collapsing_factor) % domain_size;
-
-            assert!(num_steps > 1);
-            let res = match round_number {
-                0 => { 
-                    previous_layer_element = next_level_values[0];
-                    true
-                }
-                x if x < (num_steps -1) => {
-                    let valid = previous_layer_element == query.values()[elem_tree_idx];
-                    previous_layer_element = next_level_values[0];
-                    valid
-                }
-                x if x == num_steps - 1 => {
-                    // finally we need to get expected value from coefficients
-                    let mut expected_value_from_coefficients = F::zero();
-                    let mut power = F::one();
-                    let evaluation_point = omega.pow([elem_index as u64]);
-
-                    for c in final_coefficients.iter() {
-                        let mut tmp = power;
-                        tmp.mul_assign(c);
-                        expected_value_from_coefficients.add_assign(&tmp);
-                        power.mul_assign(&evaluation_point);
-                    }
-                    expected_value_from_coefficients == previous_layer_element
-                }
-                _ =>  {
-                    unreachable!();
-                }
-            };
-
-            if !res {
+                &challenge,
+                coset_idx_range,
+                collapsing_factor,
+                coset_size,
+                &mut domain_size,
+                &mut log_domain_size,
+                &mut elem_index,
+                & mut omega_inv,
+                two_inv);
+         
+            if previous_layer_element != query.values()[elem_tree_idx] {
                 return Ok(false);
             }
+            previous_layer_element = this_layer_element;
         }
-        
-        Ok(true)
+
+        // finally we need to get expected value from coefficients
+        let mut expected_value_from_coefficients = F::zero();
+        let mut power = F::one();
+        let evaluation_point = omega.pow([elem_index as u64]);
+
+        for c in final_coefficients.iter() {
+            let mut tmp = power;
+            tmp.mul_assign(c);
+            expected_value_from_coefficients.add_assign(&tmp);
+            power.mul_assign(&evaluation_point);
+        }
+        Ok(expected_value_from_coefficients == previous_layer_element)
     }
 
     pub fn coset_interpolant_value(
@@ -228,7 +207,7 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
         let mut this_level_values = Vec::with_capacity(coset_size/2);
         let mut next_level_values = vec![F::zero(); coset_size / 2];
 
-        let base_omega_idx = bitreverse(coset_idx_range.start, log_domain_size as usize);
+        let base_omega_idx = bitreverse(coset_idx_range.start, *log_domain_size);
 
         for wrapping_step in 0..collapsing_factor {
             let inputs = if wrapping_step == 0 {
@@ -239,7 +218,7 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
             for (pair_idx, (pair, o)) in inputs.chunks(2).zip(next_level_values.iter_mut()).enumerate() 
             {
                 
-                let idx = bitreverse(base_omega_idx + 2 * pair_idx, log_domain_size as usize);
+                let idx = bitreverse(base_omega_idx + 2 * pair_idx, *log_domain_size);
                 let divisor = omega_inv.pow([idx as u64]);
                 let f_at_omega = pair[0];
                 let f_at_minus_omega = pair[1];
@@ -265,9 +244,9 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
             }
             
             omega_inv.square();
-            domain_size /= 2;
-            log_domain_size <<= 1;
-            elem_index = (elem_index << collapsing_factor) % domain_size;
+            *domain_size /= 2;
+            *log_domain_size <<= 1;
+            *elem_index = (*elem_index << collapsing_factor) % *domain_size;
         }
 
     next_level_values[0]

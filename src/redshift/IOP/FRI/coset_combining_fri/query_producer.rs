@@ -35,7 +35,7 @@ impl<F: PrimeField, I: Oracle<F>> FriProofPrototype<F, I>
             
             let coset_indexes = CosetCombiner::get_coset_idx_for_natural_index(
                 natural_first_element_index, initial_domain_size, log_initial_domain_size, collapsing_factor);
-            let upper_layer_query = upper_layer_oracles.produce_query(coset_indexes, upper_layer_values);
+            let upper_layer_query = upper_layer_oracles.produce_query(coset_indexes, &upper_layer_values);
             upper_layer_queries.push(upper_layer_query);
 
             let mut queries = vec![];
