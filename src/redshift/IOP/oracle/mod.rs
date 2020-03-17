@@ -75,7 +75,7 @@ impl<'a, F: PrimeField, I: Oracle<F>> BatchedOracle<'a, F, I>
         true
     }
 
-    pub fn produce_query(&self, indexes: Range<usize>, values: Vec<&[F]>) -> Vec<I::Query> {
+    pub fn produce_query(&self, indexes: Range<usize>, values: &Vec<&[F]>) -> Vec<I::Query> {
         self.oracles.iter().zip(values.iter()).map(|(x, val)| x.produce_query(indexes.clone(), val)).collect()
     }
 }

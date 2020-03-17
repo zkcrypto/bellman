@@ -13,6 +13,7 @@ use crate::redshift::domains::*;
 use crate::redshift::partial_reduction_field::PartialTwoBitReductionField;
 use crate::redshift::IOP::FRI::coset_combining_fri::*;
 use crate::redshift::IOP::oracle::*;
+use crate::redshift::IOP::channel::*;
 
 pub(crate) fn convert_to_field_elements<F: PrimeField>(indexes: &[usize], worker: &Worker) -> Vec<F> {
     let mut result = vec![F::zero(); indexes.len()];
@@ -34,7 +35,8 @@ pub(crate) fn convert_to_field_elements<F: PrimeField>(indexes: &[usize], worker
 }
 
 pub(crate) fn commit_single_poly<E: Engine, CP: CTPrecomputations<E::Fr>, I: Oracle<E::Fr>>(
-        poly: &Polynomial<E::Fr, Coefficients>, 
+        poly: &Polynomial<E::Fr, Coefficients>,
+        deg: usize, 
         omegas_bitreversed: &CP,
         params: &FriParams,
         worker: &Worker
@@ -298,13 +300,13 @@ pub(crate) fn output_setup_polynomials<E: Engine>(
     Ok((q_l, q_r, q_o, q_m, q_c, q_add_sel, s_id, sigma_1, sigma_2, sigma_3))
 }
 
-pub(crate) fn multiopening<E: Engine, P: FriPrecomputations<E::Fr>, I: Oracle<E::Fr>>
+pub(crate) fn multiopening<E: Engine, P: FriPrecomputations<E::Fr>, I: Oracle<E::Fr>, C: Channel<E::Fr, Input = I::Commitment>>
     ( 
         opening_requests: Vec<OpeningRequest<E::Fr>>,
         omegas_inv_bitreversed: &P,
         params: &FriParams,
         worker: &Worker,
-        aggregation_challenge: &E::Fr,
+        channel: &mut C,
     ) -> Result<(), SynthesisError> 
 where E::Fr : PartialTwoBitReductionField
 {
@@ -323,6 +325,7 @@ where E::Fr : PartialTwoBitReductionField
     let mut scratch_space_numerator = final_aggregate.clone();
     let mut scratch_space_denominator = final_aggregate.clone();
 
+    let aggregation_challenge = channel.produce_field_element_challenge();
     let mut alpha = E::Fr::one();
 
     for witness_request in witness_opening_requests.iter() {
@@ -338,7 +341,7 @@ where E::Fr : PartialTwoBitReductionField
             v.negate();
             scratch_space_numerator.add_constant(&worker, &v);
             scratch_space_numerator.mul_assign(&worker, &scratch_space_denominator);
-            if aggregation_challenge != E::Fr::one() {
+            if alpha != E::Fr::one() {
                 scratch_space_numerator.scale(&worker, alpha);
             }
 

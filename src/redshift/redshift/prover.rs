@@ -9,14 +9,12 @@ use super::gates::*;
 use super::data_structures::*;
 use super::utils::*;
 
-use crate::plonk::polynomials::*;
-use crate::plonk::transparent_engine::PartialTwoBitReductionField;
-use crate::plonk::commitments::transparent::fri::coset_combining_fri::*;
-use crate::plonk::commitments::transparent::fri::coset_combining_fri::fri::*;
-use crate::plonk::commitments::transparent::iop_compiler::*;
-use crate::plonk::commitments::transparent::iop_compiler::coset_combining_blake2s_tree::*;
-use crate::plonk::commitments::transcript::*;
-use crate::plonk::fft::cooley_tukey_ntt::*;
+use crate::redshift::polynomials::*;
+use crate::redshift::partial_reduction_field::PartialTwoBitReductionField;
+use crate::redshift::IOP::channel::*;
+use crate::redshift::IOP::FRI::coset_combining_fri::*;
+use crate::redshift::IOP::oracle::*;
+use crate::redshift::fft::cooley_tukey_ntt::*;
 
 #[derive(Debug)]
 pub(crate) struct ProvingAssembly<E: Engine> {
@@ -237,12 +235,12 @@ impl<E: Engine> ProvingAssembly<E> {
 
 //use setup and selector polynomials, precomputed by 
 fn prove_with_setup_precomputed<E: Engine, C: Circuit<E>, CP: CTPrecomputations<E::Fr>, CPI: CTPrecomputations<E::Fr>, 
-    FP: FriPrecomputations<E::Fr>, T: Transcript<E::Fr, 
-    Input = <FriSpecificBlake2sTree<E::Fr> as IopInstance<E::Fr>> :: Commitment> >
+    FP: FriPrecomputations<E::Fr>, I: Oracle<E::Fr>, T: Channel<E::Fr, Input = I::Commitment>> 
 (
     circuit: &C,
-    setup_precomp: &RedshiftSetupPrecomputation<E::Fr, FriSpecificBlake2sTree<E::Fr>>,
-    params: &RedshiftParameters<E::Fr>,
+    setup_precomp: &RedshiftSetupPrecomputation<E::Fr, I>,
+    params: &FriParams,
+    channel: &mut T,
     omegas_bitreversed: &CP,
     omegas_inv_bitreversed: &CPI,
     bitreversed_omegas_for_fri: &FP      
@@ -255,6 +253,8 @@ where E::Fr : PartialTwoBitReductionField
     let (input_gates, aux_gates, num_inputs, num_aux) = assembly.get_data();
     
     let n = input_gates.len() + aux_gates.len();
+    assert_eq!(n, params.initial_degree_plus_one);
+
     let worker = Worker::new();
     let mut transcript = T::new();
 

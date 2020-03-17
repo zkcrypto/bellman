@@ -58,7 +58,7 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
         fri_challenges
     }
 
-    fn verify_proof_with_challenges<Func: Fn(Vec<F>) -> F>(
+    fn verify_proof_with_challenges<Func: Fn(Vec<&F>) -> F>(
         proof: &FriProof<F, O>,
         upper_layer_commitments: Vec<O::Commitment>,
         natural_element_indexes: Vec<usize>,
@@ -108,7 +108,6 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
 
         let omegas_inv_bitreversed: &[F] = precomputations.omegas_inv_bitreversed();
         let mut this_domain_size = initial_domain_size;
-
 
         intermediate_values.push(lde_values);
         let mut values_slice = intermediate_values.last().expect("is something").as_ref();

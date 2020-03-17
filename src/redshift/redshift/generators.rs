@@ -12,6 +12,7 @@ use crate::redshift::fft::cooley_tukey_ntt::CTPrecomputations;
 use crate::redshift::partial_reduction_field::PartialTwoBitReductionField;
 use crate::redshift::IOP::oracle::*;
 use crate::redshift::IOP::FRI::coset_combining_fri::*;
+use crate::redshift::IOP::channel::*;
 
 use super::gates::*;
 use super::data_structures::*;
@@ -154,12 +155,13 @@ impl<E: Engine> GeneratorAssembly<E> {
     }
 }
 
-pub fn setup_with_precomputations<E: Engine, C: Circuit<E>, CP: CTPrecomputations<E::Fr>, I: Oracle<E::Fr>> (
+pub fn setup_with_precomputations<E: Engine, C: Circuit<E>, CP: CTPrecomputations<E::Fr>, I: Oracle<E::Fr>, T: Channel<E::Fr, Input = I::Commitment>> (
     circuit: &C,
-    params: &RedshiftParameters<E::Fr>,
+    params: &mut FriParams,
     omegas_bitreversed: &CP,
-    ) -> Result<(RedshiftSetup<E::Fr, FriSpecificBlake2sTree<E::Fr>>, RedshiftSetupPrecomputation<E::Fr, FriSpecificBlake2sTree<E::Fr>>), SynthesisError> 
-        where E::Fr : PartialTwoBitReductionField 
+    channel: &mut T,
+    ) -> Result<(RedshiftSetup<E::Fr, I>, RedshiftSetupPrecomputation<E::Fr, I>), SynthesisError>
+where E::Fr : PartialTwoBitReductionField 
 {
     let mut assembly = GeneratorAssembly::<E>::new();
     circuit.synthesize(&mut assembly)?;
@@ -168,36 +170,39 @@ pub fn setup_with_precomputations<E: Engine, C: Circuit<E>, CP: CTPrecomputation
     let (input_gates, aux_gates, num_inputs, num_aux) = assembly.get_data();
     let n = input_gates.len() + aux_gates.len();
     
+    //check consistency of n and FRI-parameters
+    params.initial_degree_plus_one = n;
+    
     let worker = Worker::new();
-
-    let mut transcript = T::new();
 
     let (q_l, q_r, q_o, q_m, q_c, q_add_sel, s_id, sigma_1, sigma_2, sigma_3) = 
         output_setup_polynomials::<E>(input_gates, aux_gates, num_inputs, num_aux, &worker)?;
 
-    let q_l_commitment_data = commit_single_poly::<E, CP>(&q_l, omegas_bitreversed, &params, &worker)?;
-    let q_r_commitment_data = commit_single_poly::<E, CP>(&q_r, omegas_bitreversed, &params, &worker)?;
-    let q_o_commitment_data = commit_single_poly::<E, CP>(&q_o, omegas_bitreversed, &params, &worker)?;
-    let q_m_commitment_data = commit_single_poly::<E, CP>(&q_m, omegas_bitreversed, &params, &worker)?;
-    let q_c_commitment_data = commit_single_poly::<E, CP>(&q_c, omegas_bitreversed, &params, &worker)?;
-    let q_add_sel_commitment_data = commit_single_poly::<E, CP>(&q_add_sel, omegas_bitreversed, &params, &worker)?;
-    let s_id_commitment_data = commit_single_poly::<E, CP>(&s_id, omegas_bitreversed, &params, &worker)?;
-    let sigma_1_commitment_data = commit_single_poly::<E, CP>(&sigma_1, omegas_bitreversed, &params, &worker)?;
-    let sigma_2_commitment_data = commit_single_poly::<E, CP>(&sigma_2, omegas_bitreversed, &params, &worker)?;
-    let sigma_3_commitment_data = commit_single_poly::<E, CP>(&sigma_3, omegas_bitreversed, &params, &worker)?;
+    // we prefer to pass degree explicitely (in order to implement hiding later)
+    let q_l_commitment_data = commit_single_poly::<E, CP, I>(&q_l, n, omegas_bitreversed, &params, &worker)?;
+    let q_r_commitment_data = commit_single_poly::<E, CP, I>(&q_r, n, omegas_bitreversed, &params, &worker)?;
+    let q_o_commitment_data = commit_single_poly::<E, CP, I>(&q_o, n, omegas_bitreversed, &params, &worker)?;
+    let q_m_commitment_data = commit_single_poly::<E, CP, I>(&q_m, n, omegas_bitreversed, &params, &worker)?;
+    let q_c_commitment_data = commit_single_poly::<E, CP, I>(&q_c, n, omegas_bitreversed, &params, &worker)?;
+    let q_add_sel_commitment_data = commit_single_poly::<E, CP, I>(&q_add_sel, n, omegas_bitreversed, &params, &worker)?;
+    let s_id_commitment_data = commit_single_poly::<E, CP, I>(&s_id, n, omegas_bitreversed, &params, &worker)?;
+    let sigma_1_commitment_data = commit_single_poly::<E, CP, I>(&sigma_1, n, omegas_bitreversed, &params, &worker)?;
+    let sigma_2_commitment_data = commit_single_poly::<E, CP, I>(&sigma_2, n, omegas_bitreversed, &params, &worker)?;
+    let sigma_3_commitment_data = commit_single_poly::<E, CP, I>(&sigma_3, n, omegas_bitreversed, &params, &worker)?;
 
-    transcript.commit_input(&q_l_commitment_data.oracle.get_commitment());
-    transcript.commit_input(&q_r_commitment_data.oracle.get_commitment());
-    transcript.commit_input(&q_o_commitment_data.oracle.get_commitment());
-    transcript.commit_input(&q_m_commitment_data.oracle.get_commitment());
-    transcript.commit_input(&q_c_commitment_data.oracle.get_commitment());
-    transcript.commit_input(&q_add_sel_commitment_data.oracle.get_commitment());
-    transcript.commit_input(&s_id_commitment_data.oracle.get_commitment());
-    transcript.commit_input(&sigma_1_commitment_data.oracle.get_commitment());
-    transcript.commit_input(&sigma_2_commitment_data.oracle.get_commitment());
-    transcript.commit_input(&sigma_3_commitment_data.oracle.get_commitment());
+    channel.consume(&q_l_commitment_data.oracle.get_commitment());
+    channel.consume(&q_r_commitment_data.oracle.get_commitment());
+    channel.consume(&q_o_commitment_data.oracle.get_commitment());
+    channel.consume(&q_m_commitment_data.oracle.get_commitment());
+    channel.consume(&q_c_commitment_data.oracle.get_commitment());
+    channel.consume(&q_add_sel_commitment_data.oracle.get_commitment());
+    channel.consume(&s_id_commitment_data.oracle.get_commitment());
+    channel.consume(&sigma_1_commitment_data.oracle.get_commitment());
+    channel.consume(&sigma_2_commitment_data.oracle.get_commitment());
+    channel.consume(&sigma_3_commitment_data.oracle.get_commitment());
 
-    let setup_point = transcript.get_challenge();
+    // TODOl it is better to produce setup point via list-decoding algorithm
+    let setup_point = channel.produce_field_element_challenge();
 
     let q_l_setup_value = q_l.evaluate_at(&worker, setup_point);
     let q_r_setup_value = q_r.evaluate_at(&worker, setup_point);
@@ -211,7 +216,7 @@ pub fn setup_with_precomputations<E: Engine, C: Circuit<E>, CP: CTPrecomputation
     let sigma_2_setup_value = sigma_2.evaluate_at(&worker, setup_point);
     let sigma_3_setup_value = sigma_3.evaluate_at(&worker, setup_point);
 
-    let setup = RedshiftSetup::<E::Fr, FriSpecificBlake2sTree<E::Fr>> {
+    let setup = RedshiftSetup::<E::Fr, I> {
         n: n,
         q_l: q_l_commitment_data.oracle.get_commitment(),
         q_r: q_r_commitment_data.oracle.get_commitment(),
@@ -225,63 +230,73 @@ pub fn setup_with_precomputations<E: Engine, C: Circuit<E>, CP: CTPrecomputation
         sigma_3: sigma_3_commitment_data.oracle.get_commitment(),
     };
 
-    let precomputation = RedshiftSetupPrecomputation::<E::Fr, FriSpecificBlake2sTree<E::Fr>> {
-        q_l_aux: SinglePolySetupData::<E::Fr, FriSpecificBlake2sTree<E::Fr>> {
+    let precomputation = RedshiftSetupPrecomputation::<E::Fr, I> {
+        q_l_aux: SinglePolySetupData::<E::Fr, I> {
             poly: q_l_commitment_data.poly,
+            deg: n,
             oracle: q_l_commitment_data.oracle,
             setup_point: setup_point,
             setup_value: q_l_setup_value,
         },
-        q_r_aux: SinglePolySetupData::<E::Fr, FriSpecificBlake2sTree<E::Fr>> {
+        q_r_aux: SinglePolySetupData::<E::Fr, I> {
             poly: q_r_commitment_data.poly,
+            deg: n,
             oracle: q_r_commitment_data.oracle,
             setup_point: setup_point,
             setup_value: q_r_setup_value,
         },
-        q_o_aux: SinglePolySetupData::<E::Fr, FriSpecificBlake2sTree<E::Fr>> {
+        q_o_aux: SinglePolySetupData::<E::Fr, I> {
             poly: q_o_commitment_data.poly,
+            deg: n,
             oracle: q_o_commitment_data.oracle,
             setup_point: setup_point,
             setup_value: q_o_setup_value,
         },
-        q_m_aux: SinglePolySetupData::<E::Fr, FriSpecificBlake2sTree<E::Fr>> {
+        q_m_aux: SinglePolySetupData::<E::Fr, I> {
             poly: q_m_commitment_data.poly,
+            deg: n,
             oracle: q_m_commitment_data.oracle,
             setup_point: setup_point,
             setup_value: q_m_setup_value,
         },
-        q_c_aux: SinglePolySetupData::<E::Fr, FriSpecificBlake2sTree<E::Fr>> {
+        q_c_aux: SinglePolySetupData::<E::Fr, I> {
             poly: q_c_commitment_data.poly,
+            deg: n,
             oracle: q_c_commitment_data.oracle,
             setup_point: setup_point,
             setup_value: q_c_setup_value,
         },
-        q_add_sel_aux: SinglePolySetupData::<E::Fr, FriSpecificBlake2sTree<E::Fr>> {
+        q_add_sel_aux: SinglePolySetupData::<E::Fr, I> {
             poly: q_add_sel_commitment_data.poly,
+            deg: n,
             oracle: q_add_sel_commitment_data.oracle,
             setup_point: setup_point,
             setup_value: q_add_sel_setup_value,
         },
-        s_id_aux: SinglePolySetupData::<E::Fr, FriSpecificBlake2sTree<E::Fr>> {
+        s_id_aux: SinglePolySetupData::<E::Fr, I> {
             poly: s_id_commitment_data.poly,
+            deg: n,
             oracle: s_id_commitment_data.oracle,
             setup_point: setup_point,
             setup_value: s_id_setup_value,
         },
-        sigma_1_aux: SinglePolySetupData::<E::Fr, FriSpecificBlake2sTree<E::Fr>> {
+        sigma_1_aux: SinglePolySetupData::<E::Fr, I> {
             poly: sigma_1_commitment_data.poly,
+            deg: n,
             oracle: sigma_1_commitment_data.oracle,
             setup_point: setup_point,
             setup_value: sigma_1_setup_value,
         },
-        sigma_2_aux: SinglePolySetupData::<E::Fr, FriSpecificBlake2sTree<E::Fr>> {
+        sigma_2_aux: SinglePolySetupData::<E::Fr, I> {
             poly: sigma_2_commitment_data.poly,
+            deg: n,
             oracle: sigma_2_commitment_data.oracle,
             setup_point: setup_point,
             setup_value: sigma_2_setup_value,
         },
-        sigma_3_aux: SinglePolySetupData::<E::Fr, FriSpecificBlake2sTree<E::Fr>> {
+        sigma_3_aux: SinglePolySetupData::<E::Fr, I> {
             poly: sigma_3_commitment_data.poly,
+            deg: n,
             oracle: sigma_3_commitment_data.oracle,
             setup_point: setup_point,
             setup_value: sigma_3_setup_value,
