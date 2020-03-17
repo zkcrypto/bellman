@@ -1,15 +1,13 @@
 use crate::pairing::ff::{Field, PrimeField};
 use crate::pairing::{Engine};
 
-use crate::redshift::commitments::transparent::fri::coset_combining_fri::fri::*;
-use crate::plonk::commitments::transparent::iop_compiler::*;
-use crate::plonk::polynomials::*;
-use crate::plonk::fft::cooley_tukey_ntt::*;
 use crate::multicore::*;
+use crate::redshift::polynomials::*;
+use crate::redshift::IOP::oracle::*;
 
 
 #[derive(Debug)]
-pub struct RedshiftSetup<F: PrimeField, I: IopInstance<F>>{
+pub struct RedshiftSetup<F: PrimeField, I: Oracle<F>>{
     pub n: usize,
     pub q_l: I::Commitment,
     pub q_r: I::Commitment,
@@ -23,20 +21,22 @@ pub struct RedshiftSetup<F: PrimeField, I: IopInstance<F>>{
     pub sigma_3: I::Commitment,
 }
 
-pub struct SinglePolySetupData<F: PrimeField, I: IopInstance<F>>{
+pub struct SinglePolySetupData<F: PrimeField, I: Oracle<F>>{
     pub poly: Polynomial<F, Values>,
+    pub deg: usize,
     pub oracle: I,
     pub setup_point: F,
     pub setup_value: F,
 }
 
-pub struct SinglePolyCommitmentData<F: PrimeField, I: IopInstance<F>>{
+pub struct SinglePolyCommitmentData<F: PrimeField, I: Oracle<F>>{
     pub poly: Polynomial<F, Values>,
+    pub deg: usize,
     pub oracle: I,
 }
 
 // #[derive(Debug)]
-pub struct RedshiftSetupPrecomputation<F: PrimeField, I: IopInstance<F>>{
+pub struct RedshiftSetupPrecomputation<F: PrimeField, I: Oracle<F>>{
     pub q_l_aux: SinglePolySetupData<F, I>,
     pub q_r_aux: SinglePolySetupData<F, I>,
     pub q_o_aux: SinglePolySetupData<F, I>,
@@ -49,18 +49,11 @@ pub struct RedshiftSetupPrecomputation<F: PrimeField, I: IopInstance<F>>{
     pub sigma_3_aux: SinglePolySetupData<F, I>,
 }
 
-pub struct WitnessOpeningRequest<'a, F: PrimeField> {
-    pub polynomials: Vec<&'a Polynomial<F, Values>>,
-    pub opening_point: F,
-    pub opening_values: Vec<F>
-}
-
-pub struct SetupOpeningRequest<'a, F: PrimeField> {
-    pub polynomials: Vec<&'a Polynomial<F, Values>>,
-    pub setup_point: F,
-    pub setup_values: Vec<F>,
-    pub opening_point: F,
-    pub opening_values: Vec<F>
+pub struct OpeningRequest<'a, F: PrimeField> {
+    pub polynomial: &'a Polynomial<F, Values>,
+    pub deg: usize,
+    pub opening_points: (F, Option<F>),
+    pub opening_values: (F, Option<F>),
 }
 
 

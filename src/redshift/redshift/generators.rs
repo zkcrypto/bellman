@@ -10,6 +10,8 @@ use crate::redshift::polynomials::*;
 use crate::redshift::domains::*;
 use crate::redshift::fft::cooley_tukey_ntt::CTPrecomputations;
 use crate::redshift::partial_reduction_field::PartialTwoBitReductionField;
+use crate::redshift::IOP::oracle::*;
+use crate::redshift::IOP::FRI::coset_combining_fri::*;
 
 use super::gates::*;
 use super::data_structures::*;
@@ -152,8 +154,7 @@ impl<E: Engine> GeneratorAssembly<E> {
     }
 }
 
-pub fn setup_with_precomputations<E: Engine, C: Circuit<E>, CP: CTPrecomputations<E::Fr>, T: Transcript<E::Fr, 
-    Input = <FriSpecificBlake2sTree<E::Fr> as IopInstance<E::Fr>> :: Commitment> >(
+pub fn setup_with_precomputations<E: Engine, C: Circuit<E>, CP: CTPrecomputations<E::Fr>, I: Oracle<E::Fr>> (
     circuit: &C,
     params: &RedshiftParameters<E::Fr>,
     omegas_bitreversed: &CP,

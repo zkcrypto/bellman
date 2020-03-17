@@ -1,20 +1,18 @@
-use crate::plonk::commitments::transparent::iop_compiler::coset_combining_blake2s_tree::*;
 use crate::SynthesisError;
-use crate::plonk::transparent_engine::PartialTwoBitReductionField;
 use crate::pairing::ff::{Field, PrimeField};
 use crate::pairing::{Engine};
-use crate::plonk::commitments::transparent::iop_compiler::*;
-use crate::plonk::polynomials::*;
-use super::data_structures::*;
-use crate::plonk::commitments::transparent::fri::coset_combining_fri::fri::*;
-use crate::plonk::fft::cooley_tukey_ntt::*;
 use crate::multicore::*;
-use super::gates::*;
 
-use crate::plonk::commitments::transparent::fri::coset_combining_fri::*;
-use crate::plonk::commitments::transparent::fri::coset_combining_fri::fri::*;
-use crate::plonk::commitments::transcript::*;
-use crate::plonk::domains::*;
+use super::data_structures::*;
+use super::gates::*;
+use super::cs::*;
+
+use crate::redshift::polynomials::*;
+use crate::redshift::fft::cooley_tukey_ntt::*;
+use crate::redshift::domains::*;
+use crate::redshift::partial_reduction_field::PartialTwoBitReductionField;
+use crate::redshift::IOP::FRI::coset_combining_fri::*;
+use crate::redshift::IOP::oracle::*;
 
 pub(crate) fn convert_to_field_elements<F: PrimeField>(indexes: &[usize], worker: &Worker) -> Vec<F> {
     let mut result = vec![F::zero(); indexes.len()];
@@ -35,12 +33,12 @@ pub(crate) fn convert_to_field_elements<F: PrimeField>(indexes: &[usize], worker
     result
 }
 
-pub(crate) fn commit_single_poly<E: Engine, CP: CTPrecomputations<E::Fr>>(
+pub(crate) fn commit_single_poly<E: Engine, CP: CTPrecomputations<E::Fr>, I: Oracle<E::Fr>>(
         poly: &Polynomial<E::Fr, Coefficients>, 
         omegas_bitreversed: &CP,
-        params: &RedshiftParameters<E::Fr>,
+        params: &FriParams,
         worker: &Worker
-    ) -> Result<SinglePolyCommitmentData<E::Fr, FriSpecificBlake2sTree<E::Fr>>, SynthesisError> 
+    ) -> Result<SinglePolyCommitmentData<E::Fr, I>, SynthesisError> 
 where E::Fr : PartialTwoBitReductionField {
     let lde = poly.clone().bitreversed_lde_using_bitreversed_ntt_with_partial_reduction(
         worker, 
@@ -49,11 +47,11 @@ where E::Fr : PartialTwoBitReductionField {
         &E::Fr::multiplicative_generator()
     )?;
 
-    let oracle_params = FriSpecificBlake2sTreeParams {
-        values_per_leaf: (1 << params.coset_params.cosets_schedule[0])
+    let oracle_params = I::params {
+        values_per_leaf: (1 << params.collapsing_factor),
     };
 
-    let oracle = FriSpecificBlake2sTree::create(&lde.as_ref(), &oracle_params);
+    let oracle = I::create(&lde.as_ref(), &oracle_params);
 
     Ok(SinglePolyCommitmentData::<E::Fr, _> {
         poly: lde,
@@ -300,18 +298,20 @@ pub(crate) fn output_setup_polynomials<E: Engine>(
     Ok((q_l, q_r, q_o, q_m, q_c, q_add_sel, s_id, sigma_1, sigma_2, sigma_3))
 }
 
-pub(crate) fn multiopening<E: Engine, P: FriPrecomputations<E::Fr>, T: Transcript<E::Fr, Input = <FriSpecificBlake2sTree<E::Fr> as IopInstance<E::Fr>> :: Commitment> >
+pub(crate) fn multiopening<E: Engine, P: FriPrecomputations<E::Fr>, I: Oracle<E::Fr>>
     ( 
-        witness_opening_requests: Vec<WitnessOpeningRequest<E::Fr>>,
-        setup_opening_requests: Vec<SetupOpeningRequest<E::Fr>>,
+        opening_requests: Vec<OpeningRequest<E::Fr>>,
         omegas_inv_bitreversed: &P,
-        params: &RedshiftParameters<E::Fr>,
+        params: &FriParams,
         worker: &Worker,
-        transcript: &mut T
+        aggregation_challenge: &E::Fr,
     ) -> Result<(), SynthesisError> 
 where E::Fr : PartialTwoBitReductionField
 {
-    let required_divisor_size = witness_opening_requests[0].polynomials[0].size();
+    //we assert that all of the polynomials are of the same degree
+    assert!(opening_requests.windows(2).all(|w| w[0].deg == w[1].deg));
+    let deg = opening_requests[0].deg;
+    let required_divisor_size = deg * params.lde_factor;
 
     let mut final_aggregate = Polynomial::from_values(vec![E::Fr::zero(); required_divisor_size])?;
 
@@ -322,8 +322,6 @@ where E::Fr : PartialTwoBitReductionField
 
     let mut scratch_space_numerator = final_aggregate.clone();
     let mut scratch_space_denominator = final_aggregate.clone();
-
-    let aggregation_challenge = transcript.get_challenge();
 
     let mut alpha = E::Fr::one();
 
@@ -432,7 +430,7 @@ where E::Fr : PartialTwoBitReductionField
         }
     }
 
-    let fri_proto = CosetCombiningFriIop::proof_from_lde(
+    let fri_proto = FriIop::proof_from_lde(
         &final_aggregate,
         params.lde_factor,
         params.output_coeffs_at_degree_plus_one,
@@ -442,7 +440,14 @@ where E::Fr : PartialTwoBitReductionField
         &params.coset_params
     )?;
 
-    Ok(())
+    fn proof_from_lde<T: FriPrecomputations<F>
+    >(
+        //NB: we consume the polynomial here! we also assume that the polynomial is already after lde!
+        lde_values: Polynomial<F, Values>,
+        precomputations: &T,
+        worker: &Worker,
+        channel: &mut C,
+        params: &FriParams,
 }
 
 pub(crate) fn calculate_inverse_vanishing_polynomial_in_a_coset<E: Engine>(

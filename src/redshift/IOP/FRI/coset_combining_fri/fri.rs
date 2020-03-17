@@ -96,8 +96,6 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
 
         //TODO: locate all of them in LDE order
         let oracle_params = <O as Oracle<F>>::Params::from(wrapping_factor);
-        let initial_oracle = <O as Oracle<F>>::create(lde_values.as_ref(), &oracle_params);
-        oracles.push(initial_oracle);
         
         // if we would precompute all N we would have
         // [0, N/2, N/4, 3N/4, N/8, N/2 + N/8, N/8 + N/4, N/8 + N/4 + N/2, ...]
@@ -117,8 +115,9 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
         for fri_step in 0..num_steps {
             let next_domain_size = this_domain_size / wrapping_factor;
             next_values = vec![F::zero(); next_domain_size];
-
-            channel.consume(&oracles.last().expect("should not be empty").get_commitment());
+            if fri_step != 0 {
+                channel.consume(&oracles.last().expect("should not be empty").get_commitment());
+            }
             let mut challenge = channel.produce_field_element_challenge();
             challenges.push(challenge.clone());
 

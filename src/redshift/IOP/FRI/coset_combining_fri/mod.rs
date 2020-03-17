@@ -15,7 +15,7 @@ use crate::redshift::IOP::channel::Channel;
 //proof prototype is just a series of FRI-oracles (FRI setup phase)
 #[derive(PartialEq, Eq, Clone)]
 pub struct FriProofPrototype<F: PrimeField, I: Oracle<F>> {
-    //including the initial one
+    //excluding the initial one oracle - it is simly the commitment, no need to repeat
     pub oracles: Vec<I>,
     pub challenges: Vec<F>,
     //this vector include the initial and doesn't include the last one
@@ -43,6 +43,7 @@ impl<F: PrimeField, I: Oracle<F>> FriProofPrototype<F, I> {
 #[derive(PartialEq, Eq, Clone)]
 pub struct FriProof<F: PrimeField, I: Oracle<F>> {
     pub queries: Vec<Vec<I::Query>>,
+    //excluding the initial one oracle - it is simly the commitment, no need to repeat
     pub commitments: Vec<I::Commitment>,
     pub final_coefficients: Vec<F>,
 }
