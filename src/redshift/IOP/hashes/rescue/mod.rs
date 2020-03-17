@@ -91,14 +91,15 @@ impl<F: PrimeField> RescueParams<F>
     }
 }
 
+
+
+/// generation of mds_matrix is taken from https://github.com/KULeuven-COSIC/Marvellous/blob/master/instance_generator.sage
 // # generate a mxm MDS matrix over F
 //     @staticmethod
 //     def MDS_matrix( F, m ):
 //         z = F.primitive_element()
 //         mat = matrix([[z^(i*j) for j in range(0, 2*m)] for i in range(0, m)])
 //         return mat.echelon_form()[:, m:]
-
-/// generation of mds_matrix is taken from https://github.com/KULeuven-COSIC/Marvellous/blob/master/instance_generator.sage
 pub(crate) fn generate_mds_matrix<F: PrimeField>(_params: &RescueParams<F>) -> [[F; RESCUE_M]; RESCUE_M] {
     // TODO: Correct MDS generation; this causes horribly-biased output
     // in order to simplify output - the first index is column, the second is row

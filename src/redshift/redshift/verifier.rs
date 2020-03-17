@@ -3,77 +3,13 @@ use crate::pairing::{Engine};
 
 use crate::{SynthesisError};
 use std::marker::PhantomData;
-
-use crate::plonk::cs::gates::*;
-use crate::plonk::cs::*;
-
 use crate::multicore::*;
-use super::polynomials::*;
-use super::domains::*;
-use crate::plonk::commitments::*;
-use crate::plonk::commitments::transcript::*;
-use crate::plonk::utils::*;
-use crate::plonk::generator::*;
-use crate::plonk::prover::*;
 
-fn evaluate_inverse_vanishing_poly<E: Engine>(vahisning_size: usize, point: E::Fr) -> E::Fr {
-    assert!(vahisning_size.is_power_of_two());
+use crate::redshift::polynomials::*;
 
-    // update from the paper - it should not hold for the last generator, omega^(n) in original notations
+use super::cs;
 
-    // Z(X) = (X^(n+1) - 1) / (X - omega^(n)) => Z^{-1}(X) = (X - omega^(n)) / (X^(n+1) - 1)
 
-    let domain = Domain::<E::Fr>::new_for_size(vahisning_size as u64).expect("should fit");
-    let n_domain_omega = domain.generator;
-    let root = n_domain_omega.pow([(vahisning_size - 1) as u64]);
-
-    let mut numerator = point;
-    numerator.sub_assign(&root);
-
-    let mut denominator = point.pow([vahisning_size as u64]);
-    denominator.sub_assign(&E::Fr::one());
-
-    let denominator = denominator.inverse().expect("must exist");
-
-    numerator.mul_assign(&denominator);
-
-    numerator
-}
-
-fn evaluate_lagrange_poly<E: Engine>(vahisning_size:usize, poly_number: usize, at: E::Fr) -> E::Fr {
-    assert!(vahisning_size.is_power_of_two());
-
-    let mut repr = E::Fr::zero().into_repr();
-    repr.as_mut()[0] = vahisning_size as u64;
-
-    let size_fe = E::Fr::from_repr(repr).expect("is a valid representation");
-    // let size_inv = n_fe.inverse().expect("must exist");
-
-    // L_0(X) = (Z_H(X) / (X - 1)).(1/n) and L_0(1) = 1
-    // L_1(omega) = 1 = L_0(omega * omega^-1)
-
-    let domain = Domain::<E::Fr>::new_for_size(vahisning_size as u64).expect("domain of this size should exist");
-    let omega = domain.generator;
-
-    let omega_inv = omega.inverse().expect("must exist");
-
-    let argument_multiplier = omega_inv.pow([poly_number as u64]);
-    let mut argument = at;
-    argument.mul_assign(&argument_multiplier);
-
-    let mut numerator = argument.pow([vahisning_size as u64]);
-    numerator.sub_assign(&E::Fr::one());
-
-    let mut denom = argument;
-    denom.sub_assign(&E::Fr::one());
-    denom.mul_assign(&size_fe);
-
-    let denom_inv = denom.inverse().expect("must exist");
-
-    numerator.mul_assign(&denom_inv);
-
-    numerator
-}
 
 pub fn verify_nonhomomorphic<E: Engine, S: CommitmentScheme<E::Fr, Prng = T>, T: Transcript<E::Fr, Input = S::Commitment>>(
     setup: &PlonkSetup<E, S>,

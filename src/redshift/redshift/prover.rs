@@ -231,6 +231,11 @@ impl<E: Engine> ProvingAssembly<E> {
 
         (f_l, f_r, f_o)
     }
+
+    pub(crate) fn make_public_inputs_assingment(&self) -> Vec<E::Fr> {
+        assert!(self.is_finalized);
+        self.input_assingments        
+    }
 }
 
 //use setup and selector polynomials, precomputed by 
@@ -253,14 +258,12 @@ where E::Fr : PartialTwoBitReductionField
     let (input_gates, aux_gates, num_inputs, num_aux) = assembly.get_data();
     
     let n = input_gates.len() + aux_gates.len();
-    assert_eq!(n, params.initial_degree_plus_one);
-
     let worker = Worker::new();
-    let mut transcript = T::new();
 
     // we need n+1 to be a power of two and can not have n to be power of two
     let required_domain_size = n + 1;
     assert!(required_domain_size.is_power_of_two());
+    assert_eq!(n+1, params.initial_degree_plus_one);
 
     let (w_l, w_r, w_o) = assembly.make_wire_assingments();
 
@@ -275,18 +278,16 @@ where E::Fr : PartialTwoBitReductionField
 
     // polynomials inside of these is are values in cosets
 
-    let a_commitment_data = commit_single_poly::<E, CP>(&a_poly, omegas_bitreversed, &params, &worker)?;
-    let b_commitment_data = commit_single_poly::<E, CP>(&b_poly, omegas_bitreversed, &params, &worker)?;
-    let c_commitment_data = commit_single_poly::<E, CP>(&c_poly, omegas_bitreversed, &params, &worker)?;
+    let a_commitment_data = commit_single_poly::<E, CP, I>(&a_poly, n, omegas_bitreversed, &params, &worker)?;
+    let b_commitment_data = commit_single_poly::<E, CP, I>(&b_poly, n, omegas_bitreversed, &params, &worker)?;
+    let c_commitment_data = commit_single_poly::<E, CP, I>(&c_poly, n, omegas_bitreversed, &params, &worker)?;
 
-    transcript.commit_input(&a_commitment_data.oracle.get_commitment());
-    transcript.commit_input(&b_commitment_data.oracle.get_commitment());
-    transcript.commit_input(&c_commitment_data.oracle.get_commitment());
+    channel.consume(&a_commitment_data.oracle.get_commitment());
+    channel.consume(&b_commitment_data.oracle.get_commitment());
+    channel.consume(&c_commitment_data.oracle.get_commitment());
 
-    // TODO: Add public inputs
-
-    let beta = transcript.get_challenge();
-    let gamma = transcript.get_challenge();
+    let beta = channel.produce_field_element_challenge();
+    let gamma = channel.produce_field_element_challenge();
 
     let mut w_l_plus_gamma = w_l.clone();
     w_l_plus_gamma.add_constant(&worker, &gamma);
@@ -387,11 +388,11 @@ where E::Fr : PartialTwoBitReductionField
 
     // polynomials inside of these is are values in cosets
 
-    let z_1_commitment_data = commit_single_poly::<E, CP>(&z_1, omegas_bitreversed, &params, &worker)?;
-    let z_2_commitment_data = commit_single_poly::<E, CP>(&z_2, omegas_bitreversed, &params, &worker)?;
+    let z_1_commitment_data = commit_single_poly::<E, CP, I>(&z_1, n, omegas_bitreversed, &params, &worker)?;
+    let z_2_commitment_data = commit_single_poly::<E, CP, I>(&z_2, n, omegas_bitreversed, &params, &worker)?;
 
-    transcript.commit_input(&z_1_commitment_data.oracle.get_commitment());
-    transcript.commit_input(&z_2_commitment_data.oracle.get_commitment());
+    channel.consume(&z_1_commitment_data.oracle.get_commitment());
+    channel.consume(&z_2_commitment_data.oracle.get_commitment());
 
     let mut z_1_shifted = z_1.clone();
     z_1_shifted.distribute_powers(&worker, z_1.omega);
@@ -413,7 +414,13 @@ where E::Fr : PartialTwoBitReductionField
     let q_o_coset_lde_bitreversed = setup_precomp.q_o_aux.poly.clone_subset_assuming_bitreversed(partition_factor)?;
     let q_m_coset_lde_bitreversed = setup_precomp.q_m_aux.poly.clone_subset_assuming_bitreversed(partition_factor)?;
     let q_c_coset_lde_bitreversed = setup_precomp.q_c_aux.poly.clone_subset_assuming_bitreversed(partition_factor)?;
-    //let q_add_sel_coset_lde_bitreversed = setup_precomp.q_add_sel_aux.poly.clone_subset_assuming_bitreversed(partition_factor)?;
+    let q_add_sel_coset_lde_bitreversed = setup_precomp.q_add_sel_aux.poly.clone_subset_assuming_bitreversed(partition_factor)?;
+    let z_1_shifted_coset_lde_bitreversed = z_1_shifted.clone().bitreversed_lde_using_bitreversed_ntt_with_partial_reduction(
+        &worker, 
+        4, 
+        omegas_bitreversed, 
+        &E::Fr::multiplicative_generator()
+    )?;
     let s_id_coset_lde_bitreversed = setup_precomp.s_id_aux.poly.clone_subset_assuming_bitreversed(partition_factor)?;
     let sigma_1_coset_lde_bitreversed = setup_precomp.sigma_1_aux.poly.clone_subset_assuming_bitreversed(partition_factor)?;
     let sigma_2_coset_lde_bitreversed = setup_precomp.sigma_2_aux.poly.clone_subset_assuming_bitreversed(partition_factor)?;
@@ -428,15 +435,37 @@ where E::Fr : PartialTwoBitReductionField
     let mut two_n_fe = n_fe;
     two_n_fe.double();
 
-    let alpha = transcript.get_challenge();
+    let alpha = channel.produce_field_element_challenge();
 
     // TODO: may be speedup this one too
     let mut vanishing_poly_inverse_bitreversed = 
         calculate_inverse_vanishing_polynomial_in_a_coset::<E>(&worker, q_l_coset_lde_bitreversed.size(), required_domain_size.next_power_of_two())?;
     vanishing_poly_inverse_bitreversed.bitreverse_enumeration(&worker);
 
+     // NB: Computation of public inputs polynomial PI(x) = \sum -x_i L_i(x) is carried by both prover and verifier
+    // as prover need to divide also
+
+    let PI = Polynomial::<E::Fr, Values>::from_values_unpadded(assembly.make_public_inputs_assingment())?;
+    let PI = PI.ifft_using_bitreversed_ntt_with_partial_reduction(&worker, omegas_inv_bitreversed, &E::Fr::one())?;
+    let PI = PI.bitreversed_lde_using_bitreversed_ntt_with_partial_reduction(
+        &worker, 
+        params.lde_factor, 
+        omegas_bitreversed, 
+        &E::Fr::multiplicative_generator()
+    )?;
+
+    let mut c_shifted = c_poly.clone();
+    c_shifted.distribute_powers(&worker, c_poly.omega);
+    let c_shifted_coset_lde_bitreversed = c_shifted.clone().bitreversed_lde_using_bitreversed_ntt_with_partial_reduction(
+        &worker, 
+        params.lde_factor, 
+        omegas_bitreversed, 
+        &E::Fr::multiplicative_generator()
+    )?;
+
     let mut t_1 = {
         let mut t_1 = q_c_coset_lde_bitreversed;
+        t_1.add_assign(&worker, &PI);
 
         let mut q_l_by_a = q_l_coset_lde_bitreversed;
         q_l_by_a.mul_assign(&worker, &a_coset_lde_bitreversed);
@@ -459,7 +488,10 @@ where E::Fr : PartialTwoBitReductionField
         t_1.add_assign(&worker, &q_m_by_ab);
         drop(q_m_by_ab);
 
-        //let mut q_add_sel_by_c_next = q_add_sel_coset_lde_bitreversed;
+        let mut q_add_sel_by_c_next = q_add_sel_coset_lde_bitreversed;
+        q_add_sel_by_c_next.mul_assign(&worker, &c_shifted_coset_lde_bitreversed);
+        t_1.add_assign(&worker, &q_m_by_ab);
+        drop(q_add_sel_by_c_next);
 
         vanishing_poly_inverse_bitreversed.scale(&worker, alpha);
 
@@ -653,15 +685,15 @@ where E::Fr : PartialTwoBitReductionField
     let t_poly_mid = t_poly_parts.pop().expect("mid exists");
     let t_poly_low = t_poly_parts.pop().expect("low exists");
 
-    let t_poly_high_commitment_data = commit_single_poly::<E, CP>(&t_poly_high, omegas_bitreversed, &params, &worker)?;
-    let t_poly_mid_commitment_data = commit_single_poly::<E, CP>(&t_poly_mid, omegas_bitreversed, &params, &worker)?;
-    let t_poly_low_commitment_data = commit_single_poly::<E, CP>(&t_poly_low, omegas_bitreversed, &params, &worker)?;
+    let t_poly_high_commitment_data = commit_single_poly::<E, CP, I>(&t_poly_high, n, omegas_bitreversed, &params, &worker)?;
+    let t_poly_mid_commitment_data = commit_single_poly::<E, CP, I>(&t_poly_mid, n, omegas_bitreversed, &params, &worker)?;
+    let t_poly_low_commitment_data = commit_single_poly::<E, CP, I>(&t_poly_low, n, omegas_bitreversed, &params, &worker)?;
 
-    transcript.commit_input(&t_poly_low_commitment_data.oracle.get_commitment());
-    transcript.commit_input(&t_poly_mid_commitment_data.oracle.get_commitment());
-    transcript.commit_input(&t_poly_high_commitment_data.oracle.get_commitment());
+    channel.consume(&t_poly_low_commitment_data.oracle.get_commitment());
+    channel.consume(&t_poly_mid_commitment_data.oracle.get_commitment());
+    channel.consume(&t_poly_high_commitment_data.oracle.get_commitment());
 
-    let z = transcript.get_challenge();
+    let z = channel.produce_field_element_challenge();
 
     let a_at_z = a_poly.evaluate_at(&worker, z);
     let b_at_z = b_poly.evaluate_at(&worker, z);
@@ -672,6 +704,7 @@ where E::Fr : PartialTwoBitReductionField
     let q_o_at_z = q_o.evaluate_at(&worker, z);
     let q_m_at_z = q_m.evaluate_at(&worker, z);
     let q_c_at_z = q_c.evaluate_at(&worker, z);
+    let q_add_sel_at_z = q_add_sel.evaluate_at(&worker, z);
 
     let s_id_at_z = s_id.evaluate_at(&worker, z);
     let sigma_1_at_z = sigma_1.evaluate_at(&worker, z);
@@ -693,39 +726,42 @@ where E::Fr : PartialTwoBitReductionField
     let l_0_at_z = l_0.evaluate_at(&worker, z);
     let l_n_minus_one_at_z = l_n_minus_one.evaluate_at(&worker, z);
 
-    {
-        transcript.commit_field_element(&a_at_z);
-        transcript.commit_field_element(&b_at_z);
-        transcript.commit_field_element(&c_at_z);
+    // TODO: think twice! Do we really need this additional source of randomness before getting
+    // aggregation challenge
+    // especially if we are using sponge construction!
+    // {
+    //     channel.consume(&a_at_z);
+    //     channel.consume(&b_at_z);
+    //     channel.consume(&c_at_z);
 
-        transcript.commit_field_element(&q_l_at_z);
-        transcript.commit_field_element(&q_r_at_z);
-        transcript.commit_field_element(&q_o_at_z);
-        transcript.commit_field_element(&q_m_at_z);
-        transcript.commit_field_element(&q_c_at_z);
+    //     channel.consume(&q_l_at_z);
+    //     channel.consume(&q_r_at_z);
+    //     channel.consume(&q_o_at_z);
+    //     channel.consume(&q_m_at_z);
+    //     channel.consume(&q_c_at_z);
+    //     channel.consume(&q_add_sel_at_z);
 
-        transcript.commit_field_element(&s_id_at_z);
-        transcript.commit_field_element(&sigma_1_at_z);
-        transcript.commit_field_element(&sigma_2_at_z);
-        transcript.commit_field_element(&sigma_3_at_z);
+    //     channel.consume(&s_id_at_z);
+    //     channel.consume(&sigma_1_at_z);
+    //     channel.consume(&sigma_2_at_z);
+    //     channel.consume(&sigma_3_at_z);
 
-        transcript.commit_field_element(&t_low_at_z);
-        transcript.commit_field_element(&t_mid_at_z);
-        transcript.commit_field_element(&t_high_at_z);
+    //     channel.consume(&t_low_at_z);
+    //     channel.consume(&t_mid_at_z);
+    //     channel.consume(&t_high_at_z);
 
-        transcript.commit_field_element(&z_1_at_z);
-        transcript.commit_field_element(&z_2_at_z);
+    //     channel.consume(&z_1_at_z);
+    //     channel.consume(&z_2_at_z);
 
-        transcript.commit_field_element(&z_1_shifted_at_z);
-        transcript.commit_field_element(&z_2_shifted_at_z);
-    }
+    //     channel.consume(&z_1_shifted_at_z);
+    //     channel.consume(&z_2_shifted_at_z);
+    // }
 
-    // let aggregation_challenge = transcript.get_challenge();
-
-    let z_in_pow_of_domain_size = z.pow([required_domain_size as u64]);
-
+    
     // this is a sanity check
-    {
+    if cfg!(debug_assertions) {
+        
+        let z_in_pow_of_domain_size = z.pow([required_domain_size as u64]);
         let mut t_1 = {
             let mut res = q_c_at_z;
 
@@ -859,7 +895,14 @@ where E::Fr : PartialTwoBitReductionField
     let mut z_by_omega = z;
     z_by_omega.mul_assign(&z_1.omega);
 
-    let witness_opening_request_at_z = WitnessOpeningRequest {
+    let openin_request = OpeningRequest {
+    pub polynomial: &'a Polynomial<F, Values>,
+    pub deg: usize,
+    pub opening_points: (F, Option<F>),
+    pub opening_values: (F, Option<F>),
+}
+
+    let a_request = WitnessOpeningRequest {
         polynomials: vec![
             &a_commitment_data.poly,
             &b_commitment_data.poly,

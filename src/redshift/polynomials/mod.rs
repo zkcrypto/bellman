@@ -28,6 +28,7 @@ impl PolynomialForm for Values{}
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Polynomial<F: PrimeField, P: PolynomialForm> {
     coeffs: Vec<F>,
+    //if domain is of size 2^s
     pub exp: u32,
     pub omega: F,
     pub omegainv: F,

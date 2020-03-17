@@ -171,7 +171,8 @@ where E::Fr : PartialTwoBitReductionField
     let n = input_gates.len() + aux_gates.len();
     
     //check consistency of n and FRI-parameters
-    params.initial_degree_plus_one = n;
+    // TODO: I may be mistaken here and should have simply n instead of n+1
+    params.initial_degree_plus_one = n + 1;
     
     let worker = Worker::new();
 
@@ -179,6 +180,7 @@ where E::Fr : PartialTwoBitReductionField
         output_setup_polynomials::<E>(input_gates, aux_gates, num_inputs, num_aux, &worker)?;
 
     // we prefer to pass degree explicitely (in order to implement hiding later)
+    // we also have plans to hold the case of various degrees polynomials
     let q_l_commitment_data = commit_single_poly::<E, CP, I>(&q_l, n, omegas_bitreversed, &params, &worker)?;
     let q_r_commitment_data = commit_single_poly::<E, CP, I>(&q_r, n, omegas_bitreversed, &params, &worker)?;
     let q_o_commitment_data = commit_single_poly::<E, CP, I>(&q_o, n, omegas_bitreversed, &params, &worker)?;
