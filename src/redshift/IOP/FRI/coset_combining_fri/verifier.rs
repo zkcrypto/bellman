@@ -8,16 +8,19 @@ use crate::redshift::fft::cooley_tukey_ntt::log2_floor;
 use crate::redshift::IOP::oracle::*;
 use super::coset_combiner::*;
 use crate::redshift::fft::cooley_tukey_ntt::bitreverse;
+use std::ops::Range;
 
 //TODO: it is also very important to understand how do values are located inside coset
 
 impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F, O, C> {
     
-    pub fn verify_proof_queries(
+    pub fn verify_proof_queries<Func: Fn(Vec<&F>) -> F>(
         proof: &FriProof<F, O>,
+        upper_layer_commitments: Vec<O::Commitment>,
         natural_element_indexes: Vec<usize>,
         fri_challenges: &[F],
         params: &FriParams,
+        upper_layer_combiner: Func,
     ) -> Result<bool, SynthesisError> {
 
         assert!(fri_challenges.len() == proof.commitments.len());
@@ -51,9 +54,13 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
         let num_steps = 
             log2_floor(params.initial_degree_plus_one / params.final_degree_plus_one) / params.collapsing_factor as u32;
         
-        for (round, natural_first_element_index) in proof.queries.iter().zip(natural_element_indexes.into_iter()) {
+        for ((round, natural_first_element_index), upper_layer_query) in 
+            proof.queries.iter().zip(natural_element_indexes.into_iter()).zip(proof.upper_layer_queries.iter()) {
             
-            let valid = FriIop::<F, O, C>::verify_single_proof_round(
+            let valid = FriIop::<F, O, C>::verify_single_proof_round::<Func>(
+                &upper_layer_query,
+                &upper_layer_commitments,
+                &upper_layer_combiner,
                 round,
                 &proof.commitments,
                 &proof.final_coefficients,
@@ -78,7 +85,10 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
         return Ok(true);
     }
 
-    pub fn verify_single_proof_round(
+    pub fn verify_single_proof_round<Func: Fn(Vec<&F>) -> F>(
+        upper_layer_queries: &Vec<O::Query>,
+        upper_layer_commitments: &Vec<O::Commitment>, 
+        upper_layer_combiner: &Func,
         queries: &Vec<O::Query>,
         commitments: &Vec<O::Commitment>,
         final_coefficients: &Vec<F>,
@@ -95,14 +105,41 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
         two_inv: &F,
     ) -> Result<bool, SynthesisError>
     {
-        let mut omega_inv = omega_inv.clone();
+        let coset_idx_range = CosetCombiner::get_coset_idx_for_natural_index(
+                natural_first_element_index, initial_domain_size, log_initial_domain_size, collapsing_factor);
+        
+        //check query cardinality here!
+        if upper_layer_queries.iter().any(|x| x.card() != initial_domain_size || x.indexes() != coset_idx_range) {
+            return Ok(false);
+        }
+        if !BatchedOracle::verify_query(upper_layer_commitments, upper_layer_queries, oracle_params) {
+            return Ok(false);
+        }
+
+        let mut values = Vec::with_capacity(coset_size);
+        for i in 0..coset_size {
+            let argument = upper_layer_queries.iter().map(|x| &x.values()[i]).collect();
+            values.push(upper_layer_combiner(argument));
+        }
+
         let mut domain_size = initial_domain_size;
         let mut log_domain_size = log_initial_domain_size;
-        let mut elem_index = natural_first_element_index;
-        let mut previous_layer_element = F::zero();
-            
+        let mut elem_index = (natural_first_element_index << collapsing_factor) % domain_size;
+        let mut omega_inv = omega_inv.clone();
+        let mut previous_layer_element = FriIop::<F, O, C>::coset_interpolant_value(
+            &values[..],
+            &fri_challenges[0],
+            coset_idx_range,
+            collapsing_factor,
+            coset_size,
+            &mut domain_size,
+            &mut log_initial_domain_size,
+            &mut elem_index,
+            & mut omega_inv,
+            two_inv: &F);
+
         for (round_number, ((query, commitment), challenge)) 
-            in queries.into_iter().zip(commitments.iter()).zip(fri_challenges.iter()).enumerate() 
+            in queries.into_iter().zip(commitments.iter()).zip(fri_challenges.iter().skip(1)).enumerate() 
         {
             //check query cardinality here!
             if query.card() != domain_size {
@@ -121,51 +158,20 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
             <O as Oracle<F>>::verify_query(commitment, query, &oracle_params);
             
             //round consistency check
-            let mut challenge = challenge.clone();
-            let mut this_level_values = Vec::with_capacity(coset_size/2);
-            let mut next_level_values = vec![F::zero(); coset_size / 2];
+            let mut previous_layer_element = FriIop::<F, O, C>::coset_interpolant_value(
+                query.values(),
+                &fri_challenge,
+            coset_idx_range,
+            collapsing_factor,
+            coset_size,
+            log_initial_domain_size,
+            & mut omega_inv,
+            two_inv: &F);
 
-            let base_omega_idx = bitreverse(coset_idx_range.start, log_domain_size as usize);
-
-            for wrapping_step in 0..collapsing_factor {
-                let inputs = if wrapping_step == 0 {
-                                    query.values()
-                                } else {
-                                    &this_level_values[..(coset_size >> wrapping_step)]
-                                };
-                for (pair_idx, (pair, o)) in inputs.chunks(2).zip(next_level_values.iter_mut()).enumerate() 
-                {
-                    
-                    let idx = bitreverse(base_omega_idx + 2 * pair_idx, log_domain_size as usize);
-                    let divisor = omega_inv.pow([idx as u64]);
-                    let f_at_omega = pair[0];
-                    let f_at_minus_omega = pair[1];
-                    let mut v_even_coeffs = f_at_omega;
-                    v_even_coeffs.add_assign(&f_at_minus_omega);
-
-                    let mut v_odd_coeffs = f_at_omega;
-                    v_odd_coeffs.sub_assign(&f_at_minus_omega);
-                    v_odd_coeffs.mul_assign(&divisor);
-
-                    let mut tmp = v_odd_coeffs;
-                    tmp.mul_assign(&challenge);
-                    tmp.add_assign(&v_even_coeffs);
-                    tmp.mul_assign(&two_inv);
-
-                    *o = tmp;
-                }
-
-                if wrapping_step != collapsing_factor - 1 {
-                    this_level_values.clear();
-                    this_level_values.clone_from(&next_level_values);
-                    challenge.double();
-                }
-                
-                omega_inv.square();
-                domain_size /= 2;
+            //TODO: change it also!
+            domain_size /= 2;
                 log_domain_size <<= 1;
                 elem_index = (elem_index << collapsing_factor) % domain_size;
-            }
 
             assert!(num_steps > 1);
             let res = match round_number {
@@ -203,6 +209,68 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
         }
         
         Ok(true)
+    }
+
+    pub fn coset_interpolant_value(
+        values: &[F],
+        challenge: &F,
+        coset_idx_range: Range<usize>,
+        collapsing_factor: usize,
+        coset_size: usize,
+        domain_size: &mut usize,
+        log_domain_size: &mut usize,
+        elem_index: &mut usize,
+        omega_inv: &mut F,
+        two_inv: &F,
+    ) -> F
+    {
+        let mut challenge = challenge.clone();
+        let mut this_level_values = Vec::with_capacity(coset_size/2);
+        let mut next_level_values = vec![F::zero(); coset_size / 2];
+
+        let base_omega_idx = bitreverse(coset_idx_range.start, log_domain_size as usize);
+
+        for wrapping_step in 0..collapsing_factor {
+            let inputs = if wrapping_step == 0 {
+                                values
+                            } else {
+                                &this_level_values[..(coset_size >> wrapping_step)]
+                            };
+            for (pair_idx, (pair, o)) in inputs.chunks(2).zip(next_level_values.iter_mut()).enumerate() 
+            {
+                
+                let idx = bitreverse(base_omega_idx + 2 * pair_idx, log_domain_size as usize);
+                let divisor = omega_inv.pow([idx as u64]);
+                let f_at_omega = pair[0];
+                let f_at_minus_omega = pair[1];
+                let mut v_even_coeffs = f_at_omega;
+                v_even_coeffs.add_assign(&f_at_minus_omega);
+
+                let mut v_odd_coeffs = f_at_omega;
+                v_odd_coeffs.sub_assign(&f_at_minus_omega);
+                v_odd_coeffs.mul_assign(&divisor);
+
+                let mut tmp = v_odd_coeffs;
+                tmp.mul_assign(&challenge);
+                tmp.add_assign(&v_even_coeffs);
+                tmp.mul_assign(&two_inv);
+
+                *o = tmp;
+            }
+
+            if wrapping_step != collapsing_factor - 1 {
+                this_level_values.clear();
+                this_level_values.clone_from(&next_level_values);
+                challenge.double();
+            }
+            
+            omega_inv.square();
+            domain_size /= 2;
+            log_domain_size <<= 1;
+            elem_index = (elem_index << collapsing_factor) % domain_size;
+        }
+
+    next_level_values[0]
     }
 }
 

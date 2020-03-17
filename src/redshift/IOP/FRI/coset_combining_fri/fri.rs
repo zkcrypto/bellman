@@ -29,12 +29,14 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
         )
     }
 
-    fn prototype_into_proof(
+    fn prototype_into_proof<'a>(
         prototype: FriProofPrototype<F, O>,
+        upper_layer_oracles: &'a BatchedOracle<F, O>,
+        upper_layer_values: Vec<&[F]>,
         natural_first_element_indexes: Vec<usize>,
         params: &FriParams,
     ) -> Result<FriProof<F, O>, SynthesisError> {
-        prototype.produce_proof(natural_first_element_indexes, params)
+        prototype.produce_proof(natural_first_element_indexes, upper_layer_oracles, upper_layer_values, params)
     }
 
     fn get_fri_challenges(
@@ -56,13 +58,15 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
         fri_challenges
     }
 
-    fn verify_proof_with_challenges(
+    fn verify_proof_with_challenges<Func: Fn(Vec<F>) -> F>(
         proof: &FriProof<F, O>,
+        upper_layer_commitments: Vec<O::Commitment>,
         natural_element_indexes: Vec<usize>,
         fri_challenges: &[F],
         params: &FriParams,
+        upper_layer_combiner: Func,
     ) -> Result<bool, SynthesisError> {
-        Self::verify_proof_queries(proof, natural_element_indexes, fri_challenges, params)
+        Self::verify_proof_queries(proof, upper_layer_commitments, natural_element_indexes, fri_challenges, params, upper_layer_combiner)
     }
 
     pub fn proof_from_lde_by_values<T: FriPrecomputations<F>>
@@ -90,7 +94,7 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
         let wrapping_factor = 1 << params.collapsing_factor;
         let num_steps = log2_floor(params.initial_degree_plus_one / params.final_degree_plus_one) / params.collapsing_factor as u32;
     
-        let mut oracles = Vec::with_capacity(num_steps as usize);
+        let mut oracles = Vec::<O>::with_capacity(num_steps as usize);
         let mut challenges = Vec::with_capacity(num_steps as usize);
         let mut intermediate_values = Vec::with_capacity(num_steps as usize);
 
@@ -222,7 +226,7 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
         }
 
         assert_eq!(challenges.len(), num_steps as usize);
-        assert_eq!(oracles.len(), num_steps as usize);
+        assert_eq!(oracles.len(), (num_steps-1) as usize);
         assert_eq!(intermediate_values.len(), num_steps as usize);
 
         let mut degree = final_poly_coeffs.len() - 1;

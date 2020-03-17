@@ -35,6 +35,51 @@ pub trait IopQuery<F: PrimeField>: 'static + PartialEq + Eq + Clone + std::fmt::
     fn card(&self) -> usize;
 }
 
+// this struct is used as an aggregator of multiple different oracles.
+// as a common example comsider the following situation: we use batch version of FRI
+// at a "highest" level, we have series of different oracles, and we need to open them simultaneously
+// at the same set of points
+#[derive(PartialEq, Eq, Clone)]
+pub struct BatchedOracle<'a, F, I>
+where F: PrimeField, I: Oracle<F>
+{
+    pub oracles: &'a Vec<I>,
+    _marker_f: std::marker::PhantomData<F>,
+}
+
+impl<'a, F: PrimeField, I: Oracle<F>> BatchedOracle<'a, F, I>
+{
+    pub fn create(oracles: &'a Vec<I>) -> Self {
+        // all of the suboracles should have the same size
+        assert!(oracles.windows(2).all(|w| w[0].size() == w[1].size()));
+        // and there should be at least one oracle!
+        assert!(!oracles.is_empty());
+
+        BatchedOracle{ oracles, _marker_f : std::marker::PhantomData::<F> }
+    }
+
+    pub fn size(&self) -> usize {
+        self.oracles[0].size()
+    }
+
+    pub fn get_commitment(&self) -> Vec<I::Commitment> {
+        self.oracles.iter().map(|x| x.get_commitment()).collect()
+    }
+
+    pub fn verify_query(commitment: &Vec<I::Commitment>, query: &Vec<I::Query>, params: &I::Params) -> bool {
+        for (sub_query, sub_commitment) in query.iter().zip(commitment.iter()) {
+            if !I::verify_query(sub_commitment, sub_query, params) {
+                return false;
+            }
+        }
+        true
+    }
+
+    pub fn produce_query(&self, indexes: Range<usize>, values: Vec<&[F]>) -> Vec<I::Query> {
+        self.oracles.iter().zip(values.iter()).map(|(x, val)| x.produce_query(indexes.clone(), val)).collect()
+    }
+}
+
 pub fn log2_floor(num: usize) -> u32 {
     assert!(num > 0);
 

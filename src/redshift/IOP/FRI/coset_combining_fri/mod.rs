@@ -8,7 +8,7 @@ use crate::SynthesisError;
 use crate::multicore::Worker;
 use crate::ff::PrimeField;
 
-use crate::redshift::IOP::oracle::Oracle;
+use crate::redshift::IOP::oracle::{Oracle, BatchedOracle};
 use crate::redshift::polynomials::*;
 use crate::redshift::IOP::channel::Channel;
 
@@ -42,6 +42,8 @@ impl<F: PrimeField, I: Oracle<F>> FriProofPrototype<F, I> {
 //the parameter r is defined in FRI params 
 #[derive(PartialEq, Eq, Clone)]
 pub struct FriProof<F: PrimeField, I: Oracle<F>> {
+    //for batched version of FRI
+    pub upper_layer_queries: Vec<Vec<I::Query>>,
     pub queries: Vec<Vec<I::Query>>,
     //excluding the initial one oracle - it is simly the commitment, no need to repeat
     pub commitments: Vec<I::Commitment>,
