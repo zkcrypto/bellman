@@ -88,13 +88,14 @@ pub fn verify_proof<E: Engine, I: Oracle<E::Fr>, T: Channel<E::Fr, Input = I::Co
     let a_at_z = proof.a_opening_value;
     let b_at_z = proof.b_opening_value;
     let c_at_z = proof.c_opening_value;
+    let c_shifted_at_z = proof.c_shifted_opening_value;
 
     let q_l_at_z = proof.q_l_opening_value;
     let q_r_at_z = proof.q_r_opening_value;
     let q_o_at_z = proof.q_o_opening_value;
     let q_m_at_z = proof.q_m_opening_value;
     let q_c_at_z = proof.q_c_opening_value;
-    let q_c_add_lel_at_z = proof.q_add_sel_opening_value;
+    let q_add_sel_at_z = proof.q_add_sel_opening_value;
 
     let s_id_at_z = proof.s_id_opening_value;
     let sigma_1_at_z = proof.sigma_1_opening_value;
@@ -112,18 +113,18 @@ pub fn verify_proof<E: Engine, I: Oracle<E::Fr>, T: Channel<E::Fr, Input = I::Co
     let l_0_at_z = evaluate_lagrange_poly::<E>(required_domain_size, 0, z);
     let l_n_minus_one_at_z = evaluate_lagrange_poly::<E>(required_domain_size, n - 1, z);
 
-    let mut PI = E::Fr::zero();
+    let mut PI_at_z = E::Fr::zero();
     for (i, val) in public_inputs.iter().enumerate() {
         if i == 0 {
             let mut temp = l_0_at_z;
             temp.mul_assign(val);
-            PI.sub_assign(&temp);
+            PI_at_z.sub_assign(&temp);
         }
         else {
             // TODO: maybe make it multithreaded
             let mut temp = evaluate_lagrange_poly::<E>(required_domain_size, i, z);
             temp.mul_assign(val);
-            PI.sub_assign(&temp);
+            PI_at_z.sub_assign(&temp);
         }
     }
 
@@ -145,12 +146,6 @@ pub fn verify_proof<E: Engine, I: Oracle<E::Fr>, T: Channel<E::Fr, Input = I::Co
     tmp.mul_assign(&t_high_at_z);
     t_at_z.add_assign(&tmp);
 
-    
-    let aggregation_challenge = transcript.get_challenge();
-
-    // TODO: add public inputs
-
-    // verify by blindly assembling a t poly
     let mut t_1 = {
         let mut res = q_c_at_z;
 
@@ -171,12 +166,25 @@ pub fn verify_proof<E: Engine, I: Oracle<E::Fr>, T: Channel<E::Fr, Input = I::Co
         tmp.mul_assign(&b_at_z);
         res.add_assign(&tmp);
 
-        inverse_vanishing_at_z.mul_assign(&alpha);
+        // add additional shifted selector
+        let mut tmp = q_add_sel_at_z;
+        tmp.mul_assign(&c_shifted_at_z);
+        res.add_assign(&tmp);
+
+        // add public inputs
+        res.add_assign(&PI_at_z);
+
+        // no need for the first one
+        //inverse_vanishing_at_z.mul_assign(&alpha);
 
         res.mul_assign(&inverse_vanishing_at_z);
 
         res
     };
+
+    let n_fe = E::Fr::from_str(&n.to_string()).expect("must be valid field element");
+    let mut two_n_fe = n_fe;
+    two_n_fe.double();
 
     {
         let mut res = z_1_at_z;
@@ -264,93 +272,72 @@ pub fn verify_proof<E: Engine, I: Oracle<E::Fr>, T: Channel<E::Fr, Input = I::Co
         t_1.add_assign(&res);
     }
 
-    let domain = Domain::<E::Fr>::new_for_size(required_domain_size as u64)?;
-
-    let mut z_by_omega = z;
-    z_by_omega.mul_assign(&domain.generator);
-
-    let commitments = vec![
-        &proof.a_commitment,
-        &proof.b_commitment,
-        &proof.c_commitment,
-        &setup.q_l,
-        &setup.q_r,
-        &setup.q_o,
-        &setup.q_m,
-        &setup.q_c,
-        &setup.s_id,
-        &setup.sigma_1,
-        &setup.sigma_2,
-        &setup.sigma_3,
-        &proof.z_1_commitment,
-        &proof.z_2_commitment,
-        &proof.z_1_commitment,
-        &proof.z_2_commitment,
-        &proof.t_low_commitment,
-        &proof.t_mid_commitment,
-        &proof.t_high_commitment,
-    ];
-
-    let claimed_values = vec![
-        a_at_z,
-        b_at_z,
-        c_at_z,
-        q_l_at_z,
-        q_r_at_z,
-        q_o_at_z,
-        q_m_at_z,
-        q_c_at_z,
-        s_id_at_z,
-        sigma_1_at_z,
-        sigma_2_at_z,
-        sigma_3_at_z,
-        z_1_at_z,
-        z_2_at_z,
-        z_1_shifted_at_z,
-        z_2_shifted_at_z,
-        t_low_at_z,
-        t_mid_at_z,
-        t_high_at_z,
-    ];
-
-    let opening_points = vec![
-        z, 
-        z,
-        z,
-
-        z, 
-        z,
-        z,
-        z,
-        z,
-
-        z,
-        z,
-        z,
-        z,
-
-        z,
-        z,
-
-        z_by_omega,
-        z_by_omega,
-
-        z,
-        z,
-        z,
-    ];
-
     if t_1 != t_at_z {
         println!("Recalculated t(z) is not equal to the provided value");
         return Ok(false);
     }
 
+    // verify FRI proof;
+    
+    let fri_challenges = FriIop::get_fri_challenges(
+        &proof.batched_FRI_proof,
+        &mut channel,
+        &params,
+    ); 
+
+    let domain_size = n * params.lde_factor;
+    let natural_first_element_indexes = (0..params.R).map(|_| channel.produce_uint_challenge() as usize % domain_size).collect();
+
+    fn upper_layer_combiner<F: PrimeField>(arr: Vec<(Label, &F)>) -> F {
+        // combine witness polynomials a, b, t_low, t_mid, t_high which are opened only at z
+        
+        let pairs = vec![
+            
+        ]
+
+        // combine witness polynomials c, z_1, z_2 which are opened at z and z * omega,
+
+        // combine setup polynomials q_l, q_r, q_o, q_m, q_c, q_add_sel, s_id, sigma_1, sigma_2, sigma_3
+        // which are opened at z_setup and z 
+
+    }
+
+    pub a_opening_value: F,
+    pub b_opening_value: F,
+    pub c_opening_value: F,
+    pub c_shifted_opening_value: F,
+    pub q_l_opening_value: F,
+    pub q_r_opening_value: F,
+    pub q_o_opening_value: F,
+    pub q_m_opening_value: F,
+    pub q_c_opening_value: F,
+    pub q_add_sel_opening_value: F,
+    pub s_id_opening_value: F,
+    pub sigma_1_opening_value: F,
+    pub sigma_2_opening_value: F,
+    pub sigma_3_opening_value: F,
+    pub z_1_opening_value: F,
+    pub z_2_opening_value: F,
+    pub z_1_shifted_opening_value: F,
+    pub z_2_shifted_opening_value: F,
+    pub t_low_opening_value: F,
+    pub t_mid_opening_value: F,
+    pub t_high_opening_value: F,
+
+    FriIop::
+    verify_proof_queries<Func: Fn(Vec<&F>) -> F>(
+        proof: &FriProof<F, O>,
+        upper_layer_commitments: Vec<(Label, O::Commitment)>,
+        natural_element_indexes: Vec<usize>,
+        fri_challenges: &[F],
+        params: &FriParams,
+        upper_layer_combiner: Func
+
+    
+    
+
     let valid = committer.verify_multiple_openings(commitments, opening_points, &claimed_values, aggregation_challenge, &proof.openings_proof, &mut transcript);
 
-    if !valid {
-        println!("Multiopening is invalid");
-        return Ok(false);
-    }
 
     Ok(valid)
 }

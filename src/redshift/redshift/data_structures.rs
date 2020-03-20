@@ -68,6 +68,7 @@ pub struct RedshiftProof<F: PrimeField, I: Oracle<F>>{
     pub a_opening_value: F,
     pub b_opening_value: F,
     pub c_opening_value: F,
+    pub c_shifted_opening_value: F,
     pub q_l_opening_value: F,
     pub q_r_opening_value: F,
     pub q_o_opening_value: F,
@@ -86,7 +87,7 @@ pub struct RedshiftProof<F: PrimeField, I: Oracle<F>>{
     pub t_mid_opening_value: F,
     pub t_high_opening_value: F,
     pub batched_FRI_proof: FriProof<F, I>,
-    pub commitments: Vec<Label, I::Commitment>, 
+    pub commitments: Vec<(Label, I::Commitment)>, 
 }
 
 

@@ -39,12 +39,13 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
         prototype.produce_proof(natural_first_element_indexes, upper_layer_oracles, upper_layer_values, params)
     }
 
-    fn get_fri_challenges(
+    pub fn get_fri_challenges(
         proof: &FriProof<F, O>,
         channel: &mut C,
         _params: &FriParams
     ) -> Vec<F> {
         let mut fri_challenges = vec![];
+        fri_challenges.push(channel.produce_field_element_challenge());
 
         for commitment in proof.commitments.iter() {
             let iop_challenge = {
@@ -58,7 +59,7 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
         fri_challenges
     }
 
-    fn verify_proof_with_challenges<Func: Fn(Vec<&F>) -> F>(
+    pub fn verify_proof_with_challenges<Func: Fn(Vec<(Label, &F)>) -> F>(
         proof: &FriProof<F, O>,
         upper_layer_commitments: Vec<(Label, O::Commitment)>,
         natural_element_indexes: Vec<usize>,

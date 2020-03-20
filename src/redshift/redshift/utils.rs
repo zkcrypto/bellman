@@ -535,3 +535,38 @@ pub(crate) fn calculate_lagrange_poly<E: Engine>(worker: &Worker, poly_size:usiz
 
     Ok(poly.ifft(&worker))
 }
+
+pub fn evaluate_lagrange_poly<E: Engine>(vahisning_size:usize, poly_number: usize, at: E::Fr) -> E::Fr {
+    assert!(vahisning_size.is_power_of_two());
+
+    let mut repr = E::Fr::zero().into_repr();
+    repr.as_mut()[0] = vahisning_size as u64;
+
+    let size_fe = E::Fr::from_repr(repr).expect("is a valid representation");
+    // let size_inv = n_fe.inverse().expect("must exist");
+
+    // L_0(X) = (Z_H(X) / (X - 1)).(1/n) and L_0(1) = 1
+    // L_1(omega) = 1 = L_0(omega * omega^-1)
+
+    let domain = Domain::<E::Fr>::new_for_size(vahisning_size as u64).expect("domain of this size should exist");
+    let omega = domain.generator;
+
+    let omega_inv = omega.inverse().expect("must exist");
+
+    let argument_multiplier = omega_inv.pow([poly_number as u64]);
+    let mut argument = at;
+    argument.mul_assign(&argument_multiplier);
+
+    let mut numerator = argument.pow([vahisning_size as u64]);
+    numerator.sub_assign(&E::Fr::one());
+
+    let mut denom = argument;
+    denom.sub_assign(&E::Fr::one());
+    denom.mul_assign(&size_fe);
+
+    let denom_inv = denom.inverse().expect("must exist");
+
+    numerator.mul_assign(&denom_inv);
+
+    numerator
+}
