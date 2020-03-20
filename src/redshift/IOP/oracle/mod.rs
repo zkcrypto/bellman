@@ -43,13 +43,13 @@ pub trait IopQuery<F: PrimeField>: 'static + PartialEq + Eq + Clone + std::fmt::
 pub struct BatchedOracle<'a, F, I>
 where F: PrimeField, I: Oracle<F>
 {
-    pub oracles: &'a Vec<I>,
+    pub oracles: Vec<&'a I>,
     _marker_f: std::marker::PhantomData<F>,
 }
 
 impl<'a, F: PrimeField, I: Oracle<F>> BatchedOracle<'a, F, I>
 {
-    pub fn create(oracles: &'a Vec<I>) -> Self {
+    pub fn create(oracles: Vec<&'a I>) -> Self {
         // all of the suboracles should have the same size
         assert!(oracles.windows(2).all(|w| w[0].size() == w[1].size()));
         // and there should be at least one oracle!

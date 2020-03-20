@@ -51,17 +51,17 @@ pub struct RedshiftSetupPrecomputation<F: PrimeField, I: Oracle<F>>{
 }
 
 pub struct SinglePointOpeningRequest<'a, F: PrimeField> {
-    polynomials: Vec<&'a Polynomial<F, Values>>,
-    opening_point: F,
-    opening_values: Vec<F>,
+    pub polynomials: Vec<&'a Polynomial<F, Values>>,
+    pub opening_point: F,
+    pub opening_values: Vec<F>,
 }
 
 pub struct DoublePointOpeningRequest<'a, F: PrimeField> {
-    polynomials: Vec<&'a Polynomial<F, Values>>,
-    first_opening_point: F,
-    first_point_values: Vec<F>,
-    second_opening_point: F,
-    second_open_values: Vec<F>,
+    pub polynomials: Vec<&'a Polynomial<F, Values>>,
+    pub first_opening_point: F,
+    pub first_opening_values: Vec<F>,
+    pub second_opening_point: F,
+    pub second_opening_values: Vec<F>,
 }
 
 pub struct RedshiftProof<F: PrimeField, I: Oracle<F>>{
@@ -85,14 +85,6 @@ pub struct RedshiftProof<F: PrimeField, I: Oracle<F>>{
     pub t_low_opening_value: F,
     pub t_mid_opening_value: F,
     pub t_high_opening_value: F,
-    pub a_commitment: I::Commitment,
-    pub b_commitment: I::Commitment,
-    pub c_commitment: I::Commitment,
-    pub z_1_commitment: I::Commitment,
-    pub z_2_commitment: I::Commitment,
-    pub t_low_commitment: I::Commitment,
-    pub t_mid_commitment: I::Commitment,
-    pub t_high_commitment: I::Commitment,
     pub batched_FRI_proof: FriProof<F, I>,
 }
 

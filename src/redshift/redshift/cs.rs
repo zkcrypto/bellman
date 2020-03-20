@@ -31,4 +31,24 @@ pub trait ConstraintSystem<E: Engine> {
     }
 
     fn get_dummy_variable(&self) -> Variable;
+
+    fn enforce_zero_2(&mut self, variables: (Variable, Variable), coeffs:(E::Fr, E::Fr)) -> Result<(), SynthesisError>
+    {
+        let (v_0, v_1) = variables;
+        let (c_0, c_1) = coeffs;
+        let zero = E::Fr::zero();
+
+        self.new_gate((v_0, v_1, self.get_dummy_variable()), (c_0, c_1, zero, zero, zero, zero))
+    }
+
+    // allocate a linear combination gate
+    fn enforce_zero_3(&mut self, variables: (Variable, Variable, Variable), coeffs:(E::Fr, E::Fr, E::Fr)) -> Result<(), SynthesisError>
+    {
+        let (v_0, v_1, v_2) = variables;
+        let (c_0, c_1, c_2) = coeffs;
+        let zero = E::Fr::zero();
+
+        self.new_gate((v_0, v_1, v_2), (c_0, c_1, c_2, zero, zero, zero))
+        
+    }
 }

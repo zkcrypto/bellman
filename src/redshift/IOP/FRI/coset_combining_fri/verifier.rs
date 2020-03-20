@@ -16,7 +16,7 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
     
     pub fn verify_proof_queries<Func: Fn(Vec<&F>) -> F>(
         proof: &FriProof<F, O>,
-        upper_layer_commitments: Vec<O::Commitment>,
+        upper_layer_commitments: Vec<(Label, O::Commitment)>,
         natural_element_indexes: Vec<usize>,
         fri_challenges: &[F],
         params: &FriParams,
@@ -86,8 +86,8 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
     }
 
     pub fn verify_single_proof_round<Func: Fn(Vec<&F>) -> F>(
-        upper_layer_queries: &Vec<O::Query>,
-        upper_layer_commitments: &Vec<O::Commitment>, 
+        upper_layer_queries: &Vec<(Label, O::Query)>,
+        upper_layer_commitments: &Vec<(Label, O::Commitment)>, 
         upper_layer_combiner: &Func,
         queries: &Vec<O::Query>,
         commitments: &Vec<O::Commitment>,
@@ -109,7 +109,7 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
                 natural_first_element_index, initial_domain_size, log_initial_domain_size, collapsing_factor);
         
         //check query cardinality here!
-        if upper_layer_queries.iter().any(|x| x.card() != initial_domain_size || x.indexes() != coset_idx_range) {
+        if upper_layer_queries.iter().any(|x| x.1.card() != initial_domain_size || x.1.indexes() != coset_idx_range) {
             return Ok(false);
         }
         if !BatchedOracle::<F, O>::verify_query(upper_layer_commitments, upper_layer_queries, oracle_params) {
@@ -118,7 +118,7 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
 
         let mut values = Vec::with_capacity(coset_size);
         for i in 0..coset_size {
-            let argument = upper_layer_queries.iter().map(|x| &x.values()[i]).collect();
+            let argument = upper_layer_queries.iter().map(|x| &x.1.values()[i]).collect();
             values.push(upper_layer_combiner(argument));
         }
 

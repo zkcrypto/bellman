@@ -313,7 +313,7 @@ where E::Fr : PartialTwoBitReductionField
 {
     //we assert that all of the polynomials are of the same degree
     // TODO: deal with the case of various degrees
-    let required_divisor_size = deg * params.lde_factor;
+    let required_divisor_size = common_deg * params.lde_factor;
 
     // TODO: however after division all of the polynomials are of different and distinct degrees. How to hadne this?
 
@@ -440,10 +440,10 @@ where E::Fr : PartialTwoBitReductionField
             }
 
     let fri_prototype = FriIop::proof_from_lde(
-        &final_aggregate,
+        final_aggregate,
         omegas_inv_bitreversed,
         &worker,
-        &mut channel,
+        channel,
         &params,
     );
 

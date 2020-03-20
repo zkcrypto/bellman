@@ -694,7 +694,7 @@ where E::Fr : PartialTwoBitReductionField
     channel.consume(&t_poly_high_commitment_data.oracle.get_commitment());
 
     //we need to assert that z does not belong to the domain in question!
-    let mut z = E::Fr::one()
+    let mut z = E::Fr::one();
     while z.pow([n as u64]) == E::Fr::one() {
         z = channel.produce_field_element_challenge();
     }
@@ -899,92 +899,127 @@ where E::Fr : PartialTwoBitReductionField
     let mut z_by_omega = z;
     z_by_omega.mul_assign(&z_1.omega);
 
-     let witness_opening_request_at_z = WitnessOpeningRequest {
-            polynomials: vec![
-                &a_commitment_data.poly,
-                &b_commitment_data.poly,
-                &c_commitment_data.poly,
-                &z_1_commitment_data.poly,
-                &z_2_commitment_data.poly,
-                &t_poly_low_commitment_data.poly,
-                &t_poly_mid_commitment_data.poly,
-                &t_poly_high_commitment_data.poly
-            ],
-            opening_point: z,
-            opening_values: vec![
-                a_at_z,
-                b_at_z,
-                c_at_z,
-                z_1_at_z,
-                z_2_at_z,
-                t_low_at_z,
-                t_mid_at_z,
-                t_high_at_z,
-            ]
-        };
+    let witness_opening_request_at_z = SinglePointOpeningRequest {
+        polynomials: vec![
+            &a_commitment_data.poly,
+            &b_commitment_data.poly,
+            &c_commitment_data.poly,
+            &t_poly_low_commitment_data.poly,
+            &t_poly_mid_commitment_data.poly,
+            &t_poly_high_commitment_data.poly
+        ],
+        opening_point: z,
+        opening_values: vec![
+            a_at_z,
+            b_at_z,
+            c_at_z,
+            t_low_at_z,
+            t_mid_at_z,
+            t_high_at_z,
+        ]
+    };
 
-        let witness_opening_request_at_z_omega = WitnessOpeningRequest {
-            polynomials: vec![
-                &z_1_commitment_data.poly,
-                &z_2_commitment_data.poly,
-            ],
-            opening_point: z_by_omega,
-            opening_values: vec![
-                z_1_shifted_at_z,
-                z_2_shifted_at_z,
-            ]
-        };
+    let witness_opening_request_at_z_and_z_omega = DoublePointOpeningRequest {
+        polynomials: vec![
+            &z_1_commitment_data.poly,
+            &z_2_commitment_data.poly,
+        ],
+        first_opening_point: z,
+        first_opening_values: vec![
+            z_1_at_z, 
+            z_2_at_z
+        ],
+        second_opening_point: z_by_omega,
+        second_opening_values: vec![
+            z_1_shifted_at_z,
+            z_2_shifted_at_z,
+        ]
+    };
+  
+    let setup_opening_request = DoublePointOpeningRequest {
+        polynomials: vec![
+            &setup_precomp.q_l_aux.poly,
+            &setup_precomp.q_r_aux.poly,
+            &setup_precomp.q_o_aux.poly,
+            &setup_precomp.q_m_aux.poly,
+            &setup_precomp.q_c_aux.poly,
+            &setup_precomp.q_add_sel_aux.poly,
+            &setup_precomp.s_id_aux.poly,
+            &setup_precomp.sigma_1_aux.poly,
+            &setup_precomp.sigma_2_aux.poly,
+            &setup_precomp.sigma_3_aux.poly,
+        ],
+        first_opening_point: setup_precomp.q_l_aux.setup_point,
+        first_opening_values: vec![
+            setup_precomp.q_l_aux.setup_value,
+            setup_precomp.q_r_aux.setup_value,
+            setup_precomp.q_o_aux.setup_value,
+            setup_precomp.q_m_aux.setup_value,
+            setup_precomp.q_c_aux.setup_value,
+            setup_precomp.q_add_sel_aux.setup_value,
+            setup_precomp.s_id_aux.setup_value,
+            setup_precomp.sigma_1_aux.setup_value,
+            setup_precomp.sigma_2_aux.setup_value,
+            setup_precomp.sigma_3_aux.setup_value,
+        ],
+        second_opening_point: z,
+        second_opening_values: vec![
+            q_l_at_z,
+            q_r_at_z,
+            q_o_at_z,
+            q_m_at_z,
+            q_c_at_z,
+            q_add_sel_at_z,
+            s_id_at_z,
+            sigma_1_at_z,
+            sigma_2_at_z,
+            sigma_3_at_z,
+        ]
+    };
 
-        let setup_opening_request = SetupOpeningRequest {
-            polynomials: vec![
-                &setup_precomp.q_l_aux.poly,
-                &setup_precomp.q_r_aux.poly,
-                &setup_precomp.q_o_aux.poly,
-                &setup_precomp.q_m_aux.poly,
-                &setup_precomp.q_c_aux.poly,
-                &setup_precomp.s_id_aux.poly,
-                &setup_precomp.sigma_1_aux.poly,
-                &setup_precomp.sigma_2_aux.poly,
-                &setup_precomp.sigma_3_aux.poly,
-            ],
-            setup_point: setup_precomp.q_l_aux.setup_point,
-            setup_values: vec![
-                setup_precomp.q_l_aux.setup_value,
-                setup_precomp.q_r_aux.setup_value,
-                setup_precomp.q_o_aux.setup_value,
-                setup_precomp.q_m_aux.setup_value,
-                setup_precomp.q_c_aux.setup_value,
-                setup_precomp.s_id_aux.setup_value,
-                setup_precomp.sigma_1_aux.setup_value,
-                setup_precomp.sigma_2_aux.setup_value,
-                setup_precomp.sigma_3_aux.setup_value,
-            ],
-            opening_point: z,
-            opening_values: vec![
-                q_l_at_z,
-                q_r_at_z,
-                q_o_at_z,
-                q_m_at_z,
-                q_c_at_z,
-                s_id_at_z,
-                sigma_1_at_z,
-                sigma_2_at_z,
-                sigma_3_at_z,
-            ]
-        };
+    let fri_proof_prototype = multiopening(
+        vec![witness_opening_request_at_z], 
+        vec![witness_opening_request_at_z_and_z_omega, setup_opening_request], 
+        n,
+        bitreversed_omegas_for_fri, 
+        &params, 
+        &worker, 
+        channel,
+    )?;
 
-    
+    // now we need to generate FRI query challenges!
+    let domain_size = n * params.lde_factor;
+    let natural_first_element_indexes = (0..params.R).map(|_| channel.produce_uint_challenge() % domain_size as u64).collect();
+    let batched_oracle = BatchedOracle::new(vec![
+        // witness polynomials
+        &a_commitment_data.oracle,
+        &b_commitment_data.oracle,
+        &c_commitment_data.oracle,
+        &z_1_commitment_data.oracle,
+        &z_2_commitment_data.oracle,
+        &t_poly_low_commitment_data.oracle,
+        &t_poly_mid_commitment_data.oracle,
+        &t_poly_high_commitment_data.oracle,
+        // setup polynomials
+    ])
 
-    // let _ = multiopening::<E, FP, T>(vec![witness_opening_request_at_z, witness_opening_request_at_z_omega], 
-    //     vec![setup_opening_request], 
-    //     bitreversed_omegas_for_fri, 
-    //     &params, 
-    //     &worker, 
-    //     &mut transcript
-    // )?;
+    let fri_proof = fri_proof_prototype.produce_proof(
+        natural_first_element_indexes,
+        upper_layer_oracles: &'a BatchedOracle<F, I>,
+        upper_layer_values: Vec<&[F]>,
+        params: &FriParams,
 
     Ok(())
 }
+
+pub a_commitment: I::Commitment,
+//     pub b_commitment: I::Commitment,
+//     pub c_commitment: I::Commitment,
+//     pub z_1_commitment: I::Commitment,
+//     pub z_2_commitment: I::Commitment,
+//     pub t_low_commitment: I::Commitment,
+//     pub t_mid_commitment: I::Commitment,
+//     pub t_high_commitment: I::Commitment,
 
 #[cfg(test)]
 mod test {
