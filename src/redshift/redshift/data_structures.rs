@@ -4,6 +4,7 @@ use crate::pairing::{Engine};
 use crate::multicore::*;
 use crate::redshift::polynomials::*;
 use crate::redshift::IOP::oracle::*;
+use crate::redshift::IOP::FRI::coset_combining_fri::*;
 
 
 #[derive(Debug)]
@@ -49,11 +50,50 @@ pub struct RedshiftSetupPrecomputation<F: PrimeField, I: Oracle<F>>{
     pub sigma_3_aux: SinglePolySetupData<F, I>,
 }
 
-pub struct OpeningRequest<'a, F: PrimeField> {
-    pub polynomial: &'a Polynomial<F, Values>,
-    pub deg: usize,
-    pub opening_points: (F, Option<F>),
-    pub opening_values: (F, Option<F>),
+pub struct SinglePointOpeningRequest<'a, F: PrimeField> {
+    polynomials: Vec<&'a Polynomial<F, Values>>,
+    opening_point: F,
+    opening_values: Vec<F>,
+}
+
+pub struct DoublePointOpeningRequest<'a, F: PrimeField> {
+    polynomials: Vec<&'a Polynomial<F, Values>>,
+    first_opening_point: F,
+    first_point_values: Vec<F>,
+    second_opening_point: F,
+    second_open_values: Vec<F>,
+}
+
+pub struct RedshiftProof<F: PrimeField, I: Oracle<F>>{
+    pub a_opening_value: F,
+    pub b_opening_value: F,
+    pub c_opening_value: F,
+    pub q_l_opening_value: F,
+    pub q_r_opening_value: F,
+    pub q_o_opening_value: F,
+    pub q_m_opening_value: F,
+    pub q_c_opening_value: F,
+    pub q_add_sel_opening_value: F,
+    pub s_id_opening_value: F,
+    pub sigma_1_opening_value: F,
+    pub sigma_2_opening_value: F,
+    pub sigma_3_opening_value: F,
+    pub z_1_opening_value: F,
+    pub z_2_opening_value: F,
+    pub z_1_shifted_opening_value: F,
+    pub z_2_shifted_opening_value: F,
+    pub t_low_opening_value: F,
+    pub t_mid_opening_value: F,
+    pub t_high_opening_value: F,
+    pub a_commitment: I::Commitment,
+    pub b_commitment: I::Commitment,
+    pub c_commitment: I::Commitment,
+    pub z_1_commitment: I::Commitment,
+    pub z_2_commitment: I::Commitment,
+    pub t_low_commitment: I::Commitment,
+    pub t_mid_commitment: I::Commitment,
+    pub t_high_commitment: I::Commitment,
+    pub batched_FRI_proof: FriProof<F, I>,
 }
 
 

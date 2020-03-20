@@ -315,6 +315,8 @@ where E::Fr : PartialTwoBitReductionField
     let deg = opening_requests[0].deg;
     let required_divisor_size = deg * params.lde_factor;
 
+    // exploit the fact that we open only at omega and g * omega
+
     let mut final_aggregate = Polynomial::from_values(vec![E::Fr::zero(); required_divisor_size])?;
 
     let mut precomputed_bitreversed_coset_divisor = Polynomial::from_values(vec![E::Fr::one(); required_divisor_size])?;
