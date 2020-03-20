@@ -2,6 +2,7 @@ use crate::SynthesisError;
 use crate::pairing::ff::{Field, PrimeField};
 use crate::pairing::{Engine};
 use crate::multicore::*;
+use std::convert::From;
 
 use super::data_structures::*;
 use super::gates::*;
@@ -49,14 +50,12 @@ where E::Fr : PartialTwoBitReductionField {
         &E::Fr::multiplicative_generator()
     )?;
 
-    let oracle_params = I::params {
-        values_per_leaf: (1 << params.collapsing_factor),
-    };
-
+    let oracle_params = I::Params::from(1 << params.collapsing_factor);
     let oracle = I::create(&lde.as_ref(), &oracle_params);
 
     Ok(SinglePolyCommitmentData::<E::Fr, _> {
         poly: lde,
+        deg,
         oracle: oracle
     })
 }
@@ -302,20 +301,24 @@ pub(crate) fn output_setup_polynomials<E: Engine>(
 
 pub(crate) fn multiopening<E: Engine, P: FriPrecomputations<E::Fr>, I: Oracle<E::Fr>, C: Channel<E::Fr, Input = I::Commitment>>
     ( 
-        opening_requests: Vec<OpeningRequest<E::Fr>>,
+        single_point_opening_requests: Vec<SinglePointOpeningRequest<E::Fr>>,
+        double_point_opening_requests: Vec<DoublePointOpeningRequest<E::Fr>>,
+        common_deg: usize,
         omegas_inv_bitreversed: &P,
         params: &FriParams,
         worker: &Worker,
         channel: &mut C,
-    ) -> Result<(), SynthesisError> 
+    ) -> Result<(FriProofPrototype<E::Fr, I>), SynthesisError> 
 where E::Fr : PartialTwoBitReductionField
 {
     //we assert that all of the polynomials are of the same degree
-    assert!(opening_requests.windows(2).all(|w| w[0].deg == w[1].deg));
-    let deg = opening_requests[0].deg;
+    // TODO: deal with the case of various degrees
     let required_divisor_size = deg * params.lde_factor;
 
-    // exploit the fact that we open only at omega and g * omega
+    // TODO: however after division all of the polynomials are of different and distinct degrees. How to hadne this?
+
+    // Here we exploit the fact that we open only at omega and g * omega
+    // we divide the polynomials in the groups by the same common values
 
     let mut final_aggregate = Polynomial::from_values(vec![E::Fr::zero(); required_divisor_size])?;
 
@@ -330,14 +333,14 @@ where E::Fr : PartialTwoBitReductionField
     let aggregation_challenge = channel.produce_field_element_challenge();
     let mut alpha = E::Fr::one();
 
-    for witness_request in witness_opening_requests.iter() {
-        let z = witness_request.opening_point;
+    for request in single_point_opening_requests.iter() {
+        let z = request.opening_point;
         let mut minus_z = z;
         minus_z.negate();
         scratch_space_denominator.reuse_allocation(&precomputed_bitreversed_coset_divisor);
         scratch_space_denominator.add_constant(&worker, &minus_z);
         scratch_space_denominator.batch_inversion(&worker)?;
-        for (poly, value) in witness_request.polynomials.iter().zip(witness_request.opening_values.iter()) {
+        for (poly, value) in request.polynomials.iter().zip(request.opening_values.iter()) {
             scratch_space_numerator.reuse_allocation(&poly);
             let mut v = *value;
             v.negate();
@@ -353,12 +356,11 @@ where E::Fr : PartialTwoBitReductionField
         }
     }
 
-    for setup_request in setup_opening_requests.iter() {
-        // for now assume a single setup point per poly and setup point is the same for all polys
+    for request in double_point_opening_requests.iter() {
         // (omega - y)(omega - z) = omega^2 - (z+y)*omega + zy
         
-        let setup_point = setup_request.setup_point;
-        let opening_point = setup_request.opening_point;
+        let setup_point = request.first_opening_point;
+        let opening_point = request.second_opening_point;
 
         let mut t0 = setup_point;
         t0.add_assign(&opening_point);
@@ -390,69 +392,62 @@ where E::Fr : PartialTwoBitReductionField
         scratch_space_denominator.batch_inversion(&worker)?;
 
         // each numerator must have a value removed of the polynomial that interpolates the following points:
-        // (setup_x, setup_y)
+        // (x, y)
         // (opening_x, opening_y)
-        // such polynomial is linear and has a form e.g setup_y + (X - setup_x) * (witness_y - setup_y) / (witness_x - setup_x)
+        // such polynomial is linear and has a form: 
+        // f(t) = opening_x + (t - x) * (opening_y - opening_x) / (y - x)
+        // note that y and x should be distinct!
 
-        for ((poly, value), setup_value) in setup_request.polynomials.iter().zip(setup_request.opening_values.iter()).zip(setup_request.setup_values.iter()) {
+        for ((poly, setup_value), value) in request.polynomials.iter().zip(request.first_opening_values.iter()).zip(request.second_opening_values.iter()) {
             scratch_space_numerator.reuse_allocation(&poly);
 
             let intercept = setup_value;
-            let mut t0 = opening_point;
-            t0.sub_assign(&setup_point);
+                    let mut t0 = opening_point;
+                    t0.sub_assign(&setup_point);
 
-            let mut slope = t0.inverse().expect("must exist");
-            
-            let mut t1 = *value;
-            t1.sub_assign(&setup_value);
+                    let mut slope = t0.inverse().expect("must exist");
+                    
+                    let mut t1 = *value;
+                    t1.sub_assign(&setup_value);
 
-            slope.mul_assign(&t1);
+                    slope.mul_assign(&t1);
 
-            worker.scope(scratch_space_numerator.as_ref().len(), |scope, chunk| {
-                for (num, omega) in scratch_space_numerator.as_mut().chunks_mut(chunk).
-                            zip(precomputed_bitreversed_coset_divisor.as_ref().chunks(chunk)) {
-                    scope.spawn(move |_| {
-                        for (n, omega) in num.iter_mut().zip(omega.iter()) {
-                            let mut result = *omega;
-                            result.sub_assign(&setup_point);
-                            result.mul_assign(&slope);
-                            result.add_assign(&intercept);
+                    worker.scope(scratch_space_numerator.as_ref().len(), |scope, chunk| {
+                        for (num, omega) in scratch_space_numerator.as_mut().chunks_mut(chunk).
+                                    zip(precomputed_bitreversed_coset_divisor.as_ref().chunks(chunk)) {
+                            scope.spawn(move |_| {
+                                for (n, omega) in num.iter_mut().zip(omega.iter()) {
+                                    let mut result = *omega;
+                                    result.sub_assign(&setup_point);
+                                    result.mul_assign(&slope);
+                                    result.add_assign(&intercept);
 
-                            n.sub_assign(&result);
+                                    n.sub_assign(&result);
+                                }
+                            });
                         }
                     });
-                }
-            });
 
-            scratch_space_numerator.mul_assign(&worker, &scratch_space_denominator);
-            if aggregation_challenge != E::Fr::one() {
-                scratch_space_numerator.scale(&worker, alpha);
+                    scratch_space_numerator.mul_assign(&worker, &scratch_space_denominator);
+                    if aggregation_challenge != E::Fr::one() {
+                        scratch_space_numerator.scale(&worker, alpha);
+                    }
+
+                    final_aggregate.add_assign(&worker, &scratch_space_numerator);
+
+                    alpha.mul_assign(&aggregation_challenge);
+                }
             }
 
-            final_aggregate.add_assign(&worker, &scratch_space_numerator);
-
-            alpha.mul_assign(&aggregation_challenge);
-        }
-    }
-
-    let fri_proto = FriIop::proof_from_lde(
+    let fri_prototype = FriIop::proof_from_lde(
         &final_aggregate,
-        params.lde_factor,
-        params.output_coeffs_at_degree_plus_one,
         omegas_inv_bitreversed,
         &worker,
-        transcript,
-        &params.coset_params
-    )?;
+        &mut channel,
+        &params,
+    );
 
-    fn proof_from_lde<T: FriPrecomputations<F>
-    >(
-        //NB: we consume the polynomial here! we also assume that the polynomial is already after lde!
-        lde_values: Polynomial<F, Values>,
-        precomputations: &T,
-        worker: &Worker,
-        channel: &mut C,
-        params: &FriParams,
+    fri_prototype
 }
 
 pub(crate) fn calculate_inverse_vanishing_polynomial_in_a_coset<E: Engine>(

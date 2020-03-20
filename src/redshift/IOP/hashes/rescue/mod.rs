@@ -393,7 +393,7 @@ impl<F: PrimeField> Rescue<F> {
                             return e;
                         }
                     }
-
+                    unreachable!("Sponge number is too small");
                     // We've already squeezed out all available elements
                     self.sponge = SpongeState::Absorbing([None; SPONGE_RATE]);
                 }

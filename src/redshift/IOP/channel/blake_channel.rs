@@ -1,5 +1,6 @@
 use blake2s_simd::{Params, State};
 use crate::pairing::ff::{PrimeField, PrimeFieldRepr};
+use byteorder::{BigEndian, ReadBytesExt};
 use super::Channel;
 
 
@@ -53,18 +54,10 @@ impl<F: PrimeField> Channel<F> for StatelessBlake2sChannel<F> {
         value
     }
 
-    fn produce_challenge_bytes(&mut self, num_of_bytes: usize) -> Vec<u8> {
-        let mut res = Vec::with_capacity(num_of_bytes);
-        let hash_length = 32;
-        
-        for o in res.chunks_mut(hash_length) {
-            let value = *(self.state.finalize().as_array());
-
-            self.state.update(&value[..]);
-            o.copy_from_slice(&value[0..o.len()]);
-        }
-
-        res
+    fn produce_uint_challenge(&mut self) -> u64 {
+        let value = *(self.state.finalize().as_array());
+        let mut slice = &value[..8];
+        slice.read_u64::<BigEndian>().unwrap()
     }    
 }
 

@@ -16,7 +16,7 @@ pub trait Channel<F: PrimeField>: Sized + Clone + 'static {
     fn new() -> Self;
     fn consume(&mut self, data: &Self::Input);
     fn produce_field_element_challenge(&mut self) -> F;
-    fn produce_challenge_bytes(&mut self, num_of_bytes: usize) -> Vec<u8>;
+    fn produce_uint_challenge(&mut self) -> u64;
 }
 
 

@@ -11,7 +11,7 @@ use crate::redshift::fft::cooley_tukey_ntt::log2_floor;
 
 impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F, O, C> {
 
-    fn proof_from_lde<T: FriPrecomputations<F>
+    pub fn proof_from_lde<T: FriPrecomputations<F>
     >(
         //NB: we consume the polynomial here! we also assume that the polynomial is already after lde!
         lde_values: Polynomial<F, Values>,

@@ -10,4 +10,3 @@ pub mod polynomials;
 //pub mod commitment_scheme;
 //main functions are here
 pub mod redshift;
-//pub mod tester;
