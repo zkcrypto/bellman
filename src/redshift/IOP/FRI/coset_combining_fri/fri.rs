@@ -59,7 +59,7 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
         fri_challenges
     }
 
-    pub fn verify_proof_with_challenges<Func: Fn(Vec<(Label, &F)>) -> F>(
+    pub fn verify_proof_with_challenges<Func: Fn(Vec<(Label, &F)>) -> Option<F>>(
         proof: &FriProof<F, O>,
         upper_layer_commitments: Vec<(Label, O::Commitment)>,
         natural_element_indexes: Vec<usize>,

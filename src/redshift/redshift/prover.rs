@@ -692,7 +692,8 @@ where E::Fr : PartialTwoBitReductionField
 
     //we need to assert that z does not belong to the domain in question!
     let mut z = E::Fr::one();
-    while z.pow([n as u64]) == E::Fr::one() {
+    let field_zero = E::Fr::zero();
+    while z.pow([n as u64]) == E::Fr::one() || z == field_zero {
         z = channel.produce_field_element_challenge();
     }
 

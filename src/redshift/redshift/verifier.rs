@@ -9,6 +9,7 @@ use crate::redshift::polynomials::*;
 use crate::redshift::IOP::oracle::*;
 use crate::redshift::IOP::channel::*;
 use crate::redshift::IOP::FRI::coset_combining_fri::*;
+use crate::redshift::domains::*;
 
 use super::data_structures::*;
 use super::utils::*;
@@ -79,7 +80,8 @@ pub fn verify_proof<E: Engine, I: Oracle<E::Fr>, T: Channel<E::Fr, Input = I::Co
     };
 
     let mut z = E::Fr::one();
-    while z.pow([n as u64]) == E::Fr::one() {
+    let field_zero = E::Fr::zero();
+    while z.pow([n as u64]) == E::Fr::one() || z == field_zero {
         z = channel.produce_field_element_challenge();
     }
 
@@ -277,6 +279,8 @@ pub fn verify_proof<E: Engine, I: Oracle<E::Fr>, T: Channel<E::Fr, Input = I::Co
         return Ok(false);
     }
 
+    let aggregation_challenge = channel.produce_field_element_challenge();
+
     // verify FRI proof;
     
     let fri_challenges = FriIop::get_fri_challenges(
@@ -286,19 +290,89 @@ pub fn verify_proof<E: Engine, I: Oracle<E::Fr>, T: Channel<E::Fr, Input = I::Co
     ); 
 
     let domain_size = n * params.lde_factor;
+    let domain = Domain::<E::Fr>::new_for_size((domain_size) as u64)?;
+    let omega = domain.generator;
     let natural_first_element_indexes = (0..params.R).map(|_| channel.produce_uint_challenge() as usize % domain_size).collect();
 
-    fn upper_layer_combiner<F: PrimeField>(arr: Vec<(Label, &F)>) -> F {
-        // combine witness polynomials a, b, t_low, t_mid, t_high which are opened only at z
-        
+    let upper_layer_combiner = |arr: Vec<(Label, &E::Fr)>| -> Option<E::Fr> {
+        fn find_poly_value_at_omega<T>(label: Label, arr: &Vec<(Label, T)>) -> Option<&T> {
+            arr.iter().find(|(l, c)| *l == label).map(|(l, c)| c)
+        }
+
+        let omega = find_poly_value_at_omega("evaluation_point", &arr)?;
+
+        // combine polynomials a, b, t_low, t_mid, t_high,
+        // which are opened only at z
+        // for them we compute (poly(omega) - opened_value) / (omega - z)
         let pairs = vec![
-            
+            (find_poly_value_at_omega("a", &arr)?, a_at_z),
+            (find_poly_value_at_omega("b", &arr)?, b_at_z),
+            (find_poly_value_at_omega("t_low", &arr)?, t_low_at_z),
+            (find_poly_value_at_omega("t_mid", &arr)?, t_mid_at_z),
+            (find_poly_value_at_omega("t_high", &arr)?, t_high_at_z),
+        ];
+
+        let mut res = E::Fr::zero();
+        let mut alpha = E::Fr::one();
+
+        for (a, b) in values {
+            let mut temp = a;
+            temp.sub_assign(&b);
+            temp.mul_assign(&alpha);
+
+            res.add_assign(&temp);
+            alpha.mul_assign(&aggregation_challenge);
+        }
+
+        let mut temp = omega;
+        temp.sub_assign(&z);
+        temp = temp.inverse().expect("should exist");
+        res.mul_assign(&temp);
+
+        // combine witness polynomials z_1, z_2, c which are opened at z and z * omega
+
+        let triples = vec![
+            (find_poly_value_at_omega("z_1", &arr)?, z_1_at_z, z_1_shifted_at_z),
+            (find_poly_value_at_omega("z_2", &arr)?, z_2_at_z, z_2_shifted_at_z),
+            (find_poly_value_at_omega("c", &arr)?, c_at_z, c_shifted_at_z),
         ]
 
-        // combine witness polynomials c, z_1, z_2 which are opened at z and z * omega,
+        let mut z_shifted = z;
 
+
+        // and
         // combine setup polynomials q_l, q_r, q_o, q_m, q_c, q_add_sel, s_id, sigma_1, sigma_2, sigma_3
-        // which are opened at z_setup and z 
+        // which are opened at z_setup and z
+
+        (find_poly_value_at_omega("q_l", &arr)?, q_l_at_z),
+            (find_poly_value_at_omega("q_r", &arr)?, q_r_at_z),
+            (find_poly_value_at_omega("q_o", &arr)?, q_o_at_z),
+            (find_poly_value_at_omega("q_m", &arr)?, q_m_at_z),
+            (find_poly_value_at_omega("q_c", &arr)?, q_c_at_z),
+            (find_poly_value_at_omega("q_add_sel", &arr)?, q_add_sel_at_z),
+            (find_poly_value_at_omega("s_id", &arr)?, s_id_at_z),
+            (find_poly_value_at_omega("sigma_1", &arr)?, sigma_1_at_z),
+            (find_poly_value_at_omega("sigma_2", &arr)?, sigma_2_at_z),
+            (find_poly_value_at_omega("sigma_3", &arr)?, sigma_3_at_z),
+
+
+        ("c", &c_commitment_data.oracle),
+        ("z_1", &z_1_commitment_data.oracle),
+        ("z_2", &z_2_commitment_data.oracle),
+        ("t_low", &t_poly_low_commitment_data.oracle),
+        ("t_mid", &t_poly_mid_commitment_data.oracle),
+        ("t_high", &t_poly_high_commitment_data.oracle),
+        // setup polynomials
+        ("q_l", &setup_precomp.q_l_aux.oracle),
+        ("q_r", &setup_precomp.q_r_aux.oracle),
+        ("q_o", &setup_precomp.q_o_aux.oracle),
+        ("q_m", &setup_precomp.q_m_aux.oracle),
+        ("q_c", &setup_precomp.q_c_aux.oracle),
+        ("q_add_sel", &setup_precomp.q_add_sel_aux.oracle),
+        ("s_id", &setup_precomp.s_id_aux.oracle),
+        ("sigma_1", &setup_precomp.sigma_1_aux.oracle),
+        ("sigma_2", &setup_precomp.sigma_2_aux.oracle),
+        ("sigma_3", &setup_precomp.sigma_3_aux.oracle), 
 
     }
 
@@ -332,9 +406,6 @@ pub fn verify_proof<E: Engine, I: Oracle<E::Fr>, T: Channel<E::Fr, Input = I::Co
         fri_challenges: &[F],
         params: &FriParams,
         upper_layer_combiner: Func
-
-    
-    
 
     let valid = committer.verify_multiple_openings(commitments, opening_points, &claimed_values, aggregation_challenge, &proof.openings_proof, &mut transcript);
 
