@@ -14,7 +14,7 @@ use std::ops::Range;
 
 impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F, O, C> {
     
-    pub fn verify_proof_queries<Func: Fn(Vec<&F>) -> F>(
+    pub fn verify_proof_queries<Func: Fn(Vec<(Label, &F)>) -> F>(
         proof: &FriProof<F, O>,
         upper_layer_commitments: Vec<(Label, O::Commitment)>,
         natural_element_indexes: Vec<usize>,
@@ -85,7 +85,7 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
         return Ok(true);
     }
 
-    pub fn verify_single_proof_round<Func: Fn(Vec<&F>) -> F>(
+    pub fn verify_single_proof_round<Func: Fn(Vec<(Label, &F)>) -> F>(
         upper_layer_queries: &Vec<(Label, O::Query)>,
         upper_layer_commitments: &Vec<(Label, O::Commitment)>, 
         upper_layer_combiner: &Func,
@@ -118,7 +118,13 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
 
         let mut values = Vec::with_capacity(coset_size);
         for i in 0..coset_size {
-            let argument = upper_layer_queries.iter().map(|x| &x.1.values()[i]).collect();
+            let argument = upper_layer_queries.iter().map(|x| (x.0, &x.1.values()[i])).collect();
+            let evaluation_point = omega.pow(CosetCombiner::get_natural_idx_for_coset_index(
+        coset_index: usize,
+        domain_size: usize,
+        log_domain_size: usize,
+        collapsing_factor: usize));
+            argument.push()
             values.push(upper_layer_combiner(argument));
         }
 
