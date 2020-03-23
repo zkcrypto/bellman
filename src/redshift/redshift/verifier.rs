@@ -20,8 +20,9 @@ pub fn verify_proof<E: Engine, I: Oracle<E::Fr>, T: Channel<E::Fr, Input = I::Co
     public_inputs: &[E::Fr],
     setup_precomp: &RedshiftSetupPrecomputation<E::Fr, I>,
     params: &FriParams,
-) -> Result<bool, SynthesisError> {
-    
+) -> Result<bool, SynthesisError> 
+where E::Fr : PrimeField
+{
     let mut channel = T::new();
 
     // we assume that deg is the same for all the polynomials for now
@@ -31,7 +32,7 @@ pub fn verify_proof<E: Engine, I: Oracle<E::Fr>, T: Channel<E::Fr, Input = I::Co
     assert!(required_domain_size.is_power_of_two());
 
     fn find_commitment_by_label<T>(label: Label, arr: &Vec<(Label, T)>) -> Option<&T> {
-        arr.iter().find(|(l, c)| *l == label).map(|(l, c)| c)
+        arr.iter().find(|(l, _)| *l == label).map(|(_, c)| c)
     }
 
     match find_commitment_by_label("a", &proof.commitments) {
@@ -281,30 +282,108 @@ pub fn verify_proof<E: Engine, I: Oracle<E::Fr>, T: Channel<E::Fr, Input = I::Co
 
     let aggregation_challenge = channel.produce_field_element_challenge();
 
-    // verify FRI proof;
-    
-    let fri_challenges = FriIop::get_fri_challenges(
-        &proof.batched_FRI_proof,
-        &mut channel,
-        &params,
-    ); 
-
     let domain_size = n * params.lde_factor;
     let domain = Domain::<E::Fr>::new_for_size((domain_size) as u64)?;
     let omega = domain.generator;
-    let natural_first_element_indexes = (0..params.R).map(|_| channel.produce_uint_challenge() as usize % domain_size).collect();
 
     let upper_layer_combiner = |arr: Vec<(Label, &E::Fr)>| -> Option<E::Fr> {
         fn find_poly_value_at_omega<T>(label: Label, arr: &Vec<(Label, T)>) -> Option<&T> {
-            arr.iter().find(|(l, c)| *l == label).map(|(l, c)| c)
+            arr.iter().find(|(l, _)| *l == label).map(|(_, c)| c)
         }
 
-        let omega = find_poly_value_at_omega("evaluation_point", &arr)?;
+        // given an evaluation point x and auxiliarly point x_1,
+        // aggregation_challenge = alpha (the final value of alpha is also returned!)
+        // and an array of pairs (f_i(x), f_i(x_1)) - one pair for each polynomial f_i(t) in question (i \in [0, 1, .., n])
+        // this function computes: 
+        // y = /sum alpha^i [f_i(x) - f_i(x_1)]/ [x - x_1]
+        // and returns the pair (y, final_alpha)
+
+        fn combine_at_single_point<F: PrimeField>(pairs: Vec<(&F, F)>, x: &F, x_1: &F, alpha: &F) -> (F, F) {
+
+            let mut res = F::zero();
+            let mut aggr_mult = F::one();
+
+            for (&a, b) in pairs.iter() {
+                // separately compute numerators
+                let mut temp = a;
+                temp.sub_assign(&b);
+                temp.mul_assign(&aggr_mult);
+
+                res.add_assign(&temp);
+                aggr_mult.mul_assign(alpha);
+            }
+
+            // now compute the common denominator
+            let mut temp = *x;
+            temp.sub_assign(x_1);
+            temp = temp.inverse().expect("must exist");
+            res.mul_assign(&temp);
+
+            (res, aggr_mult)
+        }
+
+        // given an evaluation point x and two auxiliarly points x_1, x_2,
+        // aggregation_challenge = alpha (the final value of alpha is also returned!)
+        // and an array of triples (f_i(x), f_i(x_1), f_i(x_2)) - one triple for each polynomial f_i(t) in question (i \in [0, 1, .., n])
+        // this function computes: 
+        // y = /sum alpha^i [f_i(x) - U_i(x)]/ [(x - x_1)(x - x_2)]
+        // where U_i(t) is the unique linear function, having value f_i(x_1) at x_1 and f_i(x_2) at x_2
+        // note that such U_i(t) = f_i(x_1) + [t - x_1]/ [x_2 - x_1] (f_i(x_2) - f_i(x_1))  and hence
+        // U_i(x) = f_i(x_1) + [x - x_1]/ [x_2 - x_1] (f_i(x_2) - f_i(x_1))
+        // this means that all U_i(x) share the common slope [x - x_1] / [x_2 - x_1]
+        // which therefore may be precomputed once and forall
+        // funtion returns the pair (y, final_alpha)
+
+        fn combine_at_two_points<F: PrimeField>(triples: Vec<(&F, F, F)>, x: &F, x_1: &F, x_2: &F, alpha: &F) -> (F, F) {
+            
+            // precompute the common slope
+            let mut slope = *x;
+            slope.sub_assign(x_1);
+            let mut slope_denum = *x_2;
+            slope_denum.sub_assign(x_1);
+            slope.mul_assign(&slope_denum.inverse().expect("must exist"));
+
+            let mut res = F::zero();
+            let mut aggr_mult = F::one();
+
+            for (&f_x, f_x_1, f_x_2) in triples.iter() {
+
+                //evaluate interpolation poly -U_i(x) = -f_x_1 - slope * (f_x_2 - f_x_1) = slope * (f_x_1 - f_x_2) - f_x_1
+                let mut temp = f_x_1.clone();
+                temp.sub_assign(&f_x_2);
+                temp.mul_assign(&slope);
+                temp.sub_assign(&f_x_1);
+
+                // compute nominator: aggr_mult * (f_x - U_i(x))
+                temp.add_assign(&f_x);
+                temp.mul_assign(&aggr_mult);
+
+                res.add_assign(&temp);
+                aggr_mult.mul_assign(alpha);
+            }
+
+            // now compute the common denominator
+            // (x - x_1)(x - x_2) = x^2 - (x_1 + x_2) * x + x_1 * x_2
+            let mut t_0 = *x_1;
+            t_0.add_assign(x_2);
+            let mut t_1 = *x_1;
+            t_1.mul_assign(&x_2);
+
+            let mut common_denominator = *x;
+            common_denominator.double();
+            common_denominator.sub_assign(&t_0);
+            common_denominator.add_assign(&t_1);
+            
+            res.mul_assign(&common_denominator.inverse().expect("must exist"));
+            (res, aggr_mult)
+
+        }
+
+        let evaluation_point = find_poly_value_at_omega("evaluation_point", &arr)?;
 
         // combine polynomials a, b, t_low, t_mid, t_high,
         // which are opened only at z
-        // for them we compute (poly(omega) - opened_value) / (omega - z)
-        let pairs = vec![
+        let pairs : Vec<(&E::Fr, E::Fr)> = vec![
             (find_poly_value_at_omega("a", &arr)?, a_at_z),
             (find_poly_value_at_omega("b", &arr)?, b_at_z),
             (find_poly_value_at_omega("t_low", &arr)?, t_low_at_z),
@@ -312,105 +391,90 @@ pub fn verify_proof<E: Engine, I: Oracle<E::Fr>, T: Channel<E::Fr, Input = I::Co
             (find_poly_value_at_omega("t_high", &arr)?, t_high_at_z),
         ];
 
-        let mut res = E::Fr::zero();
-        let mut alpha = E::Fr::one();
-
-        for (a, b) in values {
-            let mut temp = a;
-            temp.sub_assign(&b);
-            temp.mul_assign(&alpha);
-
-            res.add_assign(&temp);
-            alpha.mul_assign(&aggregation_challenge);
-        }
-
-        let mut temp = omega;
-        temp.sub_assign(&z);
-        temp = temp.inverse().expect("should exist");
-        res.mul_assign(&temp);
+        let (mut res1, mut alpha1) = combine_at_single_point(pairs, &evaluation_point, &z, &aggregation_challenge);
 
         // combine witness polynomials z_1, z_2, c which are opened at z and z * omega
 
-        let triples = vec![
+        let mut z_shifted = z;
+        z_shifted.mul_assign(&omega);
+
+        let witness_triples : Vec<(&E::Fr, E::Fr, E::Fr)> = vec![
             (find_poly_value_at_omega("z_1", &arr)?, z_1_at_z, z_1_shifted_at_z),
             (find_poly_value_at_omega("z_2", &arr)?, z_2_at_z, z_2_shifted_at_z),
             (find_poly_value_at_omega("c", &arr)?, c_at_z, c_shifted_at_z),
-        ]
+        ];
 
-        let mut z_shifted = z;
+        let (mut res2, alpha2) = combine_at_two_points(witness_triples, &evaluation_point, &z, &z_shifted, &aggregation_challenge);
 
+        // finally combine setup polynomials q_l, q_r, q_o, q_m, q_c, q_add_sel, s_id, sigma_1, sigma_2, sigma_3
+        // which are opened at z and z_setup
+        // in current implementation we assume that setup point is the same for all circuit-defining polynomials!
 
-        // and
-        // combine setup polynomials q_l, q_r, q_o, q_m, q_c, q_add_sel, s_id, sigma_1, sigma_2, sigma_3
-        // which are opened at z_setup and z
+        let setup_aux = vec![
+            &setup_precomp.q_l_aux, &setup_precomp.q_r_aux, &setup_precomp.q_o_aux, &setup_precomp.q_m_aux, 
+            &setup_precomp.q_c_aux, &setup_precomp.q_add_sel_aux, &setup_precomp.s_id_aux, &setup_precomp.sigma_1_aux, 
+            &setup_precomp.sigma_2_aux, &setup_precomp.sigma_3_aux,
+        ];
+        assert!(setup_aux.windows(2).all(|w| w[0].setup_point == w[1].setup_point));
+        let common_setup_point = setup_precomp.q_l_aux.setup_point;
 
-        (find_poly_value_at_omega("q_l", &arr)?, q_l_at_z),
-            (find_poly_value_at_omega("q_r", &arr)?, q_r_at_z),
-            (find_poly_value_at_omega("q_o", &arr)?, q_o_at_z),
-            (find_poly_value_at_omega("q_m", &arr)?, q_m_at_z),
-            (find_poly_value_at_omega("q_c", &arr)?, q_c_at_z),
-            (find_poly_value_at_omega("q_add_sel", &arr)?, q_add_sel_at_z),
-            (find_poly_value_at_omega("s_id", &arr)?, s_id_at_z),
-            (find_poly_value_at_omega("sigma_1", &arr)?, sigma_1_at_z),
-            (find_poly_value_at_omega("sigma_2", &arr)?, sigma_2_at_z),
-            (find_poly_value_at_omega("sigma_3", &arr)?, sigma_3_at_z),
+        let setup_triples : Vec<(&E::Fr, E::Fr, E::Fr)> = vec![
+            (find_poly_value_at_omega("q_l", &arr)?, q_l_at_z, setup_precomp.q_l_aux.setup_value),
+            (find_poly_value_at_omega("q_r", &arr)?, q_r_at_z, setup_precomp.q_r_aux.setup_value),
+            (find_poly_value_at_omega("q_o", &arr)?, q_o_at_z, setup_precomp.q_o_aux.setup_value),
+            (find_poly_value_at_omega("q_m", &arr)?, q_m_at_z, setup_precomp.q_m_aux.setup_value),
+            (find_poly_value_at_omega("q_c", &arr)?, q_c_at_z, setup_precomp.q_c_aux.setup_value),
+            (find_poly_value_at_omega("q_add_sel", &arr)?, q_add_sel_at_z, setup_precomp.q_add_sel_aux.setup_value),
+            (find_poly_value_at_omega("s_id", &arr)?, s_id_at_z, setup_precomp.s_id_aux.setup_value),
+            (find_poly_value_at_omega("sigma_1", &arr)?, sigma_1_at_z, setup_precomp.sigma_1_aux.setup_value),
+            (find_poly_value_at_omega("sigma_2", &arr)?, sigma_2_at_z, setup_precomp.sigma_2_aux.setup_value),
+            (find_poly_value_at_omega("sigma_3", &arr)?, sigma_3_at_z, setup_precomp.sigma_3_aux.setup_value),
+        ];
 
+        let (mut res3, _) = combine_at_two_points(setup_triples, &evaluation_point, &z, &common_setup_point, &aggregation_challenge);
 
-        ("c", &c_commitment_data.oracle),
-        ("z_1", &z_1_commitment_data.oracle),
-        ("z_2", &z_2_commitment_data.oracle),
-        ("t_low", &t_poly_low_commitment_data.oracle),
-        ("t_mid", &t_poly_mid_commitment_data.oracle),
-        ("t_high", &t_poly_high_commitment_data.oracle),
-        // setup polynomials
-        ("q_l", &setup_precomp.q_l_aux.oracle),
-        ("q_r", &setup_precomp.q_r_aux.oracle),
-        ("q_o", &setup_precomp.q_o_aux.oracle),
-        ("q_m", &setup_precomp.q_m_aux.oracle),
-        ("q_c", &setup_precomp.q_c_aux.oracle),
-        ("q_add_sel", &setup_precomp.q_add_sel_aux.oracle),
-        ("s_id", &setup_precomp.s_id_aux.oracle),
-        ("sigma_1", &setup_precomp.sigma_1_aux.oracle),
-        ("sigma_2", &setup_precomp.sigma_2_aux.oracle),
-        ("sigma_3", &setup_precomp.sigma_3_aux.oracle), 
+        // res = res1 + res2 * alpha_1 + res_3 * alpha_1 * alpha_2
+        res2.mul_assign(&alpha1);
+        res1.add_assign(&res2);
+        alpha1.mul_assign(&alpha2);
+        res3.mul_assign(&alpha1);
+        res1.add_assign(&res3);
 
-    }
+        Some(res1)
+    };
 
-    pub a_opening_value: F,
-    pub b_opening_value: F,
-    pub c_opening_value: F,
-    pub c_shifted_opening_value: F,
-    pub q_l_opening_value: F,
-    pub q_r_opening_value: F,
-    pub q_o_opening_value: F,
-    pub q_m_opening_value: F,
-    pub q_c_opening_value: F,
-    pub q_add_sel_opening_value: F,
-    pub s_id_opening_value: F,
-    pub sigma_1_opening_value: F,
-    pub sigma_2_opening_value: F,
-    pub sigma_3_opening_value: F,
-    pub z_1_opening_value: F,
-    pub z_2_opening_value: F,
-    pub z_1_shifted_opening_value: F,
-    pub z_2_shifted_opening_value: F,
-    pub t_low_opening_value: F,
-    pub t_mid_opening_value: F,
-    pub t_high_opening_value: F,
+    let setup_poly_commitmetns = vec![
+        ("q_l", setup_precomp.q_l_aux.oracle.get_commitment()),
+        ("q_r", setup_precomp.q_r_aux.oracle.get_commitment()),
+        ("q_o", setup_precomp.q_o_aux.oracle.get_commitment()),
+        ("q_m", setup_precomp.q_m_aux.oracle.get_commitment()),
+        ("q_c", setup_precomp.q_c_aux.oracle.get_commitment()),
+        ("q_add_sel", setup_precomp.q_add_sel_aux.oracle.get_commitment()),
+        ("s_id", setup_precomp.s_id_aux.oracle.get_commitment()),
+        ("sigma_1", setup_precomp.sigma_1_aux.oracle.get_commitment()),
+        ("sigma_2", setup_precomp.sigma_2_aux.oracle.get_commitment()),
+        ("sigma_3", setup_precomp.sigma_3_aux.oracle.get_commitment()),
+    ];
 
-    FriIop::
-    verify_proof_queries<Func: Fn(Vec<&F>) -> F>(
-        proof: &FriProof<F, O>,
-        upper_layer_commitments: Vec<(Label, O::Commitment)>,
-        natural_element_indexes: Vec<usize>,
-        fri_challenges: &[F],
-        params: &FriParams,
-        upper_layer_combiner: Func
+    let mut upper_layer_commitments = proof.commitments.clone();
+    upper_layer_commitments.extend(setup_poly_commitmetns.into_iter());
+      
+    let fri_challenges = FriIop::get_fri_challenges(
+        &proof.batched_FRI_proof,
+        &mut channel,
+        &params,
+    ); 
+    let natural_first_element_indexes = (0..params.R).map(|_| channel.produce_uint_challenge() as usize % domain_size).collect();
 
-    let valid = committer.verify_multiple_openings(commitments, opening_points, &claimed_values, aggregation_challenge, &proof.openings_proof, &mut transcript);
+    let is_valid = FriIop::<E::Fr, I, T>::verify_proof_queries(
+        &proof.batched_FRI_proof,
+        upper_layer_commitments,
+        natural_first_element_indexes,
+        &fri_challenges[..],
+        &params,
+        upper_layer_combiner)?;
 
-
-    Ok(valid)
+    Ok(is_valid)
 }
 
 

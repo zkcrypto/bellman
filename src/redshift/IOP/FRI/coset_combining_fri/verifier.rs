@@ -94,7 +94,7 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
         final_coefficients: &Vec<F>,
         natural_first_element_index: usize,
         fri_challenges: &[F],
-        num_steps: usize,
+        _num_steps: usize,
         initial_domain_size: usize,
         log_initial_domain_size: usize,
         collapsing_factor: usize,
@@ -117,8 +117,8 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
         }
 
         let mut values = Vec::with_capacity(coset_size);
-        for (i, coset_idx) in coset_idx_range.enumerate() {
-            let argument : Vec<(Label, &F)> = upper_layer_queries.iter().map(|x| (x.0, &x.1.values()[i])).collect();
+        for (i, coset_idx) in coset_idx_range.clone().enumerate() {
+            let mut argument : Vec<(Label, &F)> = upper_layer_queries.iter().map(|x| (x.0, &x.1.values()[i])).collect();
             let natural_idx = CosetCombiner::get_natural_idx_for_coset_index(
                 coset_idx, initial_domain_size, log_initial_domain_size, collapsing_factor);
             let evaluation_point = omega.pow([natural_idx as u64]);
@@ -163,7 +163,7 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
             <O as Oracle<F>>::verify_query(commitment, query, &oracle_params);
             
             //round consistency check
-            let mut this_layer_element = FriIop::<F, O, C>::coset_interpolant_value(
+            let this_layer_element = FriIop::<F, O, C>::coset_interpolant_value(
                 query.values(),
                 &challenge,
                 coset_idx_range,

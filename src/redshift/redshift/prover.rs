@@ -431,7 +431,7 @@ where E::Fr : PartialTwoBitReductionField
     let mut two_n_fe = n_fe;
     two_n_fe.double();
 
-    let mut alpha = channel.produce_field_element_challenge();
+    let alpha = channel.produce_field_element_challenge();
 
     // TODO: may be speedup this one too
     let mut vanishing_poly_inverse_bitreversed = 
@@ -443,7 +443,7 @@ where E::Fr : PartialTwoBitReductionField
 
     let PI = Polynomial::<E::Fr, Values>::from_values_unpadded(assembly.make_public_inputs_assingment().clone())?;
     let PI = PI.ifft_using_bitreversed_ntt_with_partial_reduction(&worker, omegas_inv_bitreversed, &E::Fr::one())?;
-    let PI_on_domain = PI.bitreversed_lde_using_bitreversed_ntt_with_partial_reduction(
+    let PI_on_domain = PI.clone().bitreversed_lde_using_bitreversed_ntt_with_partial_reduction(
         &worker, 
         params.lde_factor, 
         omegas_bitreversed, 
@@ -1052,17 +1052,6 @@ where E::Fr : PartialTwoBitReductionField
         ("t_low", t_poly_low_commitment_data.oracle.get_commitment()),
         ("t_mid", t_poly_mid_commitment_data.oracle.get_commitment()),
         ("t_high", t_poly_high_commitment_data.oracle.get_commitment()),
-        // setup polynomials
-        ("q_l", setup_precomp.q_l_aux.oracle.get_commitment()),
-        ("q_r", setup_precomp.q_r_aux.oracle.get_commitment()),
-        ("q_o", setup_precomp.q_o_aux.oracle.get_commitment()),
-        ("q_m", setup_precomp.q_m_aux.oracle.get_commitment()),
-        ("q_c", setup_precomp.q_c_aux.oracle.get_commitment()),
-        ("q_add_sel", setup_precomp.q_add_sel_aux.oracle.get_commitment()),
-        ("s_id", setup_precomp.s_id_aux.oracle.get_commitment()),
-        ("sigma_1", setup_precomp.sigma_1_aux.oracle.get_commitment()),
-        ("sigma_2", setup_precomp.sigma_2_aux.oracle.get_commitment()),
-        ("sigma_3", setup_precomp.sigma_3_aux.oracle.get_commitment()),
     ];
     
     let fri_proof = fri_proof_prototype.produce_proof(
