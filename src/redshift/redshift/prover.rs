@@ -239,7 +239,7 @@ impl<E: Engine> ProvingAssembly<E> {
 }
 
 //use setup and selector polynomials, precomputed by 
-fn prove_with_setup_precomputed<E: Engine, C: Circuit<E>, CP: CTPrecomputations<E::Fr>, CPI: CTPrecomputations<E::Fr>, 
+pub fn prove_with_setup_precomputed<E: Engine, C: Circuit<E>, CP: CTPrecomputations<E::Fr>, CPI: CTPrecomputations<E::Fr>, 
     FP: FriPrecomputations<E::Fr>, I: Oracle<E::Fr>, T: Channel<E::Fr, Input = I::Commitment>> 
 (
     circuit: &C,
