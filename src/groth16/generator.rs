@@ -2,7 +2,7 @@ use rand_core::RngCore;
 use std::ops::{AddAssign, MulAssign};
 use std::sync::Arc;
 
-use ff::{Field, PrimeField};
+use ff::Field;
 use group::{CurveAffine, CurveProjective, Wnaf};
 use pairing::Engine;
 
@@ -273,7 +273,7 @@ where
                         exp.mul_assign(&coeff);
 
                         // Exponentiate
-                        *h = g1_wnaf.scalar(exp.into_repr());
+                        *h = g1_wnaf.scalar(&exp);
                     }
 
                     // Batch normalize
@@ -376,14 +376,14 @@ where
 
                         // Compute A query (in G1)
                         if !at.is_zero() {
-                            *a = g1_wnaf.scalar(at.into_repr());
+                            *a = g1_wnaf.scalar(&at);
                         }
 
                         // Compute B query (in G1/G2)
                         if !bt.is_zero() {
-                            let bt_repr = bt.into_repr();
-                            *b_g1 = g1_wnaf.scalar(bt_repr);
-                            *b_g2 = g2_wnaf.scalar(bt_repr);
+                            ();
+                            *b_g1 = g1_wnaf.scalar(&bt);
+                            *b_g2 = g2_wnaf.scalar(&bt);
                         }
 
                         at.mul_assign(&beta);
@@ -394,7 +394,7 @@ where
                         e.add_assign(&ct);
                         e.mul_assign(inv);
 
-                        *ext = g1_wnaf.scalar(e.into_repr());
+                        *ext = g1_wnaf.scalar(&e);
                     }
 
                     // Batch normalize
