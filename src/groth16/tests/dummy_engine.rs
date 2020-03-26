@@ -423,7 +423,7 @@ impl CurveProjective for Fr {
         *self
     }
 
-    fn recommended_wnaf_for_scalar(_: <Self::Scalar as PrimeField>::Repr) -> usize {
+    fn recommended_wnaf_for_scalar(_: &<Self::Scalar as PrimeField>::Repr) -> usize {
         3
     }
 
