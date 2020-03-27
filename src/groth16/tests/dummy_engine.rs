@@ -34,6 +34,12 @@ impl fmt::Display for Fr {
     }
 }
 
+impl From<u64> for Fr {
+    fn from(v: u64) -> Fr {
+        Fr(Wrapping((v % MODULUS_R.0 as u64) as u32))
+    }
+}
+
 impl ConditionallySelectable for Fr {
     fn conditional_select(a: &Self, b: &Self, choice: Choice) -> Self {
         Fr(Wrapping(u32::conditional_select(
