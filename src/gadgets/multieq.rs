@@ -1,4 +1,4 @@
-use ff::{Field, PrimeField, ScalarEngine};
+use ff::{PowVartime, PrimeField, ScalarEngine};
 
 use crate::{ConstraintSystem, LinearCombination, SynthesisError, Variable};
 

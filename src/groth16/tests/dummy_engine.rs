@@ -1,4 +1,6 @@
-use ff::{Field, PrimeField, PrimeFieldDecodingError, PrimeFieldRepr, ScalarEngine, SqrtField};
+use ff::{
+    Field, PowVartime, PrimeField, PrimeFieldDecodingError, PrimeFieldRepr, ScalarEngine, SqrtField,
+};
 use group::{CurveAffine, CurveProjective, EncodedPoint, GroupDecodingError};
 use pairing::{Engine, PairingCurveAffine};
 
@@ -190,9 +192,9 @@ impl SqrtField for Fr {
         // https://eprint.iacr.org/2012/685.pdf (page 12, algorithm 5)
         let mut c = Fr::root_of_unity();
         // r = self^((t + 1) // 2)
-        let mut r = self.pow_vartime([32]);
+        let mut r = self.pow_vartime([32u64]);
         // t = self^t
-        let mut t = self.pow_vartime([63]);
+        let mut t = self.pow_vartime([63u64]);
         let mut m = Fr::S;
 
         while t != <Fr as Field>::one() {
