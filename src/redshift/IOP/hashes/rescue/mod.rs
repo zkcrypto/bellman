@@ -6,7 +6,7 @@
 
 use crate::ff::{PrimeField, PrimeFieldRepr};
 use num::integer::*;
-use num::bigint::BigUint;
+use num::bigint::{BigUint};
 use num::{Zero, One};
 use num::ToPrimitive;
 
@@ -21,7 +21,7 @@ pub(crate) const SPONGE_RATE: usize = 2;
 pub(crate) const RESCUE_CONST_IV: &str = "qwerty";
 
 #[derive(Debug, Copy, Clone)]
-pub(crate) struct RescueParams<F>
+pub struct RescueParams<F>
 where F: PrimeField
 {
     // p - 1 is divisible by 2^s
@@ -63,25 +63,26 @@ impl<F: PrimeField> RescueParams<F>
             ret
         }
 
-        fn compute_alpha_inapha(a: &BigUint) -> (u64, [u64; 4]) {
-            let mut alpha = BigUint::from(3u64);
-            loop {
-                let ExtendedGcd{ gcd, x: _, y, .. } = a.extended_gcd(&alpha); 
-                if gcd.is_one() {
-                    let alpha = alpha.to_u64().expect("Should fit in one machine word");
-                    let inalpha = biguint_to_u64_array(y);
-                    return (alpha, inalpha)
-                }
-                alpha += BigUint::one();
-            }
-        }
+        // fn compute_alpha_inapha(a: &BigUint) -> (u64, [u64; 4]) {
+        //     let mut alpha = BigUint::from(3u64);
+        //     loop {
+        //         let ExtendedGcd{ gcd, x: _, y, .. } = a.extended_gcd(&alpha); 
+        //         if gcd.is_one() {
+        //             let alpha = alpha.to_u64().expect("Should fit in one machine word");
+        //             let inalpha = biguint_to_u64_array(y);
+        //             return (alpha, inalpha)
+        //         }
+        //         alpha += BigUint::one();
+        //     }
+        // }
 
         let mut x = BigUint::from(0u64);
         for limb in x_inner.as_ref() {
             x <<= 64;
             x += BigUint::from(*limb);
         }
-        let (RESCUE_ALPHA, RESCUE_INVALPHA) = compute_alpha_inapha(&x);
+        //let (RESCUE_ALPHA, RESCUE_INVALPHA) = compute_alpha_inapha(&x);
+        let (RESCUE_ALPHA, RESCUE_INVALPHA) = (5, [5, 0, 0, 0]);
 
         let (quotient, remainder) = x.div_rem(&BigUint::from(3u64));
         assert!(remainder.is_zero());
@@ -194,7 +195,7 @@ fn rescue_f<F: PrimeField>(
 // in https://github.com/KULeuven-COSIC/Marvellous/blob/master/instance_generator.sage there is a condition on some matrix to be invertible
 // do I really need the same restriction here?
 
-fn generate_constants<F: PrimeField>(iv: &str) -> [[F; RESCUE_M]; 2 * RESCUE_ROUNDS + 1] {
+pub fn generate_constants<F: PrimeField>(iv: &str) -> [[F; RESCUE_M]; 2 * RESCUE_ROUNDS + 1] {
 
     let mut hasher = Keccak::new_shake256();
     hasher.update(iv.as_bytes());
@@ -395,7 +396,7 @@ impl<F: PrimeField> Rescue<F> {
                     }
                     unreachable!("Sponge number is too small");
                     // We've already squeezed out all available elements
-                    self.sponge = SpongeState::Absorbing([None; SPONGE_RATE]);
+                    //self.sponge = SpongeState::Absorbing([None; SPONGE_RATE]);
                 }
             }
         }

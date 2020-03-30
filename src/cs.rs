@@ -20,7 +20,7 @@ pub trait Circuit<E: Engine> {
 }
 
 /// Represents a variable in our constraint system.
-#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub struct Variable(pub(crate) Index);
 
 impl Variable {

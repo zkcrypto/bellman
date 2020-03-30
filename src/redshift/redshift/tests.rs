@@ -161,7 +161,7 @@ mod test {
     #[test]
     fn test_redshift_with_rescue() {
 
-         use crate::redshift::IOP::oracle::coset_combining_rescue_tree::*;
+        use crate::redshift::IOP::oracle::coset_combining_rescue_tree::*;
         use crate::redshift::IOP::channel::rescue_channel::*;
 
         type E = Transparent252;

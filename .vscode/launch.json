@@ -1,0 +1,45 @@
+
+{
+    "version": "0.2.0",
+    "configurations": [
+      {
+        "name": "Run Test Debugger",
+        "type": "cppvsdbg",
+        "request": "launch",
+        "program": "${workspaceFolder}/target/debug/buggin-70708b3916187eeb.exe",
+        "args": [],
+        "stopAtEntry": false,
+        "cwd": "${workspaceFolder}",
+        "environment": [],
+        "externalConsole": true,
+        "preLaunchTask": "cargo test build",
+      },
+
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Launch",
+      "args": [],
+      "program": "${workspaceFolder}/target/debug/boa",
+      "cwd": "${workspaceFolder}",
+      "stopOnEntry": false,
+      "sourceLanguages": ["rust"],
+      "sourceMap": {
+        "/rustc/*": "${env:HOME}/.rustup/toolchains/stable-x86_64-apple-darwin/lib/rustlib/src/rust"
+      }
+    },
+    {
+      "name": "(Windows) Launch",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/target/debug/boa.exe",
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "sourceFileMap": {
+        "/rustc/5e1a799842ba6ed4a57e91f7ab9435947482f7d8": "${env:USERPROFILE}/.rustup/toolchains/stable-x86_64-pc-windows-msvc/lib/rustlib/src/rust"
+      },
+      "symbolSearchPath": "https://msdl.microsoft.com/download/symbols",
+      "environment": []
+    }
+  ]
+}

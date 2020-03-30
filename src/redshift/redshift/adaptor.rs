@@ -75,7 +75,7 @@ pub struct Transpiler<E: Engine> {
     scratch: HashSet<crate::cs::Variable>,
     // deduplication_scratch: HashMap<crate::cs::Variable, E::Fr>,
     deduplication_scratch: HashMap<crate::cs::Variable, usize>,
-    hints: Vec<(usize, TranspilationVariant)>,
+    pub hints: Vec<(usize, TranspilationVariant)>,
     _marker: std::marker::PhantomData<E>
 }
 
