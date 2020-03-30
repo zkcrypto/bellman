@@ -48,7 +48,6 @@ pub trait ConstraintSystem<E: Engine> {
         let (c_0, c_1, c_2) = coeffs;
         let zero = E::Fr::zero();
 
-        self.new_gate((v_0, v_1, v_2), (c_0, c_1, c_2, zero, zero, zero))
-        
+        self.new_gate((v_0, v_1, v_2), (c_0, c_1, c_2, zero, zero, zero))       
     }
 }
