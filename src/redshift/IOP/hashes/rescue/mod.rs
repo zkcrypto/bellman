@@ -4,15 +4,11 @@
 //! 
 //! NB: current implementation works only with base fields of length 256 bits = 8 limbs
 
-use crate::ff::{PrimeField, PrimeFieldRepr};
-use num::integer::*;
-use num::bigint::{BigUint};
-use num::{Zero, One};
-use num::ToPrimitive;
+use crate::ff::{PrimeField};
 
-use tiny_keccak::Keccak;
+pub mod bn256_rescue_params;
 
-// 
+
 trait RescueParams<F: PrimeField> {
     
     fn default() -> Self;
@@ -22,20 +18,14 @@ trait RescueParams<F: PrimeField> {
     fn r(&self) -> usize;
     fn t(&self) -> usize;
     fn get_mds_matrix(&self) -> &Vec<Vec<F>>;
-    fn get_key_schedule(&self) -> &Vec<Vec<F>>;
-    // TODO: Decide on a padding strategy (currently padding with answer for the main qestion of the universe)
+    fn get_constants(&self) -> &Vec<Vec<F>>;
+    // TODO: Decide on a padding strategy
     fn padding_constant(&self) -> &F;
 
-    // p - 1 is divisible by 2^s and not divisible by 2^(s+1)
-    fn s(&self) -> u32;
-    /// Generator of the 2^s multiplicative subgroup
-    fn alpha(&self) -> &F;
-    /// Ideally the smallest prime such that gcd(p - 1, alpha) = 1
+    /// Ideally the smallest prime x such that gcd(p - 1, x) = 1
     fn rescue_alpha(&self) -> u64;
     /// RESCUE_INVALPHA * RESCUE_ALPHA = 1 mod (p - 1)
     fn rescue_invalpha(&self) -> &[u64; 4];
-    /// Element of multiplicative order 3.
-    fn beta(&self) -> &F;
 
     // TODO: generate all the parameters from intialization vector and parameters 
     // fn new(&str, c, r, num_of_rounds) -> Self
@@ -62,13 +52,56 @@ fn mds<F: PrimeField, Params: RescueParams<F>>(
 }
 
 
+/// Duplicates [`rescue_f`] in order to extract the key schedule.
+fn generate_key_schedule<F: PrimeField, Params: RescueParams<F>>(
+    master_key: &[F],
+    params: &Params,
+) -> Vec<Vec<F>> {
+
+    let mut key_schedule = vec![];
+    let state : Vec<F> = master_key.iter().cloned().collect();
+    
+    let constants = params.get_constants();
+    let RESCUE_M = params.t();
+    let RESCUE_ROUNDS = params.get_num_rescue_rounds();
+
+    // master key should be of length RESCUE_M
+    assert_eq!(master_key.len(), RESCUE_M);
+
+    for i in 0..RESCUE_M {
+        state[i].add_assign(&(constants[0][i]));
+    }
+    key_schedule.push(state);
+
+    for r in 0..2 * RESCUE_ROUNDS {
+        let exp = if r % 2 == 0 {
+            params.rescue_invalpha()
+        } else {
+            &[params.rescue_alpha(), 0, 0, 0]
+        };
+        for entry in state.iter_mut() {
+            *entry = entry.pow(exp);
+        }
+        for (input, output) in  mds(&state[..], params).iter().zip(state.iter()) {
+            *output = *input;
+        }
+        for i in 0..RESCUE_M {
+            state[i].add_assign(&(constants[r + 1][i]));
+        }
+        key_schedule.push(state);
+    }
+
+    key_schedule
+}
+
+
 fn rescue_f<F: PrimeField, Params: RescueParams<F>>(
     state: &mut [F],
+    key_schedule: &Vec<Vec<F>>,
     params: &Params,
 ) {
 
     let mds_matrix = params.get_mds_matrix();
-    let key_schedule = params.get_key_schedule();
     let RESCUE_M = params.t();
     let RESCUE_ROUNDS = params.get_num_rescue_rounds();
    
@@ -110,6 +143,7 @@ fn pad<F: PrimeField, Params: RescueParams<F>>(
 fn rescue_duplex<F: PrimeField, Params: RescueParams<F>>(
     state: &mut Vec<F>,
     input: &mut Vec<F>,
+    key_schedule: &Vec<Vec<F>>,
     params: &Params,
 ) -> Vec<Option<F>> {
 
@@ -120,7 +154,7 @@ fn rescue_duplex<F: PrimeField, Params: RescueParams<F>>(
         state[i].add_assign(&input[i]);
     }
 
-    rescue_f(state, params);
+    rescue_f(state, key_schedule, params);
 
     let mut output = vec![];
     for i in 0..SPONGE_RATE {
@@ -143,12 +177,13 @@ impl<F: PrimeField> SpongeState<F> {
 pub struct Rescue<F: PrimeField, RP: RescueParams<F>> {
     sponge: SpongeState<F>,
     state: Vec<F>,
+    key_schedule: Vec<Vec<F>>,
     _marker: std::marker::PhantomData<RP>,
 }
 
 impl<F: PrimeField, RP: RescueParams<F>> Rescue<F, RP> {
     //we use master key as a parameter here
-    pub fn new(params: &RP) -> Self {
+    pub fn new(master_key: &[F], params: &RP) -> Self {
         
         let RESCUE_M = params.t();
         let SPONGE_STATE = params.r();
@@ -157,8 +192,14 @@ impl<F: PrimeField, RP: RescueParams<F>> Rescue<F, RP> {
         Rescue {
             sponge: SpongeState::Absorbing(vec![]),
             state,
+            key_schedule: generate_key_schedule(master_key, params),
             _marker: std::marker::PhantomData::<RP>,
         }
+    }
+
+    pub fn clear_state(&mut self) {
+        let state_len = self.state.len();
+        self.state = (0..state_len).map(|_| F::zero()).collect();
     }
 
     pub fn absorb(&mut self, val: F, params: &RP) {
@@ -171,7 +212,7 @@ impl<F: PrimeField, RP: RescueParams<F>> Rescue<F, RP> {
                 }
 
                 // We've already absorbed as many elements as we can
-                let _ = rescue_duplex(&mut self.state, input, params);
+                let _ = rescue_duplex(&mut self.state, input, &self.key_schedule, params);
                 self.sponge = SpongeState::absorb(val, SPONGE_STATE);
             }
             SpongeState::Squeezing(_) => {
@@ -184,13 +225,12 @@ impl<F: PrimeField, RP: RescueParams<F>> Rescue<F, RP> {
     pub fn squeeze(&mut self, params: &RP) -> F {
         loop {
             match self.sponge {
-                SpongeState::Absorbing(input) => {
+                SpongeState::Absorbing(ref mut input) => {
                     self.sponge = SpongeState::Squeezing(rescue_duplex(
                         &mut self.state,
-                        &input,
-                        &self.mds_matrix,
+                        input,
                         &self.key_schedule,
-                        &self.params
+                        params
                     ));
                 }
                 SpongeState::Squeezing(ref mut output) => {
@@ -201,7 +241,7 @@ impl<F: PrimeField, RP: RescueParams<F>> Rescue<F, RP> {
                     }
                     // We've already squeezed out all available elements
                     unreachable!("Sponge number is too small");
-                    //self.sponge = SpongeState::Absorbing([None; SPONGE_RATE]);
+                    //self.sponge = SpongeState::Absorbing(vec![]);
                 }
             }
         }
