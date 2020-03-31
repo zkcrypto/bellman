@@ -168,7 +168,8 @@ impl<F: PrimeField, RP: RescueParams<F>> Oracle<F> for FriSpecificRescueTree<F, 
 
         let pair_index = leaf_index ^ 1;
 
-        let leaf_pair_hash = Self::hash_into_leaf(&values[(pair_index*params.values_per_leaf)..((pair_index+1)*params.values_per_leaf)], &mut self.hasher.clone());
+        let leaf_pair_hash = Self::hash_into_leaf(&values[(pair_index*params.values_per_leaf)..((pair_index+1)*params.values_per_leaf)], 
+            &params.rescue_params);
 
         let path = self.make_full_path(leaf_index, leaf_pair_hash);
 

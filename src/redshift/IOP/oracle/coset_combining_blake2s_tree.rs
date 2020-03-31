@@ -184,7 +184,7 @@ impl<F: PrimeField> Oracle<F> for FriSpecificBlake2sTree<F> {
         self.nodes[1]
     }
 
-    fn produce_query(&self, indexes: Range<usize>, values: &[F]) -> Self::Query {
+    fn produce_query(&self, indexes: Range<usize>, values: &[F], params: &Self::Params) -> Self::Query {
         // we never expect that query is mis-alligned, so check it
         debug_assert!(indexes.start % self.params.values_per_leaf == 0);
         debug_assert!(indexes.len() == self.params.values_per_leaf);
@@ -293,7 +293,7 @@ fn make_small_iop() {
     assert!(iop.nodes.len() == (SIZE / VALUES_PER_LEAF));
     for i in 0..(SIZE / VALUES_PER_LEAF) {
         let indexes = (i*VALUES_PER_LEAF)..(VALUES_PER_LEAF + i*VALUES_PER_LEAF);
-        let query = iop.produce_query(indexes, &inputs);
+        let query = iop.produce_query(indexes, &inputs, &params);
         let valid = FriSpecificBlake2sTree::verify_query(&commitment, &query, &params);
         assert!(valid, "invalid query for leaf index {}", i);
     }
@@ -326,7 +326,7 @@ fn test_bench_large_fri_specific_iop() {
     assert!(iop.nodes.len() == (SIZE / VALUES_PER_LEAF));
     for i in 0..128 {
         let indexes = (i*VALUES_PER_LEAF)..(VALUES_PER_LEAF + i*VALUES_PER_LEAF);
-        let query = iop.produce_query(indexes, &inputs);
+        let query = iop.produce_query(indexes, &inputs, &params);
         let valid = FriSpecificBlake2sTree::verify_query(&commitment, &query, &params);
         assert!(valid, "invalid query for leaf index {}", i);
     }

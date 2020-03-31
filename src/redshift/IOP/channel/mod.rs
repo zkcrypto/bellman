@@ -11,7 +11,7 @@ pub mod rescue_channel;
 //we sometimes need new field elemets as output and sometimes we do need integer in some range -
 // the latter is used in FRI, when we take index of the element on the top level domain.
 // However we prefer to return raw bytes in the latter case
-pub trait Channel<F: PrimeField>: Sized + 'static {
+pub trait Channel<F: PrimeField>: Sized {
     type Input;
     type Params;
     fn new(params: &Self::Params) -> Self;

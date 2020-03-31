@@ -9,7 +9,7 @@ use crate::ff::{PrimeField};
 pub mod bn256_rescue_params;
 
 
-pub trait RescueParams<F: PrimeField> {
+pub trait RescueParams<F: PrimeField> : Sync {
     
     fn default() -> Self;
     fn get_num_rescue_rounds(&self) -> usize;

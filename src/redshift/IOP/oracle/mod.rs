@@ -6,7 +6,7 @@ pub mod coset_combining_rescue_tree;
 
 pub trait Commitment: Clone + Eq + PartialEq + std::fmt::Debug {}
 
-pub trait Oracle<F: PrimeField>: {
+pub trait Oracle<F: PrimeField>: Eq + PartialEq {
     // for now - hash of merklee tree
     type Commitment: Clone + Eq + PartialEq + std::fmt::Debug;
     // quried value alongside some proof of retrieval correctness - Merklee path for now

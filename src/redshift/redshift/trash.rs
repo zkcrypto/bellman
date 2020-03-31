@@ -184,3 +184,19 @@ fn generate_key_schedule<F: PrimeField, Params: RescueParams<F>>(
     key_schedule
 }
 
+
+// initialize from master key containig all zeroes
+    pub fn default(params: &RP) -> Self {
+        let RESCUE_M = params.t();
+        let SPONGE_STATE = params.r();
+        let state : Vec<F> = (0..RESCUE_M).map(|_| F::zero()).collect();
+
+        Rescue {
+            sponge: SpongeState::Absorbing(vec![]),
+            state,
+            key_schedule: generate_key_schedule(&state[..], params),
+            _marker: std::marker::PhantomData::<RP>,
+        }
+    }
+
+

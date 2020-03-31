@@ -12,6 +12,7 @@ pub struct RescueChannel<'a, F: PrimeField, RP: RescueParams<F>> {
 
 pub struct RescueChannelParams<'a, F: PrimeField, RP: RescueParams<F>> {
     rescue_params: &'a RP,
+    _marker: std::marker::PhantomData<F>
 }
 
 impl<'a, F, RP> RescueChannel<'a, F, RP>

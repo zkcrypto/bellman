@@ -19,13 +19,15 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
         worker: &Worker,
         channel: &mut C,
         params: &FriParams,
+        oracle_params: &O::Params,
     ) -> Result<FriProofPrototype<F, O>, SynthesisError> {
         Self::proof_from_lde_by_values(
             lde_values, 
             precomputations,
             worker,
             channel,
-            params
+            params,
+            oracle_params,
         )
     }
 
@@ -35,8 +37,9 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
         upper_layer_values: Vec<&[F]>,
         natural_first_element_indexes: Vec<usize>,
         params: &FriParams,
+        oracle_params: &O::Params,
     ) -> Result<FriProof<F, O>, SynthesisError> {
-        prototype.produce_proof(natural_first_element_indexes, upper_layer_oracles, upper_layer_values, params)
+        prototype.produce_proof(natural_first_element_indexes, upper_layer_oracles, upper_layer_values, params, oracle_params)
     }
 
     pub fn get_fri_challenges(
@@ -65,9 +68,11 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
         natural_element_indexes: Vec<usize>,
         fri_challenges: &[F],
         params: &FriParams,
+        oracle_params: &O::Params,
         upper_layer_combiner: Func,
     ) -> Result<bool, SynthesisError> {
-        Self::verify_proof_queries(proof, upper_layer_commitments, natural_element_indexes, fri_challenges, params, upper_layer_combiner)
+        Self::verify_proof_queries(proof, upper_layer_commitments, natural_element_indexes, fri_challenges, 
+            params, oracle_params, upper_layer_combiner)
     }
 
     pub fn proof_from_lde_by_values<T: FriPrecomputations<F>>
@@ -77,7 +82,8 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
         precomputations: &T,
         worker: &Worker,
         channel: &mut C,
-        params: &FriParams
+        params: &FriParams,
+        oracle_params: &O::Params,
     ) -> Result<FriProofPrototype<F, O>, SynthesisError> {
         
         let initial_domain_size = lde_values.size();
@@ -98,9 +104,6 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
         let mut oracles = Vec::<O>::with_capacity(num_steps as usize);
         let mut challenges = Vec::with_capacity(num_steps as usize);
         let mut intermediate_values = Vec::with_capacity(num_steps as usize);
-
-        //TODO: locate all of them in LDE order
-        let oracle_params = <O as Oracle<F>>::Params::from(wrapping_factor);
         
         // if we would precompute all N we would have
         // [0, N/2, N/4, 3N/4, N/8, N/2 + N/8, N/8 + N/4, N/8 + N/4 + N/2, ...]
@@ -253,6 +256,7 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
 
 #[cfg(test)]
 mod test {
+
     #[test]
     fn test_bench_fri_with_coset_combining() {
         use crate::ff::Field;
@@ -274,7 +278,7 @@ mod test {
 
         const SIZE: usize = 1024;
         let worker = Worker::new_with_cpus(1);
-        let mut channel = StatelessBlake2sChannel::new();
+        let mut channel = Blake2sChannel::new(&());
 
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
         let coeffs = (0..SIZE).map(|_| Fr::rand(rng)).collect::<Vec<_>>();
@@ -296,12 +300,20 @@ mod test {
             final_degree_plus_one: 2,
         };
 
-        let _fri_proto = FriIop::<Fr, FriSpecificBlake2sTree<Fr>, StatelessBlake2sChannel<Fr>>::proof_from_lde(
+        // note that fri params and oracle params should be consistent!
+        // e.g. elems_per_leaf = 1 << collapsing_factor
+
+        let oracle_params = FriSpecificBlake2sTreeParams {
+            values_per_leaf: 1 << params.collapsing_factor
+        };
+
+        let _fri_proto = FriIop::<Fr, FriSpecificBlake2sTree<Fr>, Blake2sChannel<Fr>>::proof_from_lde(
             eval_result, 
             &fri_precomp, 
             &worker, 
             &mut channel,
-            &params
+            &params,
+            &oracle_params,
         ).expect("FRI must succeed");
     }
 
@@ -328,7 +340,7 @@ mod test {
         const SIZE: usize = 1024;
 
         let worker = Worker::new_with_cpus(1);
-        let mut channel = StatelessBlake2sChannel::new();
+        let mut channel = Blake2sChannel::new(&());
 
         let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
         let coeffs = (0..SIZE).map(|_| Fr::rand(rng)).collect::<Vec<_>>();
@@ -351,12 +363,17 @@ mod test {
             final_degree_plus_one: 2,
         };
 
-        let _fri_proto = FriIop::<Fr, FriSpecificBlake2sTree<Fr>, StatelessBlake2sChannel<Fr>>::proof_from_lde(
+        let oracle_params = FriSpecificBlake2sTreeParams {
+            values_per_leaf: 1 << params.collapsing_factor
+        };
+
+        let _fri_proto = FriIop::<Fr, FriSpecificBlake2sTree<Fr>, Blake2sChannel<Fr>>::proof_from_lde(
             eval_result, 
             &fri_precomp, 
             &worker, 
             &mut channel,
-            &params
+            &params,
+            &oracle_params,
         ).expect("FRI must succeed");
     }
 }

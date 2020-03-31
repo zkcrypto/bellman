@@ -17,6 +17,7 @@ impl<F: PrimeField, I: Oracle<F>> FriProofPrototype<F, I>
         upper_layer_oracles: &'a BatchedOracle<F, I>,
         upper_layer_values: Vec<&[F]>,
         params: &FriParams,
+        oracle_params: &O::Params,
     ) -> Result<FriProof<F, I>, SynthesisError> {
 
         let mut commitments = vec![];
@@ -35,7 +36,7 @@ impl<F: PrimeField, I: Oracle<F>> FriProofPrototype<F, I>
             
             let coset_indexes = CosetCombiner::get_coset_idx_for_natural_index(
                 natural_first_element_index, initial_domain_size, log_initial_domain_size, collapsing_factor);
-            let upper_layer_query = upper_layer_oracles.produce_query(coset_indexes, &upper_layer_values);
+            let upper_layer_query = upper_layer_oracles.produce_query(coset_indexes, &upper_layer_values, oracle_params);
             upper_layer_queries.push(upper_layer_query);
 
             let mut queries = vec![];
@@ -49,7 +50,7 @@ impl<F: PrimeField, I: Oracle<F>> FriProofPrototype<F, I>
                     elem_index, domain_size, log_domain_size, collapsing_factor);
                 
                 assert_eq!(coset_indexes.len(), coset_size);
-                let query = oracle.produce_query(coset_indexes, leaf_values.as_ref());
+                let query = oracle.produce_query(coset_indexes, leaf_values.as_ref(), oracle_params);
                 queries.push(query);
 
                 domain_size >>= collapsing_factor;
