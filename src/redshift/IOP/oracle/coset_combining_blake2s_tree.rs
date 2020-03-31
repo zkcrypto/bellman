@@ -18,13 +18,6 @@ pub struct FriSpecificBlake2sTreeParams {
     pub values_per_leaf: usize
 }
 
-impl From<usize> for FriSpecificBlake2sTreeParams {
-    fn from(data: usize) -> Self {
-        Self { values_per_leaf: data}
-    }
-}
-
-
 use std::time::Instant;
 
 impl<F: PrimeField> FriSpecificBlake2sTree<F> {

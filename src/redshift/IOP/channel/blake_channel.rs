@@ -3,9 +3,9 @@ use crate::pairing::ff::{PrimeField, PrimeFieldRepr};
 use byteorder::{BigEndian, ReadBytesExt};
 use super::Channel;
 
-
+// TODO: get rid of lazy static and hide hash parameters inside associated Params type 
 lazy_static! {
-    static ref STATELESS_CHANNEL_BLAKE2S_PARAMS: State = {
+    static ref CHANNEL_BLAKE2S_PARAMS: State = {
         Params::new()
             .hash_length(32)
             .key(b"Squeamish Ossifrage")
@@ -15,24 +15,24 @@ lazy_static! {
 }
 
 #[derive(Clone)]
-pub struct StatelessBlake2sChannel<F: PrimeField> {
+pub struct Blake2sChannel<F: PrimeField> {
     state: State,
     _marker: std::marker::PhantomData<F>
 }
 
-impl<F: PrimeField> StatelessBlake2sChannel<F> {
+impl<F: PrimeField> Blake2sChannel<F> {
     const SHAVE_BITS: u32 = 256 - F::CAPACITY;
-    // const REPR_SIZE: usize = std::mem::size_of::<F::Repr>();
     const REPR_SIZE: usize = (((F::NUM_BITS as usize)/ 64) + 1) * 8;
 }
 
-impl<F: PrimeField> Channel<F> for StatelessBlake2sChannel<F> {
+impl<F: PrimeField> Channel<F> for Blake2sChannel<F> {
     type Input = [u8; 32];
+    type Params = ();
 
-    fn new() -> Self {
+    fn new(params: &Self::Params) -> Self {
         assert!(F::NUM_BITS < 256);
         Self {
-            state: STATELESS_CHANNEL_BLAKE2S_PARAMS.clone(),
+            state: CHANNEL_BLAKE2S_PARAMS.clone(),
             _marker: std::marker::PhantomData
         }
     }

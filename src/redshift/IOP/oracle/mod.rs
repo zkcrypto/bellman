@@ -1,5 +1,4 @@
 use crate::ff::PrimeField;
-use std::convert::From;
 use std::ops::Range;
 
 pub mod coset_combining_blake2s_tree;
@@ -7,12 +6,12 @@ pub mod coset_combining_rescue_tree;
 
 pub trait Commitment: Clone + Eq + PartialEq + std::fmt::Debug {}
 
-pub trait Oracle<F: PrimeField>: PartialEq + Eq {
+pub trait Oracle<F: PrimeField>: {
     // for now - hash of merklee tree
     type Commitment: Clone + Eq + PartialEq + std::fmt::Debug;
     // quried value alongside some proof of retrieval correctness - Merklee path for now
     type Query: IopQuery<F>;
-    type Params: Clone + Eq + PartialEq + std::fmt::Debug + From<usize>;
+    type Params: Sync;
 
     fn create(values: &[F], params: &Self::Params) -> Self;
     fn size(&self) -> usize;
@@ -21,7 +20,7 @@ pub trait Oracle<F: PrimeField>: PartialEq + Eq {
     // we allow several values to be stored in the same leaf
     // that's why query may be produced to the whole range of nearby values (but they must be fit in the same leaf)
     fn verify_query(commitment: &Self::Commitment, query: &Self::Query, params: &Self::Params) -> bool;
-    fn produce_query(&self, indexes: Range<usize>, values: &[F]) -> Self::Query;
+    fn produce_query(&self, indexes: Range<usize>, values: &[F], params: &Self::Params) -> Self::Query;
 }
 
 pub trait IopQuery<F: PrimeField>: 'static + PartialEq + Eq + Clone + std::fmt::Debug {
@@ -83,8 +82,8 @@ impl<'a, F: PrimeField, I: Oracle<F>> BatchedOracle<'a, F, I>
         true
     }
 
-    pub fn produce_query(&self, indexes: Range<usize>, values: &Vec<&[F]>) -> Vec<(Label, I::Query)> {
-        self.labeled_oracles.iter().zip(values.iter()).map(|(x, val)| (x.0, x.1.produce_query(indexes.clone(), val))).collect()
+    pub fn produce_query(&self, indexes: Range<usize>, values: &Vec<&[F]>, params: &I::Params) -> Vec<(Label, I::Query)> {
+        self.labeled_oracles.iter().zip(values.iter()).map(|(x, val)| (x.0, x.1.produce_query(indexes.clone(), val, params))).collect()
     }
 }
 

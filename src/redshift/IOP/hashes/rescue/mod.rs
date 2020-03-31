@@ -9,7 +9,7 @@ use crate::ff::{PrimeField};
 pub mod bn256_rescue_params;
 
 
-trait RescueParams<F: PrimeField> {
+pub trait RescueParams<F: PrimeField> {
     
     fn default() -> Self;
     fn get_num_rescue_rounds(&self) -> usize;
@@ -51,62 +51,18 @@ fn mds<F: PrimeField, Params: RescueParams<F>>(
     out_state
 }
 
-
-/// Duplicates [`rescue_f`] in order to extract the key schedule.
-fn generate_key_schedule<F: PrimeField, Params: RescueParams<F>>(
-    master_key: &[F],
-    params: &Params,
-) -> Vec<Vec<F>> {
-
-    let mut key_schedule = vec![];
-    let state : Vec<F> = master_key.iter().cloned().collect();
-    
-    let constants = params.get_constants();
-    let RESCUE_M = params.t();
-    let RESCUE_ROUNDS = params.get_num_rescue_rounds();
-
-    // master key should be of length RESCUE_M
-    assert_eq!(master_key.len(), RESCUE_M);
-
-    for i in 0..RESCUE_M {
-        state[i].add_assign(&(constants[0][i]));
-    }
-    key_schedule.push(state);
-
-    for r in 0..2 * RESCUE_ROUNDS {
-        let exp = if r % 2 == 0 {
-            params.rescue_invalpha()
-        } else {
-            &[params.rescue_alpha(), 0, 0, 0]
-        };
-        for entry in state.iter_mut() {
-            *entry = entry.pow(exp);
-        }
-        for (input, output) in  mds(&state[..], params).iter().zip(state.iter()) {
-            *output = *input;
-        }
-        for i in 0..RESCUE_M {
-            state[i].add_assign(&(constants[r + 1][i]));
-        }
-        key_schedule.push(state);
-    }
-
-    key_schedule
-}
-
-
 fn rescue_f<F: PrimeField, Params: RescueParams<F>>(
     state: &mut [F],
-    key_schedule: &Vec<Vec<F>>,
     params: &Params,
 ) {
 
     let mds_matrix = params.get_mds_matrix();
     let RESCUE_M = params.t();
     let RESCUE_ROUNDS = params.get_num_rescue_rounds();
+    let constants = params.get_constants();
    
     for i in 0..RESCUE_M {
-        state[i].add_assign(&key_schedule[0][i]);
+        state[i].add_assign(&constants[0][i]);
     }
 
     for r in 0..2 * RESCUE_ROUNDS {
@@ -122,7 +78,7 @@ fn rescue_f<F: PrimeField, Params: RescueParams<F>>(
             *output = *input;
         }
         for i in 0..RESCUE_M {
-            state[i].add_assign(&(key_schedule[r + 1][i]));
+            state[i].add_assign(&(constants[r + 1][i]));
         }
     }
 }
@@ -143,21 +99,21 @@ fn pad<F: PrimeField, Params: RescueParams<F>>(
 fn rescue_duplex<F: PrimeField, Params: RescueParams<F>>(
     state: &mut Vec<F>,
     input: &mut Vec<F>,
-    key_schedule: &Vec<Vec<F>>,
     params: &Params,
 ) -> Vec<Option<F>> {
 
     let SPONGE_RATE = params.r();
+    let OUTPUT_RATE = params.c();
     pad(&mut input, params);
 
     for i in 0..SPONGE_RATE {
         state[i].add_assign(&input[i]);
     }
 
-    rescue_f(state, key_schedule, params);
+    rescue_f(state, params);
 
     let mut output = vec![];
-    for i in 0..SPONGE_RATE {
+    for i in 0..OUTPUT_RATE {
         output[i] = Some(state[i]);
     }
     output
@@ -177,13 +133,12 @@ impl<F: PrimeField> SpongeState<F> {
 pub struct Rescue<F: PrimeField, RP: RescueParams<F>> {
     sponge: SpongeState<F>,
     state: Vec<F>,
-    key_schedule: Vec<Vec<F>>,
     _marker: std::marker::PhantomData<RP>,
 }
 
 impl<F: PrimeField, RP: RescueParams<F>> Rescue<F, RP> {
-    //we use master key as a parameter here
-    pub fn new(master_key: &[F], params: &RP) -> Self {
+
+    pub fn new(params: &RP) -> Self {
         
         let RESCUE_M = params.t();
         let SPONGE_STATE = params.r();
@@ -192,11 +147,10 @@ impl<F: PrimeField, RP: RescueParams<F>> Rescue<F, RP> {
         Rescue {
             sponge: SpongeState::Absorbing(vec![]),
             state,
-            key_schedule: generate_key_schedule(master_key, params),
             _marker: std::marker::PhantomData::<RP>,
         }
     }
-
+    
     pub fn clear_state(&mut self) {
         let state_len = self.state.len();
         self.state = (0..state_len).map(|_| F::zero()).collect();
@@ -212,7 +166,7 @@ impl<F: PrimeField, RP: RescueParams<F>> Rescue<F, RP> {
                 }
 
                 // We've already absorbed as many elements as we can
-                let _ = rescue_duplex(&mut self.state, input, &self.key_schedule, params);
+                let _ = rescue_duplex(&mut self.state, input, params);
                 self.sponge = SpongeState::absorb(val, SPONGE_STATE);
             }
             SpongeState::Squeezing(_) => {
@@ -229,8 +183,7 @@ impl<F: PrimeField, RP: RescueParams<F>> Rescue<F, RP> {
                     self.sponge = SpongeState::Squeezing(rescue_duplex(
                         &mut self.state,
                         input,
-                        &self.key_schedule,
-                        params
+                        params,
                     ));
                 }
                 SpongeState::Squeezing(ref mut output) => {

@@ -1,36 +1,29 @@
 use crate::pairing::ff::{PrimeField, PrimeFieldRepr};
 use crate::multicore::Worker;
 use super::*;
-use crate::redshift::IOP::hashes::rescue::Rescue;
-use std::convert::From;
+use crate::redshift::IOP::hashes::rescue::{Rescue, RescueParams};
 
 #[derive(Debug)]
-pub struct FriSpecificRescueTree<F: PrimeField> {
+pub struct FriSpecificRescueTree<F: PrimeField, RP: RescueParams<F>> {
     size: usize,
     nodes: Vec<F>,
-    params: FriSpecificRescueTreeParams,
-    hasher: Rescue<F>,
+    _marker: std::marker::PhantomData<RP>,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct FriSpecificRescueTreeParams {
-    pub values_per_leaf: usize
+pub struct RescueTreeParams<F: PrimeField, RP: RescueParams<F>> {
+    pub values_per_leaf: usize,
+    pub rescue_params: RP,
+    _marker: std::marker::PhantomData<F>,
 }
 
-impl From<usize> for FriSpecificRescueTreeParams {
-    fn from(data: usize) -> Self {
-        Self { values_per_leaf: data}
-    }
-}
-
-
-impl<F: PrimeField> FriSpecificRescueTree<F> {
+impl<F: PrimeField, RP: RescueParams<F>> FriSpecificRescueTree<F, RP> {
     
-    fn hash_into_leaf(values: &[F], hasher: &mut Rescue<F>) -> F {
+    fn hash_into_leaf(values: &[F], params: &RescueTreeParams<F, RP>) -> F {
+        let mut hasher = Rescue::new(&params.rescue_params);
         for value in values.iter() {
-            hasher.absorb(*value);
+            hasher.absorb(*value, &params.rescue_params);
         }
-        hasher.squeeze()
+        hasher.squeeze(&params.rescue_params)
     }
 
     fn make_full_path(&self, leaf_index: usize, leaf_hash: F) -> Vec<F> {
@@ -56,9 +49,9 @@ impl<F: PrimeField> FriSpecificRescueTree<F> {
     }
 }
 
-impl<F: PrimeField> Oracle<F> for FriSpecificRescueTree<F> {
+impl<F: PrimeField, RP: RescueParams<F>> Oracle<F> for FriSpecificRescueTree<F, RP> {
     type Commitment = F;
-    type Params = FriSpecificRescueTreeParams;
+    type Params = RescueTreeParams<F, RP>;
     type Query = CosetCombinedQuery<F>;
 
     fn size(&self) -> usize {
@@ -79,8 +72,6 @@ impl<F: PrimeField> Oracle<F> for FriSpecificRescueTree<F> {
 
         let mut nodes = vec![F::zero(); num_nodes];
 
-        let hasher = Rescue::default();
-
         let worker = Worker::new();
 
         let mut leaf_hashes = vec![F::zero(); num_leafs];
@@ -94,7 +85,7 @@ impl<F: PrimeField> Oracle<F> for FriSpecificRescueTree<F> {
                             let idx = base_idx + j;
                             let values_start = idx * values_per_leaf;
                             let values_end = values_start + values_per_leaf;
-                            *lh = Self::hash_into_leaf(&values[values_start..values_end], &mut hasher.clone());
+                            *lh = Self::hash_into_leaf(&values[values_start..values_end], params);
                         }
                     });
                 }
@@ -119,10 +110,10 @@ impl<F: PrimeField> Oracle<F> for FriSpecificRescueTree<F> {
                                 .zip(inputs.chunks(chunk*2)) {
                     scope.spawn(move |_| {
                         for (o, i) in o.iter_mut().zip(i.chunks(2)) {
-                            let mut hasher = hasher.clone();
-                            hasher.absorb(i[0]);
-                            hasher.absorb(i[1]);
-                            *o = hasher.squeeze();
+                            let mut hasher = Rescue::new(&params.rescue_params);
+                            hasher.absorb(i[0], &params.rescue_params);
+                            hasher.absorb(i[1], &params.rescue_params);
+                            *o = hasher.squeeze(&params.rescue_params);
                         }
                     });
                 }
@@ -141,10 +132,10 @@ impl<F: PrimeField> Oracle<F> for FriSpecificRescueTree<F> {
                                 .zip(inputs.chunks(chunk*2)) {
                     scope.spawn(move |_| {
                         for (o, i) in o.iter_mut().zip(i.chunks(2)) {
-                            let mut hasher = hasher.clone();
-                            hasher.absorb(i[0]);
-                            hasher.absorb(i[1]);
-                            *o = hasher.squeeze();
+                            let mut hasher = Rescue::new(&params.rescue_params);
+                            hasher.absorb(i[0], &params.rescue_params);
+                            hasher.absorb(i[1], &params.rescue_params);
+                            *o = hasher.squeeze(&params.rescue_params);
                         }
                     });
                 }
@@ -156,8 +147,7 @@ impl<F: PrimeField> Oracle<F> for FriSpecificRescueTree<F> {
         Self {
             size: size,
             nodes: nodes,
-            params: params.clone(),
-            hasher: hasher,
+            _marker: std::marker::PhantomData::<RP>,
         }
     }
 
@@ -165,20 +155,20 @@ impl<F: PrimeField> Oracle<F> for FriSpecificRescueTree<F> {
         self.nodes[1]
     }
 
-    fn produce_query(&self, indexes: Range<usize>, values: &[F]) -> Self::Query {
+    fn produce_query(&self, indexes: Range<usize>, values: &[F], params: &Self::Params) -> Self::Query {
         // we never expect that query is mis-alligned, so check it
-        debug_assert!(indexes.start % self.params.values_per_leaf == 0);
-        debug_assert!(indexes.len() == self.params.values_per_leaf);
+        debug_assert!(indexes.start % params.values_per_leaf == 0);
+        debug_assert!(indexes.len() == params.values_per_leaf);
         debug_assert!(indexes.end < self.size());
         debug_assert!(indexes.end < values.len());
 
         let query_values = Vec::from(&values[indexes.start..indexes.end]);
 
-        let leaf_index = indexes.start / self.params.values_per_leaf;
+        let leaf_index = indexes.start / params.values_per_leaf;
 
         let pair_index = leaf_index ^ 1;
 
-        let leaf_pair_hash = Self::hash_into_leaf(&values[(pair_index*self.params.values_per_leaf)..((pair_index+1)*self.params.values_per_leaf)], &mut self.hasher.clone());
+        let leaf_pair_hash = Self::hash_into_leaf(&values[(pair_index*params.values_per_leaf)..((pair_index+1)*params.values_per_leaf)], &mut self.hasher.clone());
 
         let path = self.make_full_path(leaf_index, leaf_pair_hash);
 
@@ -194,24 +184,20 @@ impl<F: PrimeField> Oracle<F> for FriSpecificRescueTree<F> {
             return false;
         }
 
-        let hasher = Rescue::default();
-
-        let mut hash = Self::hash_into_leaf(query.values(), &mut hasher.clone());
+        let mut hash = Self::hash_into_leaf(query.values(), params);
         let mut idx = query.indexes().start / params.values_per_leaf;
 
         for el in query.path.iter() {
-            let mut temp_hasher = hasher.clone();
-            {
-                
-                if idx & 1usize == 0 {
-                    temp_hasher.absorb(hash);
-                    temp_hasher.absorb(*el);
-                } else {
-                    temp_hasher.absorb(*el);
-                    temp_hasher.absorb(hash);
-                }
+
+            let mut hasher = Rescue::new(&params.rescue_params);
+            if idx & 1usize == 0 {                   
+                hasher.absorb(hash, &params.rescue_params);
+                hasher.absorb(*el, &params.rescue_params);
+            } else {
+                hasher.absorb(*el, &params.rescue_params);
+                hasher.absorb(hash, &params.rescue_params);
             }
-            hash = temp_hasher.squeeze();
+            hash = hasher.squeeze(&params.rescue_params);
             idx >>= 1;
         }
 
@@ -219,13 +205,13 @@ impl<F: PrimeField> Oracle<F> for FriSpecificRescueTree<F> {
     }
 }
 
-impl<F: PrimeField> PartialEq for FriSpecificRescueTree<F> {
+impl<F: PrimeField, RP: RescueParams<F>> PartialEq for FriSpecificRescueTree<F, RP> {
     fn eq(&self, other: &Self) -> bool {
         self.get_commitment() == other.get_commitment()
     }
 }
 
-impl<F: PrimeField> Eq for FriSpecificRescueTree<F> {}
+impl<F: PrimeField, RP: RescueParams<F>> Eq for FriSpecificRescueTree<F, RP> {}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CosetCombinedQuery<F: PrimeField> {
@@ -252,13 +238,16 @@ impl<F: PrimeField> IopQuery<F> for CosetCombinedQuery<F> {
 #[test]
 fn make_small_iop() {
     use crate::ff::Field;
-    use crate::redshift::partial_reduction_field::Fr;
+    use crate::pairing::bn256::Fr as Fr;
+    use crate::redshift::IOP::hashes::rescue::bn256_rescue_params::BN256Rescue;
 
     const SIZE: usize = 16;
     const VALUES_PER_LEAF: usize = 4;
 
-    let params = FriSpecificRescueTreeParams {
-        values_per_leaf: VALUES_PER_LEAF
+    let params = RescueTreeParams {
+        values_per_leaf: VALUES_PER_LEAF,
+        rescue_params: BN256Rescue::default(),
+        _marker: std::marker::PhantomData::<Fr>,
     };
 
     let mut inputs = vec![];
@@ -275,7 +264,7 @@ fn make_small_iop() {
     assert!(iop.nodes.len() == (SIZE / VALUES_PER_LEAF));
     for i in 0..(SIZE / VALUES_PER_LEAF) {
         let indexes= (i*VALUES_PER_LEAF)..(VALUES_PER_LEAF + i*VALUES_PER_LEAF);
-        let query = iop.produce_query(indexes, &inputs);
+        let query = iop.produce_query(indexes, &inputs, &params);
         let valid = FriSpecificRescueTree::verify_query(&commitment, &query, &params);
         assert!(valid, "invalid query for leaf index {}", i);
     }
@@ -285,13 +274,16 @@ fn make_small_iop() {
 #[test]
 fn test_bench_large_fri_specific_iop() {
     use crate::ff::Field;
-    use crate::redshift::partial_reduction_field::Fr;
+    use crate::pairing::bn256::Fr as Fr;
+    use crate::redshift::IOP::hashes::rescue::bn256_rescue_params::BN256Rescue;
 
     const SIZE: usize = 1 << (20 + 4);
     const VALUES_PER_LEAF: usize = 8;
 
-    let params = FriSpecificRescueTreeParams {
-        values_per_leaf: VALUES_PER_LEAF
+    let params = RescueTreeParams {
+        values_per_leaf: VALUES_PER_LEAF,
+        rescue_params: BN256Rescue::default(),
+        _marker: std::marker::PhantomData::<Fr>,
     };
 
     let mut inputs = vec![];
@@ -308,7 +300,7 @@ fn test_bench_large_fri_specific_iop() {
     assert!(iop.nodes.len() == (SIZE / VALUES_PER_LEAF));
     for i in 0..128 {
         let indexes = (i*VALUES_PER_LEAF)..(VALUES_PER_LEAF + i*VALUES_PER_LEAF); 
-        let query = iop.produce_query(indexes, &inputs);
+        let query = iop.produce_query(indexes, &inputs, &params);
         let valid = FriSpecificRescueTree::verify_query(&commitment, &query, &params);
         assert!(valid, "invalid query for leaf index {}", i);
     }
