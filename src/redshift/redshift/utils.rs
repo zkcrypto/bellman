@@ -40,6 +40,7 @@ pub(crate) fn commit_single_poly<E: Engine, CP: CTPrecomputations<E::Fr>, I: Ora
         deg: usize, 
         omegas_bitreversed: &CP,
         params: &FriParams,
+        oracle_params: &I::Params,
         worker: &Worker
     ) -> Result<SinglePolyCommitmentData<E::Fr, I>, SynthesisError> 
 where E::Fr : PartialTwoBitReductionField {
@@ -50,7 +51,6 @@ where E::Fr : PartialTwoBitReductionField {
         &E::Fr::multiplicative_generator()
     )?;
 
-    let oracle_params = I::Params::from(1 << params.collapsing_factor);
     let oracle = I::create(&lde.as_ref(), &oracle_params);
 
     Ok(SinglePolyCommitmentData::<E::Fr, _> {
@@ -306,6 +306,7 @@ pub(crate) fn multiopening<E: Engine, P: FriPrecomputations<E::Fr>, I: Oracle<E:
         common_deg: usize,
         omegas_inv_bitreversed: &P,
         params: &FriParams,
+        oracle_params: &I::Params,
         worker: &Worker,
         channel: &mut C,
     ) -> Result<(FriProofPrototype<E::Fr, I>), SynthesisError> 
@@ -444,7 +445,8 @@ where E::Fr : PartialTwoBitReductionField
         omegas_inv_bitreversed,
         &worker,
         channel,
-        &params,
+        params,
+        oracle_params,
     );
 
     fri_prototype

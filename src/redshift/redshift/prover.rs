@@ -245,14 +245,14 @@ pub fn prove_with_setup_precomputed<E: Engine, C: Circuit<E>, CP: CTPrecomputati
     circuit: &C,
     setup_precomp: &RedshiftSetupPrecomputation<E::Fr, I>,
     params: &FriParams,
+    oracle_params: &I::Params,
+    channel: &mut T,
     omegas_bitreversed: &CP,
     omegas_inv_bitreversed: &CPI,
     bitreversed_omegas_for_fri: &FP      
 ) -> Result<RedshiftProof<E::Fr, I>, SynthesisError> 
 where E::Fr : PartialTwoBitReductionField
-{
-    let mut channel = T::new();
-    
+{   
     let mut assembly = ProvingAssembly::<E>::new();
     circuit.synthesize(&mut assembly)?;
     assembly.finalize();
@@ -279,9 +279,9 @@ where E::Fr : PartialTwoBitReductionField
 
     // polynomials inside of these are values on cosets
 
-    let a_commitment_data = commit_single_poly::<E, CP, I>(&a_poly, n, omegas_bitreversed, &params, &worker)?;
-    let b_commitment_data = commit_single_poly::<E, CP, I>(&b_poly, n, omegas_bitreversed, &params, &worker)?;
-    let c_commitment_data = commit_single_poly::<E, CP, I>(&c_poly, n, omegas_bitreversed, &params, &worker)?;
+    let a_commitment_data = commit_single_poly::<E, CP, I>(&a_poly, n, omegas_bitreversed, &params, oracle_params, &worker)?;
+    let b_commitment_data = commit_single_poly::<E, CP, I>(&b_poly, n, omegas_bitreversed, &params, oracle_params, &worker)?;
+    let c_commitment_data = commit_single_poly::<E, CP, I>(&c_poly, n, omegas_bitreversed, &params, oracle_params, &worker)?;
 
     channel.consume(&a_commitment_data.oracle.get_commitment());
     channel.consume(&b_commitment_data.oracle.get_commitment());
@@ -389,8 +389,8 @@ where E::Fr : PartialTwoBitReductionField
 
     // polynomials inside of these is are values in cosets
 
-    let z_1_commitment_data = commit_single_poly::<E, CP, I>(&z_1, n, omegas_bitreversed, &params, &worker)?;
-    let z_2_commitment_data = commit_single_poly::<E, CP, I>(&z_2, n, omegas_bitreversed, &params, &worker)?;
+    let z_1_commitment_data = commit_single_poly::<E, CP, I>(&z_1, n, omegas_bitreversed, &params, oracle_params, &worker)?;
+    let z_2_commitment_data = commit_single_poly::<E, CP, I>(&z_2, n, omegas_bitreversed, &params, oracle_params, &worker)?;
 
     channel.consume(&z_1_commitment_data.oracle.get_commitment());
     channel.consume(&z_2_commitment_data.oracle.get_commitment());
@@ -682,9 +682,9 @@ where E::Fr : PartialTwoBitReductionField
     let t_poly_mid = t_poly_parts.pop().expect("mid exists");
     let t_poly_low = t_poly_parts.pop().expect("low exists");
 
-    let t_poly_high_commitment_data = commit_single_poly::<E, CP, I>(&t_poly_high, n, omegas_bitreversed, &params, &worker)?;
-    let t_poly_mid_commitment_data = commit_single_poly::<E, CP, I>(&t_poly_mid, n, omegas_bitreversed, &params, &worker)?;
-    let t_poly_low_commitment_data = commit_single_poly::<E, CP, I>(&t_poly_low, n, omegas_bitreversed, &params, &worker)?;
+    let t_poly_high_commitment_data = commit_single_poly::<E, CP, I>(&t_poly_high, n, omegas_bitreversed, &params, oracle_params, &worker)?;
+    let t_poly_mid_commitment_data = commit_single_poly::<E, CP, I>(&t_poly_mid, n, omegas_bitreversed, &params, oracle_params, &worker)?;
+    let t_poly_low_commitment_data = commit_single_poly::<E, CP, I>(&t_poly_low, n, omegas_bitreversed, &params, oracle_params, &worker)?;
 
     channel.consume(&t_poly_low_commitment_data.oracle.get_commitment());
     channel.consume(&t_poly_mid_commitment_data.oracle.get_commitment());
@@ -991,7 +991,8 @@ where E::Fr : PartialTwoBitReductionField
         vec![witness_opening_request_at_z_and_z_omega, setup_opening_request], 
         n,
         bitreversed_omegas_for_fri, 
-        &params, 
+        &params,
+        oracle_params,
         &worker, 
         &mut channel,
     )?;
@@ -1059,6 +1060,7 @@ where E::Fr : PartialTwoBitReductionField
         &batched_oracle,
         oracle_values,
         params,
+        oracle_params,
     )?;
 
     let redshift_proof = RedshiftProof {

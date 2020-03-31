@@ -20,6 +20,7 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
         natural_element_indexes: Vec<usize>,
         fri_challenges: &[F],
         params: &FriParams,
+        oracle_params: &O::Params,
         upper_layer_combiner: Func,
     ) -> Result<bool, SynthesisError> {
 
@@ -45,7 +46,6 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
         let coset_size = 1 << collapsing_factor;
         let initial_domain_size = domain.size as usize;
         let log_initial_domain_size = log2_floor(initial_domain_size) as usize;
-        let oracle_params = <O as Oracle<F>>::Params::from(coset_size);
 
         if natural_element_indexes.len() != params.R || proof.final_coefficients.len() > params.final_degree_plus_one {
             return Ok(false);

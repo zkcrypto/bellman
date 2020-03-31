@@ -158,6 +158,7 @@ impl<E: Engine> GeneratorAssembly<E> {
 pub fn setup_with_precomputations<E: Engine, C: Circuit<E>, CP: CTPrecomputations<E::Fr>, I: Oracle<E::Fr>, T: Channel<E::Fr, Input = I::Commitment>> (
     circuit: &C,
     params: &mut FriParams,
+    oracle_params: &I::Params,
     omegas_bitreversed: &CP,
     channel: &mut T,
     ) -> Result<(RedshiftSetup<E::Fr, I>, RedshiftSetupPrecomputation<E::Fr, I>), SynthesisError>
@@ -181,16 +182,16 @@ where E::Fr : PartialTwoBitReductionField
 
     // we prefer to pass degree explicitely (in order to implement hiding later)
     // we also have plans to hold the case of various degrees polynomials
-    let q_l_commitment_data = commit_single_poly::<E, CP, I>(&q_l, n, omegas_bitreversed, &params, &worker)?;
-    let q_r_commitment_data = commit_single_poly::<E, CP, I>(&q_r, n, omegas_bitreversed, &params, &worker)?;
-    let q_o_commitment_data = commit_single_poly::<E, CP, I>(&q_o, n, omegas_bitreversed, &params, &worker)?;
-    let q_m_commitment_data = commit_single_poly::<E, CP, I>(&q_m, n, omegas_bitreversed, &params, &worker)?;
-    let q_c_commitment_data = commit_single_poly::<E, CP, I>(&q_c, n, omegas_bitreversed, &params, &worker)?;
-    let q_add_sel_commitment_data = commit_single_poly::<E, CP, I>(&q_add_sel, n, omegas_bitreversed, &params, &worker)?;
-    let s_id_commitment_data = commit_single_poly::<E, CP, I>(&s_id, n, omegas_bitreversed, &params, &worker)?;
-    let sigma_1_commitment_data = commit_single_poly::<E, CP, I>(&sigma_1, n, omegas_bitreversed, &params, &worker)?;
-    let sigma_2_commitment_data = commit_single_poly::<E, CP, I>(&sigma_2, n, omegas_bitreversed, &params, &worker)?;
-    let sigma_3_commitment_data = commit_single_poly::<E, CP, I>(&sigma_3, n, omegas_bitreversed, &params, &worker)?;
+    let q_l_commitment_data = commit_single_poly::<E, CP, I>(&q_l, n, omegas_bitreversed, &params, oracle_params, &worker)?;
+    let q_r_commitment_data = commit_single_poly::<E, CP, I>(&q_r, n, omegas_bitreversed, &params, oracle_params, &worker)?;
+    let q_o_commitment_data = commit_single_poly::<E, CP, I>(&q_o, n, omegas_bitreversed, &params, oracle_params, &worker)?;
+    let q_m_commitment_data = commit_single_poly::<E, CP, I>(&q_m, n, omegas_bitreversed, &params, oracle_params, &worker)?;
+    let q_c_commitment_data = commit_single_poly::<E, CP, I>(&q_c, n, omegas_bitreversed, &params, oracle_params, &worker)?;
+    let q_add_sel_commitment_data = commit_single_poly::<E, CP, I>(&q_add_sel, n, omegas_bitreversed, &params, oracle_params, &worker)?;
+    let s_id_commitment_data = commit_single_poly::<E, CP, I>(&s_id, n, omegas_bitreversed, &params, oracle_params, &worker)?;
+    let sigma_1_commitment_data = commit_single_poly::<E, CP, I>(&sigma_1, n, omegas_bitreversed, &params, oracle_params, &worker)?;
+    let sigma_2_commitment_data = commit_single_poly::<E, CP, I>(&sigma_2, n, omegas_bitreversed, &params, oracle_params, &worker)?;
+    let sigma_3_commitment_data = commit_single_poly::<E, CP, I>(&sigma_3, n, omegas_bitreversed, &params, oracle_params, &worker)?;
 
     channel.consume(&q_l_commitment_data.oracle.get_commitment());
     channel.consume(&q_r_commitment_data.oracle.get_commitment());

@@ -81,6 +81,8 @@ mod test {
         r: usize,
         collapsing_factor : usize,
         output_coeffs_at_degree_plus_one: usize,
+        oracle_params: I::Params,
+        mut channel: T,
     ) -> Result<bool, SynthesisError>
     where E::Fr : PartialTwoBitReductionField 
     {
@@ -101,11 +103,11 @@ mod test {
         };
 
         let omegas_bitreversed = BitReversedOmegas::<E::Fr>::new_for_domain_size(num_steps.next_power_of_two());
-        let mut channel = T::new();
 
         let (_setup, setup_precomp) = setup_with_precomputations::<E, BenchmarkCircuit<E>,  BitReversedOmegas<E::Fr>, I, T>(
             &circuit,
             &mut params,
+            &oracle_params,
             &omegas_bitreversed,
             &mut channel,
         )?;
@@ -117,7 +119,9 @@ mod test {
             OmegasInvBitreversed::<E::Fr>, CosetOmegasInvBitreversed::<E::Fr>, I, T> (
             &circuit,
             &setup_precomp, 
-            &params, 
+            &params,
+            &oracle_params,
+            &mut channel, 
             &omegas_bitreversed, 
             &omegas_inv_bitreversed,
             &omegas_inv_bitreversed_for_fri

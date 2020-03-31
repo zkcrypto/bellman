@@ -4,6 +4,8 @@ pub mod domains;
 pub mod fft;
 //different abstractions for an oracle, commitments, etc
 pub mod IOP;
+// unsued for now as partial_reduction is not implemented for BN field yet
+// TODOL also replace Engine with TransparentEngine
 pub mod partial_reduction_field;
 pub mod polynomials;
 //abstraction layer over different commitments schemes (in the future)

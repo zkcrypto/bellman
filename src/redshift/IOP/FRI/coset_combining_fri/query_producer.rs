@@ -17,7 +17,7 @@ impl<F: PrimeField, I: Oracle<F>> FriProofPrototype<F, I>
         upper_layer_oracles: &'a BatchedOracle<F, I>,
         upper_layer_values: Vec<&[F]>,
         params: &FriParams,
-        oracle_params: &O::Params,
+        oracle_params: &I::Params,
     ) -> Result<FriProof<F, I>, SynthesisError> {
 
         let mut commitments = vec![];
