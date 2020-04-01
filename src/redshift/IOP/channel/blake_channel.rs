@@ -58,6 +58,10 @@ impl<F: PrimeField> Channel<F> for Blake2sChannel<F> {
         let value = *(self.state.finalize().as_array());
         let mut slice = &value[..8];
         slice.read_u64::<BigEndian>().unwrap()
-    }    
+    }
+
+    fn reset(&mut self) {
+        self.state = CHANNEL_BLAKE2S_PARAMS.clone();
+    }  
 }
 

@@ -4,6 +4,8 @@
 //! 
 //! NB: current implementation works only with base fields of length 256 bits = 8 limbs
 
+#![allow(non_snake_case)]
+
 use crate::ff::{PrimeField};
 
 pub mod bn256_rescue_params;
@@ -56,7 +58,6 @@ fn rescue_f<F: PrimeField, Params: RescueParams<F>>(
     params: &Params,
 ) {
 
-    let mds_matrix = params.get_mds_matrix();
     let RESCUE_M = params.t();
     let RESCUE_ROUNDS = params.get_num_rescue_rounds();
     let constants = params.get_constants();
@@ -66,15 +67,16 @@ fn rescue_f<F: PrimeField, Params: RescueParams<F>>(
     }
 
     for r in 0..2 * RESCUE_ROUNDS {
-        let exp = if r % 2 == 0 {
-            params.rescue_invalpha()
-        } else {
-            &[params.rescue_alpha(), 0, 0, 0]
-        };
+
         for entry in state.iter_mut() {
-            *entry = entry.pow(exp);
+            if r % 2 == 0 {
+                *entry = entry.pow(params.rescue_invalpha());
+            }
+            else {
+                *entry = entry.pow(&[params.rescue_alpha()]);
+            }
         }
-        for (input, output) in  mds(state, params).iter().zip(state.iter()) {
+        for (input, output) in  mds(state, params).iter().zip(state.iter_mut()) {
             *output = *input;
         }
         for i in 0..RESCUE_M {
@@ -104,7 +106,7 @@ fn rescue_duplex<F: PrimeField, Params: RescueParams<F>>(
 
     let SPONGE_RATE = params.r();
     let OUTPUT_RATE = params.c();
-    pad(&mut input, params);
+    pad(input, params);
 
     for i in 0..SPONGE_RATE {
         state[i].add_assign(&input[i]);
@@ -125,8 +127,12 @@ enum SpongeState<F: PrimeField> {
 }
 
 impl<F: PrimeField> SpongeState<F> {
-    fn absorb(val: F, SPONGE_RATE: usize) -> Self {
+    fn absorb(val: F) -> Self {
         SpongeState::Absorbing(vec![val])
+    }
+
+    fn default() -> Self {
+        SpongeState::Absorbing(vec![])
     }
 }
 
@@ -141,7 +147,6 @@ impl<F: PrimeField, RP: RescueParams<F>> Rescue<F, RP> {
     pub fn new(params: &RP) -> Self {
         
         let RESCUE_M = params.t();
-        let SPONGE_STATE = params.r();
         let state = (0..RESCUE_M).map(|_| F::zero()).collect();
 
         Rescue {
@@ -154,6 +159,7 @@ impl<F: PrimeField, RP: RescueParams<F>> Rescue<F, RP> {
     pub fn clear_state(&mut self) {
         let state_len = self.state.len();
         self.state = (0..state_len).map(|_| F::zero()).collect();
+        self.sponge = SpongeState::default();
     }
 
     pub fn absorb(&mut self, val: F, params: &RP) {
@@ -167,11 +173,11 @@ impl<F: PrimeField, RP: RescueParams<F>> Rescue<F, RP> {
 
                 // We've already absorbed as many elements as we can
                 let _ = rescue_duplex(&mut self.state, input, params);
-                self.sponge = SpongeState::absorb(val, SPONGE_STATE);
+                self.sponge = SpongeState::absorb(val);
             }
             SpongeState::Squeezing(_) => {
                 // Drop the remaining output elements
-                self.sponge = SpongeState::absorb(val, SPONGE_STATE);
+                self.sponge = SpongeState::absorb(val);
             }
         }
     }

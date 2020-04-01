@@ -18,6 +18,8 @@ pub trait Channel<F: PrimeField>: Sized {
     fn consume(&mut self, data: &Self::Input);
     fn produce_field_element_challenge(&mut self) -> F;
     fn produce_uint_challenge(&mut self) -> u64;
+    // return to intial state
+    fn reset(&mut self);
 }
 
 

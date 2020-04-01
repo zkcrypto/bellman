@@ -244,15 +244,17 @@ pub fn prove_with_setup_precomputed<E: Engine, C: Circuit<E>, CP: CTPrecomputati
 (
     circuit: &C,
     setup_precomp: &RedshiftSetupPrecomputation<E::Fr, I>,
-    params: &FriParams,
+    fri_params: &FriParams,
     oracle_params: &I::Params,
-    channel: &mut T,
+    channel_params: &T::Params,
     omegas_bitreversed: &CP,
     omegas_inv_bitreversed: &CPI,
     bitreversed_omegas_for_fri: &FP      
 ) -> Result<RedshiftProof<E::Fr, I>, SynthesisError> 
-where E::Fr : PartialTwoBitReductionField
+//where E::Fr : PartialTwoBitReductionField
 {   
+    let mut channel = T::new(channel_params);
+    
     let mut assembly = ProvingAssembly::<E>::new();
     circuit.synthesize(&mut assembly)?;
     assembly.finalize();
@@ -264,7 +266,7 @@ where E::Fr : PartialTwoBitReductionField
     // we need n+1 to be a power of two and can not have n to be power of two
     let required_domain_size = n + 1;
     assert!(required_domain_size.is_power_of_two());
-    assert_eq!(n+1, params.initial_degree_plus_one);
+    assert_eq!(fri_params.initial_degree_plus_one.get(), n+1);
 
     let (w_l, w_r, w_o) = assembly.make_wire_assingments();
 
@@ -273,15 +275,17 @@ where E::Fr : PartialTwoBitReductionField
     let w_r = Polynomial::<E::Fr, Values>::from_values_unpadded(w_r)?;
     let w_o = Polynomial::<E::Fr, Values>::from_values_unpadded(w_o)?;
 
-    let a_poly = w_l.clone_padded_to_domain()?.ifft_using_bitreversed_ntt_with_partial_reduction(&worker, omegas_inv_bitreversed, &E::Fr::one())?;
-    let b_poly = w_r.clone_padded_to_domain()?.ifft_using_bitreversed_ntt_with_partial_reduction(&worker, omegas_inv_bitreversed, &E::Fr::one())?;
-    let c_poly = w_o.clone_padded_to_domain()?.ifft_using_bitreversed_ntt_with_partial_reduction(&worker, omegas_inv_bitreversed, &E::Fr::one())?;
+    // TODO: replace by ifft_using_bitreversed_ntt_with_partial_reduction
+
+    let a_poly = w_l.clone_padded_to_domain()?.ifft_using_bitreversed_ntt(&worker, omegas_inv_bitreversed, &E::Fr::one())?;
+    let b_poly = w_r.clone_padded_to_domain()?.ifft_using_bitreversed_ntt(&worker, omegas_inv_bitreversed, &E::Fr::one())?;
+    let c_poly = w_o.clone_padded_to_domain()?.ifft_using_bitreversed_ntt(&worker, omegas_inv_bitreversed, &E::Fr::one())?;
 
     // polynomials inside of these are values on cosets
 
-    let a_commitment_data = commit_single_poly::<E, CP, I>(&a_poly, n, omegas_bitreversed, &params, oracle_params, &worker)?;
-    let b_commitment_data = commit_single_poly::<E, CP, I>(&b_poly, n, omegas_bitreversed, &params, oracle_params, &worker)?;
-    let c_commitment_data = commit_single_poly::<E, CP, I>(&c_poly, n, omegas_bitreversed, &params, oracle_params, &worker)?;
+    let a_commitment_data = commit_single_poly::<E, CP, I>(&a_poly, n, omegas_bitreversed, &fri_params, oracle_params, &worker)?;
+    let b_commitment_data = commit_single_poly::<E, CP, I>(&b_poly, n, omegas_bitreversed, &fri_params, oracle_params, &worker)?;
+    let c_commitment_data = commit_single_poly::<E, CP, I>(&c_poly, n, omegas_bitreversed, &fri_params, oracle_params, &worker)?;
 
     channel.consume(&a_commitment_data.oracle.get_commitment());
     channel.consume(&b_commitment_data.oracle.get_commitment());
@@ -384,13 +388,14 @@ where E::Fr : PartialTwoBitReductionField
     assert!(z_2.as_ref().last().expect("must exist") == z_1.as_ref().last().expect("must exist"));
 
     // interpolate on the main domain
-    let z_1 = z_1.ifft_using_bitreversed_ntt_with_partial_reduction(&worker, omegas_inv_bitreversed, &E::Fr::one())?;
-    let z_2 = z_2.ifft_using_bitreversed_ntt_with_partial_reduction(&worker, omegas_inv_bitreversed, &E::Fr::one())?;
+    // TODO: replace by ifft_using_bitreversed_ntt_with_partial_reduction
+    let z_1 = z_1.ifft_using_bitreversed_ntt(&worker, omegas_inv_bitreversed, &E::Fr::one())?;
+    let z_2 = z_2.ifft_using_bitreversed_ntt(&worker, omegas_inv_bitreversed, &E::Fr::one())?;
 
     // polynomials inside of these is are values in cosets
 
-    let z_1_commitment_data = commit_single_poly::<E, CP, I>(&z_1, n, omegas_bitreversed, &params, oracle_params, &worker)?;
-    let z_2_commitment_data = commit_single_poly::<E, CP, I>(&z_2, n, omegas_bitreversed, &params, oracle_params, &worker)?;
+    let z_1_commitment_data = commit_single_poly::<E, CP, I>(&z_1, n, omegas_bitreversed, &fri_params, oracle_params, &worker)?;
+    let z_2_commitment_data = commit_single_poly::<E, CP, I>(&z_2, n, omegas_bitreversed, &fri_params, oracle_params, &worker)?;
 
     channel.consume(&z_1_commitment_data.oracle.get_commitment());
     channel.consume(&z_2_commitment_data.oracle.get_commitment());
@@ -401,7 +406,7 @@ where E::Fr : PartialTwoBitReductionField
     let mut z_2_shifted = z_2.clone();
     z_2_shifted.distribute_powers(&worker, z_2.omega);
 
-    let partition_factor = params.lde_factor / 4;
+    let partition_factor = fri_params.lde_factor / 4;
 
     assert!(partition_factor > 0);
     assert!(partition_factor.is_power_of_two());
@@ -442,19 +447,21 @@ where E::Fr : PartialTwoBitReductionField
     // as prover need to divide also
 
     let PI = Polynomial::<E::Fr, Values>::from_values_unpadded(assembly.make_public_inputs_assingment().clone())?;
-    let PI = PI.ifft_using_bitreversed_ntt_with_partial_reduction(&worker, omegas_inv_bitreversed, &E::Fr::one())?;
-    let PI_on_domain = PI.clone().bitreversed_lde_using_bitreversed_ntt_with_partial_reduction(
+    // TODO: replace by ifft_using_bitreversed_ntt_with_partial_reduction
+    let PI = PI.ifft_using_bitreversed_ntt(&worker, omegas_inv_bitreversed, &E::Fr::one())?;
+    let PI_on_domain = PI.clone().bitreversed_lde_using_bitreversed_ntt(
         &worker, 
-        params.lde_factor, 
+        fri_params.lde_factor, 
         omegas_bitreversed, 
         &E::Fr::multiplicative_generator()
     )?;
 
     let mut c_shifted = c_poly.clone();
     c_shifted.distribute_powers(&worker, c_poly.omega);
-    let c_shifted_coset_lde_bitreversed = c_shifted.clone().bitreversed_lde_using_bitreversed_ntt_with_partial_reduction(
+    // TODO: replace by ifft_using_bitreversed_ntt_with_partial_reduction
+    let c_shifted_coset_lde_bitreversed = c_shifted.clone().bitreversed_lde_using_bitreversed_ntt(
         &worker, 
-        params.lde_factor, 
+        fri_params.lde_factor, 
         omegas_bitreversed, 
         &E::Fr::multiplicative_generator()
     )?;
@@ -515,8 +522,8 @@ where E::Fr : PartialTwoBitReductionField
     let z_1_coset_lde_bitreversed = z_1_commitment_data.poly.clone_subset_assuming_bitreversed(partition_factor)?;
 
     assert!(z_1_coset_lde_bitreversed.size() == required_domain_size*4);
-
-    let z_1_shifted_coset_lde_bitreversed = z_1_shifted.clone().bitreversed_lde_using_bitreversed_ntt_with_partial_reduction(
+    // TODO: replace by ifft_using_bitreversed_ntt_with_partial_reduction
+    let z_1_shifted_coset_lde_bitreversed = z_1_shifted.clone().bitreversed_lde_using_bitreversed_ntt(
         &worker, 
         4, 
         omegas_bitreversed, 
@@ -528,8 +535,8 @@ where E::Fr : PartialTwoBitReductionField
     let z_2_coset_lde_bitreversed = z_2_commitment_data.poly.clone_subset_assuming_bitreversed(partition_factor)?;
 
     assert!(z_2_coset_lde_bitreversed.size() == required_domain_size*4);
-
-    let z_2_shifted_coset_lde_bitreversed = z_2_shifted.clone().bitreversed_lde_using_bitreversed_ntt_with_partial_reduction(
+    // TODO: replace by ifft_using_bitreversed_ntt_with_partial_reduction
+    let z_2_shifted_coset_lde_bitreversed = z_2_shifted.clone().bitreversed_lde_using_bitreversed_ntt(
         &worker, 
         4, 
         omegas_bitreversed, 
@@ -625,8 +632,8 @@ where E::Fr : PartialTwoBitReductionField
     {
         let mut z_1_minus_z_2_shifted = z_1_shifted_coset_lde_bitreversed.clone();
         z_1_minus_z_2_shifted.sub_assign(&worker, &z_2_shifted_coset_lde_bitreversed);
-
-        let l_coset_lde_bitreversed = l_n_minus_one.clone().bitreversed_lde_using_bitreversed_ntt_with_partial_reduction(
+        // TODO: replace by ifft_using_bitreversed_ntt_with_partial_reduction
+        let l_coset_lde_bitreversed = l_n_minus_one.clone().bitreversed_lde_using_bitreversed_ntt(
             &worker, 
             4, 
             omegas_bitreversed, 
@@ -646,8 +653,8 @@ where E::Fr : PartialTwoBitReductionField
     {
         let mut z_1_minus_z_2 = z_1_coset_lde_bitreversed.clone();
         z_1_minus_z_2.sub_assign(&worker, &z_2_coset_lde_bitreversed);
-
-        let l_coset_lde_bitreversed = l_0.clone().bitreversed_lde_using_bitreversed_ntt_with_partial_reduction(
+        // TODO: replace by ifft_using_bitreversed_ntt_with_partial_reduction
+        let l_coset_lde_bitreversed = l_0.clone().bitreversed_lde_using_bitreversed_ntt(
             &worker, 
             4, 
             omegas_bitreversed, 
@@ -682,9 +689,9 @@ where E::Fr : PartialTwoBitReductionField
     let t_poly_mid = t_poly_parts.pop().expect("mid exists");
     let t_poly_low = t_poly_parts.pop().expect("low exists");
 
-    let t_poly_high_commitment_data = commit_single_poly::<E, CP, I>(&t_poly_high, n, omegas_bitreversed, &params, oracle_params, &worker)?;
-    let t_poly_mid_commitment_data = commit_single_poly::<E, CP, I>(&t_poly_mid, n, omegas_bitreversed, &params, oracle_params, &worker)?;
-    let t_poly_low_commitment_data = commit_single_poly::<E, CP, I>(&t_poly_low, n, omegas_bitreversed, &params, oracle_params, &worker)?;
+    let t_poly_high_commitment_data = commit_single_poly::<E, CP, I>(&t_poly_high, n, omegas_bitreversed, fri_params, oracle_params, &worker)?;
+    let t_poly_mid_commitment_data = commit_single_poly::<E, CP, I>(&t_poly_mid, n, omegas_bitreversed, fri_params, oracle_params, &worker)?;
+    let t_poly_low_commitment_data = commit_single_poly::<E, CP, I>(&t_poly_low, n, omegas_bitreversed, fri_params, oracle_params, &worker)?;
 
     channel.consume(&t_poly_low_commitment_data.oracle.get_commitment());
     channel.consume(&t_poly_mid_commitment_data.oracle.get_commitment());
@@ -991,15 +998,15 @@ where E::Fr : PartialTwoBitReductionField
         vec![witness_opening_request_at_z_and_z_omega, setup_opening_request], 
         n,
         bitreversed_omegas_for_fri, 
-        &params,
+        fri_params,
         oracle_params,
         &worker, 
         &mut channel,
     )?;
 
     // now we need to generate FRI query challenges!
-    let domain_size = n * params.lde_factor;
-    let natural_first_element_indexes = (0..params.R).map(|_| channel.produce_uint_challenge() as usize % domain_size).collect();
+    let domain_size = n * fri_params.lde_factor;
+    let natural_first_element_indexes = (0..fri_params.R).map(|_| channel.produce_uint_challenge() as usize % domain_size).collect();
     let batched_oracle = BatchedOracle::create(vec![
         // witness polynomials
         ("a", &a_commitment_data.oracle),
@@ -1059,7 +1066,7 @@ where E::Fr : PartialTwoBitReductionField
         natural_first_element_indexes,
         &batched_oracle,
         oracle_values,
-        params,
+        fri_params,
         oracle_params,
     )?;
 

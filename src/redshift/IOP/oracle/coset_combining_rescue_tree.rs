@@ -4,26 +4,26 @@ use super::*;
 use crate::redshift::IOP::hashes::rescue::{Rescue, RescueParams};
 
 #[derive(Debug)]
-pub struct FriSpecificRescueTree<F: PrimeField, RP: RescueParams<F>> {
+pub struct FriSpecificRescueTree<'a, F: PrimeField, RP: RescueParams<F>> {
     size: usize,
     nodes: Vec<F>,
-    _marker: std::marker::PhantomData<RP>,
+    rescue_params: &'a RP,
 }
 
-pub struct RescueTreeParams<F: PrimeField, RP: RescueParams<F>> {
+pub struct RescueTreeParams<'a, F: PrimeField, RP: RescueParams<F>> {
     pub values_per_leaf: usize,
-    pub rescue_params: RP,
-    _marker: std::marker::PhantomData<F>,
+    pub rescue_params: &'a RP,
+    pub _marker: std::marker::PhantomData<F>,
 }
 
-impl<F: PrimeField, RP: RescueParams<F>> FriSpecificRescueTree<F, RP> {
+impl<'a, F: PrimeField, RP: RescueParams<F>> FriSpecificRescueTree<'a, F, RP> {
     
     fn hash_into_leaf(values: &[F], params: &RescueTreeParams<F, RP>) -> F {
-        let mut hasher = Rescue::new(&params.rescue_params);
+        let mut hasher = Rescue::new(params.rescue_params);
         for value in values.iter() {
-            hasher.absorb(*value, &params.rescue_params);
+            hasher.absorb(*value, params.rescue_params);
         }
-        hasher.squeeze(&params.rescue_params)
+        hasher.squeeze(params.rescue_params)
     }
 
     fn make_full_path(&self, leaf_index: usize, leaf_hash: F) -> Vec<F> {
@@ -49,9 +49,9 @@ impl<F: PrimeField, RP: RescueParams<F>> FriSpecificRescueTree<F, RP> {
     }
 }
 
-impl<F: PrimeField, RP: RescueParams<F>> Oracle<F> for FriSpecificRescueTree<F, RP> {
+impl<'a, F: PrimeField, RP: RescueParams<F>> Oracle<F> for FriSpecificRescueTree<'a, F, RP> {
     type Commitment = F;
-    type Params = RescueTreeParams<F, RP>;
+    type Params = RescueTreeParams<'a, F, RP>;
     type Query = CosetCombinedQuery<F>;
 
     fn size(&self) -> usize {
@@ -110,10 +110,10 @@ impl<F: PrimeField, RP: RescueParams<F>> Oracle<F> for FriSpecificRescueTree<F, 
                                 .zip(inputs.chunks(chunk*2)) {
                     scope.spawn(move |_| {
                         for (o, i) in o.iter_mut().zip(i.chunks(2)) {
-                            let mut hasher = Rescue::new(&params.rescue_params);
-                            hasher.absorb(i[0], &params.rescue_params);
-                            hasher.absorb(i[1], &params.rescue_params);
-                            *o = hasher.squeeze(&params.rescue_params);
+                            let mut hasher = Rescue::new(params.rescue_params);
+                            hasher.absorb(i[0], params.rescue_params);
+                            hasher.absorb(i[1], params.rescue_params);
+                            *o = hasher.squeeze(params.rescue_params);
                         }
                     });
                 }
@@ -132,10 +132,10 @@ impl<F: PrimeField, RP: RescueParams<F>> Oracle<F> for FriSpecificRescueTree<F, 
                                 .zip(inputs.chunks(chunk*2)) {
                     scope.spawn(move |_| {
                         for (o, i) in o.iter_mut().zip(i.chunks(2)) {
-                            let mut hasher = Rescue::new(&params.rescue_params);
-                            hasher.absorb(i[0], &params.rescue_params);
-                            hasher.absorb(i[1], &params.rescue_params);
-                            *o = hasher.squeeze(&params.rescue_params);
+                            let mut hasher = Rescue::new(params.rescue_params);
+                            hasher.absorb(i[0], params.rescue_params);
+                            hasher.absorb(i[1], params.rescue_params);
+                            *o = hasher.squeeze(params.rescue_params);
                         }
                     });
                 }
@@ -147,7 +147,7 @@ impl<F: PrimeField, RP: RescueParams<F>> Oracle<F> for FriSpecificRescueTree<F, 
         Self {
             size: size,
             nodes: nodes,
-            _marker: std::marker::PhantomData::<RP>,
+            rescue_params: params.rescue_params,
         }
     }
 
@@ -190,15 +190,15 @@ impl<F: PrimeField, RP: RescueParams<F>> Oracle<F> for FriSpecificRescueTree<F, 
 
         for el in query.path.iter() {
 
-            let mut hasher = Rescue::new(&params.rescue_params);
+            let mut hasher = Rescue::new(params.rescue_params);
             if idx & 1usize == 0 {                   
-                hasher.absorb(hash, &params.rescue_params);
-                hasher.absorb(*el, &params.rescue_params);
+                hasher.absorb(hash, params.rescue_params);
+                hasher.absorb(*el, params.rescue_params);
             } else {
-                hasher.absorb(*el, &params.rescue_params);
-                hasher.absorb(hash, &params.rescue_params);
+                hasher.absorb(*el, params.rescue_params);
+                hasher.absorb(hash, params.rescue_params);
             }
-            hash = hasher.squeeze(&params.rescue_params);
+            hash = hasher.squeeze(params.rescue_params);
             idx >>= 1;
         }
 
@@ -206,13 +206,13 @@ impl<F: PrimeField, RP: RescueParams<F>> Oracle<F> for FriSpecificRescueTree<F, 
     }
 }
 
-impl<F: PrimeField, RP: RescueParams<F>> PartialEq for FriSpecificRescueTree<F, RP> {
+impl<'a, F: PrimeField, RP: RescueParams<F>> PartialEq for FriSpecificRescueTree<'a, F, RP> {
     fn eq(&self, other: &Self) -> bool {
         self.get_commitment() == other.get_commitment()
     }
 }
 
-impl<F: PrimeField, RP: RescueParams<F>> Eq for FriSpecificRescueTree<F, RP> {}
+impl<'a, F: PrimeField, RP: RescueParams<F>> Eq for FriSpecificRescueTree<'a, F, RP> {}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CosetCombinedQuery<F: PrimeField> {
@@ -245,9 +245,11 @@ fn make_small_iop() {
     const SIZE: usize = 16;
     const VALUES_PER_LEAF: usize = 4;
 
+    let bn256_params = BN256Rescue::default();
+
     let params = RescueTreeParams {
         values_per_leaf: VALUES_PER_LEAF,
-        rescue_params: BN256Rescue::default(),
+        rescue_params: &bn256_params,
         _marker: std::marker::PhantomData::<Fr>,
     };
 
@@ -281,9 +283,11 @@ fn test_bench_large_fri_specific_iop() {
     const SIZE: usize = 1 << (20 + 4);
     const VALUES_PER_LEAF: usize = 8;
 
+    let bn256_params = BN256Rescue::default();
+
     let params = RescueTreeParams {
         values_per_leaf: VALUES_PER_LEAF,
-        rescue_params: BN256Rescue::default(),
+        rescue_params: &bn256_params,
         _marker: std::marker::PhantomData::<Fr>,
     };
 

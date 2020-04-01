@@ -19,12 +19,13 @@ pub fn verify_proof<E: Engine, I: Oracle<E::Fr>, T: Channel<E::Fr, Input = I::Co
     proof: RedshiftProof<E::Fr, I>,
     public_inputs: &[E::Fr],
     setup_precomp: &RedshiftSetupPrecomputation<E::Fr, I>,
-    params: &FriParams,
+    fri_params: &FriParams,
     oracle_params: &I::Params,
-    channel: &mut T,
+    channel_params: &T::Params,
 ) -> Result<bool, SynthesisError> 
 where E::Fr : PrimeField
 {
+    let mut channel = T::new(channel_params);
 
     // we assume that deg is the same for all the polynomials for now
     let n = setup_precomp.q_l_aux.deg;
@@ -283,7 +284,7 @@ where E::Fr : PrimeField
 
     let aggregation_challenge = channel.produce_field_element_challenge();
 
-    let domain_size = n * params.lde_factor;
+    let domain_size = n * fri_params.lde_factor;
     let domain = Domain::<E::Fr>::new_for_size((domain_size) as u64)?;
     let omega = domain.generator;
 
@@ -462,17 +463,17 @@ where E::Fr : PrimeField
       
     let fri_challenges = FriIop::get_fri_challenges(
         &proof.batched_FRI_proof,
-        channel,
-        &params,
+        &mut channel,
+        fri_params,
     ); 
-    let natural_first_element_indexes = (0..params.R).map(|_| channel.produce_uint_challenge() as usize % domain_size).collect();
+    let natural_first_element_indexes = (0..fri_params.R).map(|_| channel.produce_uint_challenge() as usize % domain_size).collect();
 
     let is_valid = FriIop::<E::Fr, I, T>::verify_proof_queries(
         &proof.batched_FRI_proof,
         upper_layer_commitments,
         natural_first_element_indexes,
         &fri_challenges[..],
-        &params,
+        &fri_params,
         oracle_params,
         upper_layer_combiner)?;
 

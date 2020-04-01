@@ -77,23 +77,11 @@ mod test {
         a: E::Fr,
         b: E::Fr,
         num_steps: usize,
-        lde_factor: usize,
-        r: usize,
-        collapsing_factor : usize,
-        output_coeffs_at_degree_plus_one: usize,
+        fri_params: FriParams,
         oracle_params: I::Params,
-        mut channel: T,
+        channel_params: T::Params,
     ) -> Result<bool, SynthesisError>
-    where E::Fr : PartialTwoBitReductionField 
     {
-        let mut params = FriParams {
-            lde_factor,
-            R: r,
-            collapsing_factor,
-            final_degree_plus_one: output_coeffs_at_degree_plus_one,
-            // initial degree os set by generator
-            initial_degree_plus_one : 0,
-        };
 
         let circuit = BenchmarkCircuit::<E> {
             num_steps,
@@ -106,22 +94,24 @@ mod test {
 
         let (_setup, setup_precomp) = setup_with_precomputations::<E, BenchmarkCircuit<E>,  BitReversedOmegas<E::Fr>, I, T>(
             &circuit,
-            &mut params,
+            &fri_params,
             &oracle_params,
+            &channel_params,
             &omegas_bitreversed,
-            &mut channel,
         )?;
 
+
         let omegas_inv_bitreversed = <OmegasInvBitreversed::<E::Fr> as CTPrecomputations::<E::Fr>>::new_for_domain_size(num_steps.next_power_of_two());
-        let omegas_inv_bitreversed_for_fri = <CosetOmegasInvBitreversed::<E::Fr> as FriPrecomputations::<E::Fr>>::new_for_domain_size(num_steps.next_power_of_two() * lde_factor);
+        let omegas_inv_bitreversed_for_fri = <CosetOmegasInvBitreversed::<E::Fr> as FriPrecomputations::<E::Fr>>::new_for_domain_size(
+            num_steps.next_power_of_two() * fri_params.lde_factor);
 
         let proof = prove_with_setup_precomputed::<E, BenchmarkCircuit<E>, BitReversedOmegas<E::Fr>, 
             OmegasInvBitreversed::<E::Fr>, CosetOmegasInvBitreversed::<E::Fr>, I, T> (
             &circuit,
             &setup_precomp, 
-            &params,
+            &fri_params,
             &oracle_params,
-            &mut channel, 
+            &channel_params, 
             &omegas_bitreversed, 
             &omegas_inv_bitreversed,
             &omegas_inv_bitreversed_for_fri
@@ -131,7 +121,9 @@ mod test {
             proof,
             &[a, b],
             &setup_precomp,
-            &params,
+            &fri_params,
+            &oracle_params,
+            &channel_params,
         );
 
         is_valid
@@ -145,16 +137,38 @@ mod test {
 
         type E = Transparent252;
         type O = FriSpecificBlake2sTree<Fr>;
-        type T = StatelessBlake2sChannel<Fr>;
+        type T = Blake2sChannel<Fr>;
+
+        // prepare parameters
+        let a = Fr::one();
+        let b = Fr::one();
+        let num_steps = 1000;
+
+        let fri_params = FriParams {
+            lde_factor : 16,
+            initial_degree_plus_one: std::cell::Cell::new(0),
+            R : 4,
+            collapsing_factor : 1,
+            final_degree_plus_one : 1,
+        };
+
+        // note the consistency between collapsing_factor and num_elems_per_leaf!
+        // we should always have num_elems_per_leaf = 1 << collapsing_factor
+
+        let oracle_params = FriSpecificBlake2sTreeParams {
+            values_per_leaf : 1 << fri_params.collapsing_factor
+        };
+
+        let channel_params = ();
 
         let res = test_redshift_template::<E, O, T>(
-            Fr::one(),
-            Fr::one(),
-            1000,
-            16,
-            4,
-            1,
-            1);
+            a,
+            b,
+            num_steps,
+            fri_params,
+            oracle_params,
+            channel_params,
+        );
 
         match res {
             Ok(valid) => assert_eq!(valid, true),
@@ -167,19 +181,48 @@ mod test {
 
         use crate::redshift::IOP::oracle::coset_combining_rescue_tree::*;
         use crate::redshift::IOP::channel::rescue_channel::*;
+        use crate::redshift::IOP::hashes::rescue::bn256_rescue_params::BN256Rescue;
+        use crate::redshift::IOP::hashes::rescue::RescueParams;
+        use crate::pairing::bn256::Fr as Fr;
 
-        type E = Transparent252;
-        type O = FriSpecificRescueTree<Fr>;
-        type T = StatelessRescueChannel<Fr>;
+        type E = crate::pairing::bn256::Bn256;
+        type O<'a> = FriSpecificRescueTree<'a, Fr, BN256Rescue>;
+        type T<'a> = RescueChannel<'a, Fr, BN256Rescue>;
+
+        // prepare parameters
+        let a = Fr::one();
+        let b = Fr::one();
+        let num_steps = 1000;
+
+        let fri_params = FriParams {
+            initial_degree_plus_one: std::cell::Cell::new(0),
+            lde_factor: 16,
+            R: 4,
+            collapsing_factor: 2,
+            final_degree_plus_one: 4
+        };
+
+        let bn256_rescue_params = BN256Rescue::default();
+
+        let oracle_params = RescueTreeParams {
+            values_per_leaf: 1 << fri_params.collapsing_factor,
+            rescue_params: &bn256_rescue_params,
+            _marker: std::marker::PhantomData::<Fr>,
+        };
+
+        let channel_params = RescueChannelParams {
+            rescue_params: &bn256_rescue_params,
+            _marker: std::marker::PhantomData::<Fr>,
+        };
 
         let res = test_redshift_template::<E, O, T>(
-            Fr::one(),
-            Fr::one(),
-            1000,
-            16,
-            4,
-            2,
-            4);
+            a,
+            b,
+            num_steps,
+            fri_params,
+            oracle_params,
+            channel_params,
+        );
 
         match res {
             Ok(valid) => assert_eq!(valid, true),

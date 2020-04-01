@@ -26,7 +26,7 @@ impl<F: PrimeField, I: Oracle<F>> FriProofPrototype<F, I>
         }
 
         let mut rounds = vec![];
-        let initial_domain_size = params.initial_degree_plus_one * params.lde_factor;
+        let initial_domain_size = params.initial_degree_plus_one.get() * params.lde_factor;
         let log_initial_domain_size = log2_floor(initial_domain_size) as usize;
         let collapsing_factor = params.collapsing_factor;
         let coset_size = 1 << collapsing_factor;

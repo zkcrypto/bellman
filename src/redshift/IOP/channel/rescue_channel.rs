@@ -11,8 +11,8 @@ pub struct RescueChannel<'a, F: PrimeField, RP: RescueParams<F>> {
 }
 
 pub struct RescueChannelParams<'a, F: PrimeField, RP: RescueParams<F>> {
-    rescue_params: &'a RP,
-    _marker: std::marker::PhantomData<F>
+    pub rescue_params: &'a RP,
+    pub _marker: std::marker::PhantomData<F>
 }
 
 impl<'a, F, RP> RescueChannel<'a, F, RP>
@@ -73,5 +73,9 @@ where F: PrimeField, RP: RescueParams<F> {
         };
 
         res
+    }
+
+    fn reset(&mut self) {
+        self.state.clear_state();
     }
 }

@@ -35,7 +35,7 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
             SynthesisError::DivisionByZero
         )?;
 
-        let domain = Domain::<F>::new_for_size((params.initial_degree_plus_one * params.lde_factor) as u64)?;
+        let domain = Domain::<F>::new_for_size((params.initial_degree_plus_one.get() * params.lde_factor) as u64)?;
 
         let omega = domain.generator;
         let omega_inv = omega.inverse().ok_or(
@@ -52,7 +52,7 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
         }
 
         let num_steps = 
-            log2_floor(params.initial_degree_plus_one / params.final_degree_plus_one) / params.collapsing_factor as u32;
+            log2_floor(params.initial_degree_plus_one.get() / params.final_degree_plus_one) / params.collapsing_factor as u32;
         
         for ((round, natural_first_element_index), upper_layer_query) in 
             proof.queries.iter().zip(natural_element_indexes.into_iter()).zip(proof.upper_layer_queries.iter()) {

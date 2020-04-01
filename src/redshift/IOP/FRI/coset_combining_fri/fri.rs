@@ -8,6 +8,8 @@ use std::convert::From;
 use crate::redshift::IOP::oracle::*;
 use crate::redshift::fft::cooley_tukey_ntt::log2_floor;
 
+use std::cell::*;
+
 
 impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F, O, C> {
 
@@ -87,10 +89,11 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
     ) -> Result<FriProofPrototype<F, O>, SynthesisError> {
         
         let initial_domain_size = lde_values.size();
-        assert_eq!(params.initial_degree_plus_one * params.lde_factor, initial_domain_size);
+        let initial_degree_plus_one = params.initial_degree_plus_one.get();
+        assert_eq!(initial_degree_plus_one * params.lde_factor, initial_domain_size);
         assert_eq!(precomputations.domain_size(), initial_domain_size);
 
-        assert!(params.initial_degree_plus_one.is_power_of_two());
+        assert!(initial_degree_plus_one.is_power_of_two());
         assert!(params.final_degree_plus_one.is_power_of_two());
         assert!(params.lde_factor.is_power_of_two());
 
@@ -98,8 +101,9 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
         two.double();
         let two_inv = two.inverse().expect("should exist");
         
-        let wrapping_factor = 1 << params.collapsing_factor;
-        let num_steps = log2_floor(params.initial_degree_plus_one / params.final_degree_plus_one) / params.collapsing_factor as u32;
+        let collapsing_factor = params.collapsing_factor;
+        let wrapping_factor = 1 << collapsing_factor;
+        let num_steps = log2_floor(initial_degree_plus_one / params.final_degree_plus_one) / collapsing_factor as u32;
     
         let mut oracles = Vec::<O>::with_capacity(num_steps as usize);
         let mut challenges = Vec::with_capacity(num_steps as usize);
@@ -153,7 +157,7 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
                         for (j, v) in v.iter_mut().enumerate() {
                             let batch_id = initial_k + j;
                             let values_offset = batch_id*wrapping_factor;
-                            for wrapping_step in 0..params.collapsing_factor {
+                            for wrapping_step in 0..collapsing_factor {
                                 let base_omega_idx = (batch_id * wrapping_factor) >> (1 + wrapping_step);
                                 let expected_this_level_values = wrapping_factor >> wrapping_step;
                                 let expected_next_level_values = wrapping_factor >> (wrapping_step + 1);
@@ -198,7 +202,7 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
                                     *o = tmp;
                                 }
 
-                                if wrapping_step != params.collapsing_factor - 1 {
+                                if wrapping_step != collapsing_factor - 1 {
                                     this_level_values.clear();
                                     this_level_values.clone_from(&next_level_values);
                                     challenge.double();
@@ -295,7 +299,7 @@ mod test {
         let params = FriParams {
             collapsing_factor: 1,
             R: 80,
-            initial_degree_plus_one: 1024,
+            initial_degree_plus_one: std::cell::Cell::new(1024),
             lde_factor: 16,
             final_degree_plus_one: 2,
         };
@@ -358,7 +362,7 @@ mod test {
         let params = FriParams {
             collapsing_factor: 1,
             R: 80,
-            initial_degree_plus_one: 1024,
+            initial_degree_plus_one: std::cell::Cell::new(1024),
             lde_factor: 16,
             final_degree_plus_one: 2,
         };

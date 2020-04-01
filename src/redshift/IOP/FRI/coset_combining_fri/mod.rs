@@ -12,6 +12,8 @@ use crate::redshift::IOP::oracle::{Oracle, BatchedOracle, Label};
 use crate::redshift::polynomials::*;
 use crate::redshift::IOP::channel::Channel;
 
+use std::cell::*;
+
 //proof prototype is just a series of FRI-oracles (FRI setup phase)
 #[derive(PartialEq, Eq, Clone)]
 pub struct FriProofPrototype<F: PrimeField, I: Oracle<F>> {
@@ -73,7 +75,8 @@ pub struct FriParams {
     pub collapsing_factor : usize,
     //number of iterations done during FRI query phase
     pub R : usize,
-    pub initial_degree_plus_one : usize,
+    // should be mutable as initial degree is set by generator
+    pub initial_degree_plus_one : Cell<usize>,
     pub lde_factor: usize,
     //the degree of the resulting polynomial at the bottom level of FRI
     pub final_degree_plus_one : usize,

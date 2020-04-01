@@ -35,6 +35,8 @@ pub(crate) fn convert_to_field_elements<F: PrimeField>(indexes: &[usize], worker
     result
 }
 
+// TODO: add E::Fr : PartialTwoBitReductionField later
+
 pub(crate) fn commit_single_poly<E: Engine, CP: CTPrecomputations<E::Fr>, I: Oracle<E::Fr>>(
         poly: &Polynomial<E::Fr, Coefficients>,
         deg: usize, 
@@ -43,8 +45,9 @@ pub(crate) fn commit_single_poly<E: Engine, CP: CTPrecomputations<E::Fr>, I: Ora
         oracle_params: &I::Params,
         worker: &Worker
     ) -> Result<SinglePolyCommitmentData<E::Fr, I>, SynthesisError> 
-where E::Fr : PartialTwoBitReductionField {
-    let lde = poly.clone().bitreversed_lde_using_bitreversed_ntt_with_partial_reduction(
+//where E::Fr : PartialTwoBitReductionField 
+{
+    let lde = poly.clone().bitreversed_lde_using_bitreversed_ntt(
         worker, 
         params.lde_factor, 
         omegas_bitreversed, 
@@ -310,7 +313,7 @@ pub(crate) fn multiopening<E: Engine, P: FriPrecomputations<E::Fr>, I: Oracle<E:
         worker: &Worker,
         channel: &mut C,
     ) -> Result<(FriProofPrototype<E::Fr, I>), SynthesisError> 
-where E::Fr : PartialTwoBitReductionField
+//where E::Fr : PartialTwoBitReductionField
 {
     //we assert that all of the polynomials are of the same degree
     // TODO: deal with the case of various degrees
