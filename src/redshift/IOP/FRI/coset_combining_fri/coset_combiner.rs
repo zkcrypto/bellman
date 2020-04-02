@@ -62,7 +62,7 @@ impl CosetCombiner {
         assert!(coset_index < domain_size, "asking for index {} for domain size {}", coset_index, domain_size);
         assert_eq!(1 << log_domain_size, domain_size);
 
-        let mut start_idx = coset_index >> collapsing_factor;
+        let start_idx = coset_index >> collapsing_factor;
         let mask = (1 << collapsing_factor) - 1;
         let shift = bitreverse(coset_index & mask, log_domain_size as usize);
         mask + shift
@@ -80,7 +80,7 @@ mod test {
         let collapsing_factor = 4;
 
         let natural_index = 837;
-        let (coset_idx_range, coset_idx) = CosetCombiner::get_coset_idx_for_natural_index_extended(
+        let (_coset_idx_range, coset_idx) = CosetCombiner::get_coset_idx_for_natural_index_extended(
             natural_index, domain_size, log_domain_size, collapsing_factor);
         assert_eq!(natural_index, CosetCombiner::get_natural_idx_for_coset_index(
             coset_idx, domain_size, log_domain_size, collapsing_factor));

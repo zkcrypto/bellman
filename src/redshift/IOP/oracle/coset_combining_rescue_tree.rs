@@ -221,6 +221,15 @@ pub struct CosetCombinedQuery<F: PrimeField> {
     path: Vec<F>,
 }
 
+
+impl<F: PrimeField> CosetCombinedQuery<F> {
+
+    // useful for testing purposes in some contexts
+    fn raw_merkle_proof(self) -> Vec<F> {
+        self.path
+    }
+}
+
 impl<F: PrimeField> IopQuery<F> for CosetCombinedQuery<F> {
     fn indexes(&self) -> Range<usize> {
         self.indexes.clone()

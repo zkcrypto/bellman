@@ -226,7 +226,7 @@ mod test {
 
         match res {
             Ok(valid) => assert_eq!(valid, true),
-            Err(_) => println!("Some erro has been occured!"),
+            Err(_) => println!("Some error has been occured!"),
         };       
     }
 }
