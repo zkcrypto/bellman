@@ -279,3 +279,94 @@ mod test {
 }
 
 
+// here we implicitely assume rescue_alpha to be 5!
+    pub fn rescue_alpha<CS: ConstraintSystem<E>>(&self, mut cs: CS) -> Result<AllocatedNum<E>, SynthesisError>
+    {
+        let any_allocated = self.terms.iter().any(|n| !n.is_constant());
+
+        if any_allocated {
+
+            assert_eq!(params.alpha(), 5);
+            
+            let base_value = self.get_value();
+            let base_lc = self.lc(cs);
+
+            let result_value = base_value.and_then(|num| Some(num.pow(&[params.alpha()])));
+            let result_alloced_var = AllocatedNum::alloc(cs, || result_value.ok_or(SynthesisError::AssignmentMissing))?;
+            let result_var : Num<E> = result_alloced_var.into();
+            let result_lc = result_var.lc(cs);
+            constrain_pow_five(cs, &base_lc, &result_lc, base_value)?;
+
+            Ok(result_var)
+        } else {
+            // We can just return a constant
+            let base_value = self.value.ok_or(SynthesisError::AssignmentMissing)?;
+            Ok(Num::constant(base_value.pow(&[params.alpha(), 0, 0, 0])))
+        }
+    }
+
+    pub fn rescue_invalpha<CS>(&self, cs: &mut CS, params: &Params<E>) -> Result<Num<E>, SynthesisError>
+    where
+        CS: ConstraintSystem<E>,
+    {
+        let any_allocated = self.terms.iter().any(|n| !n.is_constant());
+
+        if any_allocated {
+
+            assert_eq!(params.alpha(), 5);
+
+            let result_value = self.get_value();
+            let result_lc = self.lc(cs);
+
+            let base_value = result_value.and_then(|num| Some(num.pow(params.inalpha())));
+            let base_allocated_var = AllocatedNum::alloc(cs, || base_value.ok_or(SynthesisError::AssignmentMissing))?;
+            let base_var : Num<E> = base_allocated_var.into();
+            let base_lc = base_var.lc(cs);
+            constrain_pow_five(cs, &base_lc, &result_lc, base_value)?;
+
+            Ok(base_var)
+        } else {
+            // We can just return a constant
+            let base_value = self.value.ok_or(SynthesisError::AssignmentMissing)?;
+            Ok(Num::constant(base_value.pow(params.inalpha())))
+        }
+    }
+
+
+    // check is the combination in question exactly contains the only one element (or even empty)
+    // it yes - returns that unique element
+    pub fn simplify<CS: ConstraintSystem<E>>(&mut self, cs: &mut CS) -> Result<Num<E>, SynthesisError> {
+        let any_allocated = self.terms.iter().any(|n| !n.is_constant());
+        let res = if any_allocated {
+            let res = match self.terms.len() {
+                0 => Num::zero(),
+                1 => self.terms[0].clone(),
+                _ => {
+                    let out_alloc = AllocatedNum::alloc(&mut cs.namespace(|| "simplified element"), || {
+                        self.get_value().ok_or(SynthesisError::AssignmentMissing)
+                    })?;
+                    let out : Num<E> = out_alloc.into();
+
+                    let in_lc = self.lc(cs);
+                    let lc = out.lc(cs) - &in_lc;
+                    enforce_zero(cs, &lc);
+
+                    // As we've constrained this currentcombination, we can
+                    // substitute for the new variable to shorten subsequent combinations.
+                    *self = out.clone().into();
+                    out
+                }
+            };
+            res
+        }
+        else {
+            // We can just return a constant
+            let base_value = self.value.ok_or(SynthesisError::AssignmentMissing)?;
+            let new_num = Num::constant(base_value);
+            *self = new_num.clone().into();
+            new_num
+        };
+        Ok(res)
+    }
+
+

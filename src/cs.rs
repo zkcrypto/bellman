@@ -60,6 +60,21 @@ impl<E: Engine> LinearCombination<E> {
     pub fn zero() -> LinearCombination<E> {
         LinearCombination(vec![])
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// returns true if this linear combination 
+    /// consists of exactly one element with coefficient 1
+    pub fn is_simple(&self) -> Option<Variable> {
+        let res = match self.0.len() == 1 && self.0[0].1 == E::Fr::one() {
+            true => Some(self.0[0].0),
+            false => None,
+        };
+
+        res
+    }
 }
 
 impl<E: Engine> Add<(E::Fr, Variable)> for LinearCombination<E> {

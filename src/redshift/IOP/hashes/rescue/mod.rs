@@ -76,8 +76,8 @@ fn rescue_f<F: PrimeField, Params: RescueParams<F>>(
                 *entry = entry.pow(&[params.rescue_alpha()]);
             }
         }
-        for (input, output) in  mds(state, params).iter().zip(state.iter_mut()) {
-            *output = *input;
+        for (input, output) in  mds(state, params).into_iter().zip(state.iter_mut()) {
+            *output = input;
         }
         for i in 0..RESCUE_M {
             state[i].add_assign(&(constants[r + 1][i]));
