@@ -225,7 +225,7 @@ pub struct CosetCombinedQuery<F: PrimeField> {
 impl<F: PrimeField> CosetCombinedQuery<F> {
 
     // useful for testing purposes in some contexts
-    fn raw_merkle_proof(self) -> Vec<F> {
+    pub fn raw_merkle_proof(self) -> Vec<F> {
         self.path
     }
 }
