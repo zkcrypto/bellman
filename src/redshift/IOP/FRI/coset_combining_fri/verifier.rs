@@ -106,7 +106,7 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
     ) -> Result<bool, SynthesisError>
     {
         let coset_idx_range = CosetCombiner::get_coset_idx_for_natural_index(
-                natural_first_element_index, initial_domain_size, log_initial_domain_size, collapsing_factor);
+            natural_first_element_index, initial_domain_size, log_initial_domain_size, collapsing_factor);
         
         //check query cardinality here!
         if upper_layer_queries.iter().any(|x| x.1.card() != initial_domain_size || x.1.indexes() != coset_idx_range) {
@@ -130,6 +130,7 @@ impl<F: PrimeField, O: Oracle<F>, C: Channel<F, Input = O::Commitment>> FriIop<F
         let mut domain_size = initial_domain_size;
         let mut log_domain_size = log_initial_domain_size;
         let mut elem_index = (natural_first_element_index << collapsing_factor) % domain_size;
+        // TODO: here is a bug - omega inverse should also be cloned
         let mut omega_inv = omega_inv.clone();
         let mut previous_layer_element = FriIop::<F, O, C>::coset_interpolant_value(
             &values[..],
