@@ -184,7 +184,9 @@ pub enum SynthesisError {
     /// During verification, our verifying key was malformed.
     MalformedVerifyingKey,
     /// During CRS generation, we observed an unconstrained auxillary variable
-    UnconstrainedVariable
+    UnconstrainedVariable,
+    /// Error that should never happen under normal circumstances
+    Unknown,
 }
 
 impl From<io::Error> for SynthesisError {
@@ -203,7 +205,8 @@ impl Error for SynthesisError {
             SynthesisError::UnexpectedIdentity => "encountered an identity element in the CRS",
             SynthesisError::IoError(_) => "encountered an I/O error",
             SynthesisError::MalformedVerifyingKey => "malformed verifying key",
-            SynthesisError::UnconstrainedVariable => "auxillary variable was unconstrained"
+            SynthesisError::UnconstrainedVariable => "auxillary variable was unconstrained",
+            SynthesisError::Unknown => "unknown error",
         }
     }
 }

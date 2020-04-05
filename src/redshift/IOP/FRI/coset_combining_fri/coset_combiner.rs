@@ -41,7 +41,7 @@ impl CosetCombiner {
         assert!(natural_index < domain_size, "asking for index {} for domain size {}", natural_index, domain_size);
         assert_eq!(1 << log_domain_size, domain_size);
 
-        let mut endpoint_mask = (1 << collapsing_factor) - 1;
+        let endpoint_mask = (1 << collapsing_factor) - 1;
         let mask = !(endpoint_mask << (log_domain_size - collapsing_factor)); 
 
         let start_idx = (natural_index & mask) << collapsing_factor;
