@@ -82,6 +82,7 @@ where E::Fr : PrimeField
         Some(x) => channel.consume(x),
     };
 
+    // TODO: may be it is safe to remove this check?
     let mut z = E::Fr::one();
     let field_zero = E::Fr::zero();
     while z.pow([n as u64]) == E::Fr::one() || z == field_zero {

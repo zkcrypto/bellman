@@ -370,3 +370,14 @@ mod test {
     }
 
 
+
+for (elem, o) in coset.iter_mut().zip(array.iter_mut()) {
+            *o = elem.simplify(cs.namespace(|| "simplification"))?;
+        }
+        array.extend(iter::repeat(AllocatedNum::default::<CS>()).take(self.wrapping_factor / 2));    
+
+        for (elem, o) in coset.iter_mut().zip(array[..self.wrapping_factor].iter_mut()) {
+            *o = elem.simplify(cs.namespace(|| "simplification"))?;
+        }
+
+
