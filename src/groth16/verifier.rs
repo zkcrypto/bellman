@@ -1,9 +1,14 @@
 use ff::{Field, PrimeField};
+use futures::Future;
 use groupy::{CurveAffine, CurveProjective};
 use paired::{Engine, PairingCurveAffine};
 use rayon::prelude::*;
+use std::sync::Arc;
 
 use super::{BatchPreparedVerifyingKey, PreparedVerifyingKey, Proof, VerifyingKey};
+use crate::gpu::LockedMultiexpKernel;
+use crate::multicore::Worker;
+use crate::multiexp::{multiexp, FullDensity};
 use crate::SynthesisError;
 
 pub fn prepare_verifying_key<E: Engine>(vk: &VerifyingKey<E>) -> PreparedVerifyingKey<E> {
@@ -82,6 +87,7 @@ where
         }
     }
 
+    let worker = Worker::new();
     let pi_num = pvk.ic.len() - 1;
     let proof_num = proofs.len();
 
@@ -116,16 +122,26 @@ where
                 tmp.mul_assign(&public_inputs[j][i]);
                 pi.add_assign(&tmp);
             }
-            pi
+            pi.into_repr()
         })
         .collect();
 
     // create group element corresponding to public input combination
     // This roughly corresponds to Accum_Gamma in spec
     let mut acc_pi = pvk.ic[0].mul(sum_r.into_repr());
-    for (i, b) in pi_scalars.iter().zip(pvk.ic.iter().skip(1)) {
-        acc_pi.add_assign(&b.mul(i.into_repr()));
-    }
+    let log_d = (pi_num as f32).log2().ceil() as usize;
+    let mut multiexp_kern = Some(LockedMultiexpKernel::<E>::new(log_d, false));
+    acc_pi.add_assign(
+        &multiexp(
+            &worker,
+            (Arc::new(pvk.ic[1..].to_vec()), 0),
+            FullDensity,
+            Arc::new(pi_scalars),
+            &mut multiexp_kern,
+        )
+        .wait()
+        .unwrap(),
+    );
 
     // This corresponds to Accum_Y
     // -Accum_Y
