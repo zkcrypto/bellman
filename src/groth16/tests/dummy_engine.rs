@@ -332,6 +332,10 @@ impl PrimeField for Fr {
         FrRepr::from(*self)
     }
 
+    fn is_odd(&self) -> bool {
+        (self.0).0 % 2 != 0
+    }
+
     fn char() -> FrRepr {
         Fr(MODULUS_R).into()
     }
