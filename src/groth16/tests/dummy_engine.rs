@@ -8,7 +8,7 @@ use rand_core::RngCore;
 use std::cmp::Ordering;
 use std::fmt;
 use std::num::Wrapping;
-use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
+use std::ops::{Add, AddAssign, BitAnd, Mul, MulAssign, Neg, Shr, Sub, SubAssign};
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
 
 const MODULUS_R: Wrapping<u32> = Wrapping(64513);
@@ -148,6 +148,23 @@ impl<'r> MulAssign<&'r Fr> for Fr {
 impl MulAssign for Fr {
     fn mul_assign(&mut self, other: Self) {
         MulAssign::mul_assign(self, &other);
+    }
+}
+
+impl BitAnd<u64> for Fr {
+    type Output = u64;
+
+    fn bitand(self, rhs: u64) -> u64 {
+        (self.0).0 as u64 & rhs
+    }
+}
+
+impl Shr<u32> for Fr {
+    type Output = Fr;
+
+    fn shr(mut self, rhs: u32) -> Fr {
+        self.0 = Wrapping((self.0).0 >> rhs);
+        self
     }
 }
 
