@@ -50,6 +50,18 @@ impl ConditionallySelectable for Fr {
     }
 }
 
+impl Ord for Fr {
+    fn cmp(&self, other: &Fr) -> Ordering {
+        (self.0).0.cmp(&(other.0).0)
+    }
+}
+
+impl PartialOrd for Fr {
+    fn partial_cmp(&self, other: &Fr) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 impl Neg for Fr {
     type Output = Self;
 
