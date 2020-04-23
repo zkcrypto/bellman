@@ -313,12 +313,12 @@ pub fn field_into_allocated_bits_le<E: ScalarEngine, CS: ConstraintSystem<E>, F:
     // Deconstruct in big-endian bit order
     let values = match value {
         Some(ref value) => {
-            let mut field_char = BitIterator::<u64, _>::new(F::char());
+            let mut field_char = BitIterator::<u8, _>::new(F::char());
 
             let mut tmp = Vec::with_capacity(F::NUM_BITS as usize);
 
             let mut found_one = false;
-            for b in BitIterator::<u64, _>::new(value.into_repr()) {
+            for b in BitIterator::<u8, _>::new(value.into_repr()) {
                 // Skip leading bits
                 found_one |= field_char.next().unwrap();
                 if !found_one {

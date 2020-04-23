@@ -1,6 +1,6 @@
 use super::multicore::Worker;
 use bit_vec::{self, BitVec};
-use ff::{Field, PrimeField, PrimeFieldRepr, ScalarEngine};
+use ff::{Field, PrimeField, ScalarEngine};
 use futures::Future;
 use group::{CurveAffine, CurveProjective};
 use std::io;
@@ -154,7 +154,7 @@ fn multiexp_inner<Q, D, G, S>(
     pool: &Worker,
     bases: S,
     density_map: D,
-    exponents: Arc<Vec<<<G::Engine as ScalarEngine>::Fr as PrimeField>::Repr>>,
+    exponents: Arc<Vec<<G::Engine as ScalarEngine>::Fr>>,
     mut skip: u32,
     c: u32,
     handle_trivial: bool,
@@ -181,13 +181,12 @@ where
             // Create space for the buckets
             let mut buckets = vec![G::zero(); (1 << c) - 1];
 
-            let zero = <G::Engine as ScalarEngine>::Fr::zero().into_repr();
-            let one = <G::Engine as ScalarEngine>::Fr::one().into_repr();
+            let one = <G::Engine as ScalarEngine>::Fr::one();
 
             // Sort the bases into buckets
             for (&exp, density) in exponents.iter().zip(density_map.as_ref().iter()) {
                 if density {
-                    if exp == zero {
+                    if exp.is_zero() {
                         bases.skip(1)?;
                     } else if exp == one {
                         if handle_trivial {
@@ -196,9 +195,8 @@ where
                             bases.skip(1)?;
                         }
                     } else {
-                        let mut exp = exp;
-                        exp.shr(skip);
-                        let exp = exp.as_ref()[0] % (1 << c);
+                        let exp = exp >> skip;
+                        let exp = exp & ((1 << c) - 1);
 
                         if exp != 0 {
                             (&mut buckets[(exp - 1) as usize])
@@ -261,7 +259,7 @@ pub fn multiexp<Q, D, G, S>(
     pool: &Worker,
     bases: S,
     density_map: D,
-    exponents: Arc<Vec<<<G::Engine as ScalarEngine>::Fr as PrimeField>::Repr>>,
+    exponents: Arc<Vec<<G::Engine as ScalarEngine>::Fr>>,
 ) -> Box<dyn Future<Item = G, Error = SynthesisError>>
 where
     for<'a> &'a Q: QueryDensity,
@@ -290,14 +288,14 @@ where
 fn test_with_bls12() {
     fn naive_multiexp<G: CurveProjective>(
         bases: Arc<Vec<<G as CurveProjective>::Affine>>,
-        exponents: Arc<Vec<<G::Scalar as PrimeField>::Repr>>,
+        exponents: Arc<Vec<G::Scalar>>,
     ) -> G {
         assert_eq!(bases.len(), exponents.len());
 
         let mut acc = G::zero();
 
         for (base, exp) in bases.iter().zip(exponents.iter()) {
-            AddAssign::<&G>::add_assign(&mut acc, &base.mul(*exp));
+            AddAssign::<&G>::add_assign(&mut acc, &base.mul(exp.into_repr()));
         }
 
         acc
@@ -311,7 +309,7 @@ fn test_with_bls12() {
     let rng = &mut rand::thread_rng();
     let v = Arc::new(
         (0..SAMPLES)
-            .map(|_| <Bls12 as ScalarEngine>::Fr::random(rng).into_repr())
+            .map(|_| <Bls12 as ScalarEngine>::Fr::random(rng))
             .collect::<Vec<_>>(),
     );
     let g = Arc::new(
