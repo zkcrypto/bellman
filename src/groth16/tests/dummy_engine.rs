@@ -166,7 +166,7 @@ impl Shr<u32> for Fr {
 }
 
 impl Field for Fr {
-    fn random<R: RngCore + ?std::marker::Sized>(rng: &mut R) -> Self {
+    fn random<R: RngCore + ?Sized>(rng: &mut R) -> Self {
         Fr(Wrapping(rng.next_u32()) % MODULUS_R)
     }
 
@@ -358,7 +358,7 @@ impl CurveProjective for Fr {
     type Scalar = Fr;
     type Engine = DummyEngine;
 
-    fn random<R: RngCore + ?std::marker::Sized>(rng: &mut R) -> Self {
+    fn random<R: RngCore + ?Sized>(rng: &mut R) -> Self {
         <Fr as Field>::random(rng)
     }
 
