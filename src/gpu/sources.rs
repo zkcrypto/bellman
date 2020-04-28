@@ -1,15 +1,12 @@
 use ff::PrimeField;
-use itertools::join;
+use ff_cl_gen as ffgen;
 use paired::Engine;
 
 // Instead of having a very large OpenCL program written for a specific curve, with a lot of
 // rudandant codes (As OpenCL doesn't have generic types or templates), this module will dynamically
 // generate OpenCL codes given different PrimeFields and curves.
 
-static DEFS_SRC: &str = include_str!("common/defs.cl");
-static FIELD_SRC: &str = include_str!("common/field.cl");
 static FFT_SRC: &str = include_str!("fft/fft.cl");
-
 static EXP_SRC: &str = include_str!("multiexp/exp.cl");
 static FIELD2_SRC: &str = include_str!("multiexp/field2.cl");
 static EC_SRC: &str = include_str!("multiexp/ec.cl");
@@ -25,54 +22,6 @@ fn limbs_of<T>(value: &T) -> &[u64] {
     }
 }
 
-/// Calculate the `INV` parameter of Montgomery reduction algorithm for 64bit limbs
-/// * `a` - Is the first limb of modulus
-fn calc_inv(a: u64) -> u64 {
-    let mut inv = 1u64;
-    for _ in 0..63 {
-        inv = inv.wrapping_mul(inv);
-        inv = inv.wrapping_mul(a);
-    }
-    return inv.wrapping_neg();
-}
-
-fn params<F>(name: &str) -> String
-where
-    F: PrimeField,
-{
-    let one = F::one();
-    let one = limbs_of(&one); // Get Montomery from of F::one()
-    let p = F::char();
-    let p = limbs_of(&p); // Get regular form of field modulus
-    let limbs = one.len(); // Number of limbs
-    let inv = calc_inv(p[0]);
-    let limbs_def = format!("#define {}_LIMBS {}", name, limbs);
-    let p_def = format!(
-        "#define {}_P (({}){{ {{ {} }} }})",
-        name,
-        name,
-        join(p, ", ")
-    );
-    let one_def = format!(
-        "#define {}_ONE (({}){{ {{ {} }} }})",
-        name,
-        name,
-        join(one, ", ")
-    );
-    let zero_def = format!(
-        "#define {}_ZERO (({}){{ {{ {} }} }})",
-        name,
-        name,
-        join(vec![0u32; limbs], ", ")
-    );
-    let inv_def = format!("#define {}_INV {}", name, inv);
-    let typedef = format!("typedef struct {{ limb val[{}_LIMBS]; }} {};", name, name);
-    return format!(
-        "{}\n{}\n{}\n{}\n{}\n{}",
-        limbs_def, one_def, p_def, zero_def, inv_def, typedef
-    );
-}
-
 fn exponent<F>(name: &str) -> String
 where
     F: PrimeField,
@@ -81,64 +30,6 @@ where
         "{}\n{}\n",
         format!("#define {}_LIMBS {}", name, limbs_of(&F::one()).len()),
         String::from(EXP_SRC).replace("EXPONENT", name)
-    );
-}
-
-fn field_add_sub<F>(name: &str, is_sub: bool) -> String
-where
-    F: PrimeField,
-{
-    let op = if is_sub { "sub" } else { "add" };
-    let one = F::one();
-    let len = limbs_of(&one).len();
-    let mut src = String::from(format!(
-        "{} {}_{}_({} a, {} b) {{\n",
-        name, name, op, name, name
-    ));
-
-    if len > 1 {
-        src.push_str("asm(");
-        src.push_str(format!("\"{}.cc.u64 %0, %0, %{};\\r\\n\"\n", op, len).as_str());
-        for i in 1..len - 1 {
-            src.push_str(
-                format!("\"{}c.cc.u64 %{}, %{}, %{};\\r\\n\"\n", op, i, i, len + i).as_str(),
-            );
-        }
-        src.push_str(
-            format!(
-                "\"{}c.u64 %{}, %{}, %{};\\r\\n\"\n",
-                op,
-                len - 1,
-                len - 1,
-                2 * len - 1
-            )
-            .as_str(),
-        );
-        src.push_str(":");
-        let inps = join((0..len).map(|n| format!("\"+l\"(a.val[{}])", n)), ", ");
-        src.push_str(inps.as_str());
-
-        src.push_str("\n:");
-        let outs = join((0..len).map(|n| format!("\"l\"(b.val[{}])", n)), ", ");
-        src.push_str(outs.as_str());
-        src.push_str(");\n");
-    }
-
-    src.push_str("return a;\n}\n");
-
-    return src;
-}
-
-fn field<F>(name: &str) -> String
-where
-    F: PrimeField,
-{
-    return format!(
-        "{}\n{}\n{}\n{}\n",
-        params::<F>(name),
-        field_add_sub::<F>(name, false),
-        field_add_sub::<F>(name, true),
-        String::from(FIELD_SRC).replace("FIELD", name)
     );
 }
 
@@ -171,11 +62,11 @@ where
 {
     return String::from(format!(
         "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
-        DEFS_SRC,
-        field::<E::Fr>("Fr"),
+        ffgen::common(),
+        ffgen::field::<E::Fr>("Fr"),
         fft("Fr"),
         exponent::<E::Fr>("Exp"),
-        field::<E::Fq>("Fq"),
+        ffgen::field::<E::Fq>("Fq"),
         ec("Fq", "G1"),
         multiexp("G1", "Exp"),
         field2("Fq2", "Fq"),
