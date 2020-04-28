@@ -38,8 +38,7 @@ where
     E: Engine,
 {
     return String::from(format!(
-        "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
-        ffgen::common(),
+        "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
         ffgen::field::<E::Fr>("Fr"),
         fft("Fr"),
         ffgen::field::<E::Fq>("Fq"),
