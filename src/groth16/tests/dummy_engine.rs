@@ -285,6 +285,7 @@ impl Default for FrRepr {
 
 impl PrimeField for Fr {
     type Repr = FrRepr;
+    type ReprEndianness = byteorder::LittleEndian;
 
     const NUM_BITS: u32 = 16;
     const CAPACITY: u32 = 15;

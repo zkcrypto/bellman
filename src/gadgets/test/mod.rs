@@ -1,6 +1,6 @@
 //! Helpers for testing circuit implementations.
 
-use ff::{Field, PowVartime, PrimeField, ScalarEngine};
+use ff::{Endianness, Field, PowVartime, PrimeField, ScalarEngine};
 
 use crate::{ConstraintSystem, Index, LinearCombination, SynthesisError, Variable};
 
@@ -106,11 +106,9 @@ fn hash_lc<E: ScalarEngine>(terms: &[(Variable, E::Fr)], h: &mut Blake2sState) {
             }
         }
 
-        // BLS12-381's Fr is canonically serialized in little-endian, but the hasher
-        // writes its coefficients in big endian. For now, we flip the endianness
-        // manually, which is not necessarily correct for circuits using other curves.
-        // TODO: Fix this in a standalone commit, and document the no-op change.
-        let coeff_be: Vec<_> = coeff.into_repr().as_ref().iter().cloned().rev().collect();
+        let mut coeff_repr = coeff.into_repr();
+        <E::Fr as PrimeField>::ReprEndianness::toggle_little_endian(&mut coeff_repr);
+        let coeff_be: Vec<_> = coeff_repr.as_ref().iter().cloned().rev().collect();
         buf[9..].copy_from_slice(&coeff_be[..]);
 
         h.update(&buf);
