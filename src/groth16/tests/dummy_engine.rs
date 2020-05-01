@@ -1,4 +1,4 @@
-use ff::{Field, PowVartime, PrimeField, ScalarEngine, SqrtField};
+use ff::{Field, PowVartime, PrimeField, ScalarEngine};
 use group::{CurveAffine, CurveProjective, EncodedPoint, GroupDecodingError};
 use pairing::{Engine, PairingCurveAffine};
 
@@ -217,9 +217,7 @@ impl Field for Fr {
     fn frobenius_map(&mut self, _: usize) {
         // identity
     }
-}
 
-impl SqrtField for Fr {
     fn sqrt(&self) -> CtOption<Self> {
         // Tonelli-Shank's algorithm for q mod 16 = 1
         // https://eprint.iacr.org/2012/685.pdf (page 12, algorithm 5)
