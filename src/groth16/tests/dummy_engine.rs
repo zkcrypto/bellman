@@ -3,7 +3,6 @@ use group::{CurveAffine, CurveProjective, EncodedPoint, GroupDecodingError};
 use pairing::{Engine, PairingCurveAffine};
 
 use rand_core::RngCore;
-use std::cmp::Ordering;
 use std::fmt;
 use std::num::Wrapping;
 use std::ops::{Add, AddAssign, BitAnd, Mul, MulAssign, Neg, Shr, Sub, SubAssign};
@@ -45,18 +44,6 @@ impl ConditionallySelectable for Fr {
             &(b.0).0,
             choice,
         )))
-    }
-}
-
-impl Ord for Fr {
-    fn cmp(&self, other: &Fr) -> Ordering {
-        (self.0).0.cmp(&(other.0).0)
-    }
-}
-
-impl PartialOrd for Fr {
-    fn partial_cmp(&self, other: &Fr) -> Option<Ordering> {
-        Some(self.cmp(other))
     }
 }
 
