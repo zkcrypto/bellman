@@ -1,4 +1,4 @@
-use ff::{Field, PowVartime, PrimeField, ScalarEngine};
+use ff::{Field, PrimeField, ScalarEngine};
 use group::{CurveAffine, CurveProjective, EncodedPoint, GroupDecodingError};
 use pairing::{Engine, PairingCurveAffine};
 

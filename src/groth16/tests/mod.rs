@@ -1,4 +1,4 @@
-use ff::{Field, PowVartime, PrimeField};
+use ff::{Field, PrimeField};
 use pairing::Engine;
 
 mod dummy_engine;

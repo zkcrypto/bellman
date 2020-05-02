@@ -11,7 +11,7 @@
 //! [`EvaluationDomain`]: crate::domain::EvaluationDomain
 //! [Groth16]: https://eprint.iacr.org/2016/260
 
-use ff::{Field, PowVartime, PrimeField, ScalarEngine};
+use ff::{Field, PrimeField, ScalarEngine};
 use group::CurveProjective;
 use std::ops::{AddAssign, MulAssign, SubAssign};
 

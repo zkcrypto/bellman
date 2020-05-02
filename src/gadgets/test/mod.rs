@@ -1,6 +1,6 @@
 //! Helpers for testing circuit implementations.
 
-use ff::{Endianness, Field, PowVartime, PrimeField, ScalarEngine};
+use ff::{Endianness, Field, PrimeField, ScalarEngine};
 
 use crate::{ConstraintSystem, Index, LinearCombination, SynthesisError, Variable};
 
