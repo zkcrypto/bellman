@@ -103,8 +103,8 @@ impl<E: ScalarEngine> AllocatedNum<E> {
 
         // We want to ensure that the bit representation of a is
         // less than or equal to r - 1.
-        let mut a = self.value.map(|e| BitIterator::<u8, _>::new(e.into_repr()));
-        let b = (-E::Fr::one()).into_repr();
+        let mut a = self.value.map(|e| BitIterator::<u8, _>::new(e.to_repr()));
+        let b = (-E::Fr::one()).to_repr();
 
         let mut result = vec![];
 
@@ -557,7 +557,7 @@ mod test {
 
             assert!(cs.is_satisfied());
 
-            for (b, a) in BitIterator::<u8, _>::new(r.into_repr())
+            for (b, a) in BitIterator::<u8, _>::new(r.to_repr())
                 .skip(1)
                 .zip(bits.iter().rev())
             {

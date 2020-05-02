@@ -287,7 +287,7 @@ impl PrimeField for Fr {
         }
     }
 
-    fn into_repr(&self) -> FrRepr {
+    fn to_repr(&self) -> FrRepr {
         FrRepr::from(*self)
     }
 

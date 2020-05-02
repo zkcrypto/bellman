@@ -318,7 +318,7 @@ pub fn field_into_allocated_bits_le<E: ScalarEngine, CS: ConstraintSystem<E>, F:
             let mut tmp = Vec::with_capacity(F::NUM_BITS as usize);
 
             let mut found_one = false;
-            for b in BitIterator::<u8, _>::new(value.into_repr()) {
+            for b in BitIterator::<u8, _>::new(value.to_repr()) {
                 // Skip leading bits
                 found_one |= field_char.next().unwrap();
                 if !found_one {

@@ -106,7 +106,7 @@ fn hash_lc<E: ScalarEngine>(terms: &[(Variable, E::Fr)], h: &mut Blake2sState) {
             }
         }
 
-        let mut coeff_repr = coeff.into_repr();
+        let mut coeff_repr = coeff.to_repr();
         <E::Fr as PrimeField>::ReprEndianness::toggle_little_endian(&mut coeff_repr);
         let coeff_be: Vec<_> = coeff_repr.as_ref().iter().cloned().rev().collect();
         buf[9..].copy_from_slice(&coeff_be[..]);

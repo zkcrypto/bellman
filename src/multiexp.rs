@@ -195,7 +195,7 @@ where
                             bases.skip(1)?;
                         }
                     } else {
-                        let mut exp = exp.into_repr();
+                        let mut exp = exp.to_repr();
                         <<G::Engine as ScalarEngine>::Fr as PrimeField>::ReprEndianness::toggle_little_endian(&mut exp);
 
                         let exp = exp
@@ -305,7 +305,7 @@ fn test_with_bls12() {
         let mut acc = G::zero();
 
         for (base, exp) in bases.iter().zip(exponents.iter()) {
-            AddAssign::<&G>::add_assign(&mut acc, &base.mul(exp.into_repr()));
+            AddAssign::<&G>::add_assign(&mut acc, &base.mul(exp.to_repr()));
         }
 
         acc
