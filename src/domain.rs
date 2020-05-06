@@ -216,7 +216,7 @@ impl<G: CurveProjective> Clone for Point<G> {
     }
 }
 
-impl<G: CurveProjective> Group<G::Engine> for Point<G> {
+impl<G: CurveProjective, E: ScalarEngine<Fr = G::Scalar>> Group<E> for Point<G> {
     fn group_zero() -> Self {
         Point(G::identity())
     }

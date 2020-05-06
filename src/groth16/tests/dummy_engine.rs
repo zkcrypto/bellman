@@ -356,7 +356,6 @@ impl CurveProjective for Fr {
     type Affine = Fr;
     type Base = Fr;
     type Scalar = Fr;
-    type Engine = DummyEngine;
 
     fn random<R: RngCore + ?Sized>(rng: &mut R) -> Self {
         <Fr as Field>::random(rng)
@@ -448,7 +447,6 @@ impl CurveAffine for Fr {
     type Projective = Fr;
     type Base = Fr;
     type Scalar = Fr;
-    type Engine = DummyEngine;
 
     fn identity() -> Self {
         <Fr as Field>::zero()
