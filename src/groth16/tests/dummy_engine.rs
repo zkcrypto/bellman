@@ -380,8 +380,8 @@ impl CurveProjective for Fr {
         true
     }
 
-    fn double(&mut self) {
-        self.0 = <Fr as Field>::double(self).0;
+    fn double(&self) -> Self {
+        <Fr as Field>::double(self)
     }
 
     fn mul_assign<S: Into<<Self::Scalar as PrimeField>::Repr>>(&mut self, other: S) {

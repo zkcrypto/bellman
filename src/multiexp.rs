@@ -252,7 +252,7 @@ where
             ))
             .map(move |(this, mut higher): (_, G)| {
                 for _ in 0..c {
-                    higher.double();
+                    higher = higher.double();
                 }
 
                 higher.add_assign(&this);
