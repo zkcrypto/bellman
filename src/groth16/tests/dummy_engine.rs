@@ -362,15 +362,15 @@ impl CurveProjective for Fr {
         <Fr as Field>::random(rng)
     }
 
-    fn zero() -> Self {
+    fn identity() -> Self {
         <Fr as Field>::zero()
     }
 
-    fn one() -> Self {
+    fn generator() -> Self {
         <Fr as Field>::one()
     }
 
-    fn is_zero(&self) -> bool {
+    fn is_identity(&self) -> bool {
         <Fr as Field>::is_zero(self)
     }
 
@@ -450,15 +450,15 @@ impl CurveAffine for Fr {
     type Scalar = Fr;
     type Engine = DummyEngine;
 
-    fn zero() -> Self {
+    fn identity() -> Self {
         <Fr as Field>::zero()
     }
 
-    fn one() -> Self {
+    fn generator() -> Self {
         <Fr as Field>::one()
     }
 
-    fn is_zero(&self) -> bool {
+    fn is_identity(&self) -> bool {
         <Fr as Field>::is_zero(self)
     }
 

@@ -55,7 +55,7 @@ impl<G: CurveAffine> Source<G> for (Arc<Vec<G>>, usize) {
             .into());
         }
 
-        if self.0[self.1].is_zero() {
+        if self.0[self.1].is_identity() {
             return Err(SynthesisError::UnexpectedIdentity);
         }
 
@@ -173,13 +173,13 @@ where
 
         pool.compute(move || {
             // Accumulate the result
-            let mut acc = G::zero();
+            let mut acc = G::identity();
 
             // Build a source for the bases
             let mut bases = bases.new();
 
             // Create space for the buckets
-            let mut buckets = vec![G::zero(); (1 << c) - 1];
+            let mut buckets = vec![G::identity(); (1 << c) - 1];
 
             let one = <G::Engine as ScalarEngine>::Fr::one();
 
@@ -222,7 +222,7 @@ where
             // e.g. 3a + 2b + 1c = a +
             //                    (a) + b +
             //                    ((a) + b) + c
-            let mut running_sum = G::zero();
+            let mut running_sum = G::identity();
             for exp in buckets.into_iter().rev() {
                 running_sum.add_assign(&exp);
                 acc.add_assign(&running_sum);
@@ -302,7 +302,7 @@ fn test_with_bls12() {
     ) -> G {
         assert_eq!(bases.len(), exponents.len());
 
-        let mut acc = G::zero();
+        let mut acc = G::identity();
 
         for (base, exp) in bases.iter().zip(exponents.iter()) {
             AddAssign::<&G>::add_assign(&mut acc, &base.mul(exp.to_repr()));

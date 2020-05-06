@@ -234,7 +234,7 @@ where
 
     let worker = Worker::new();
 
-    let mut h = vec![E::G1::zero(); powers_of_tau.as_ref().len() - 1];
+    let mut h = vec![E::G1::identity(); powers_of_tau.as_ref().len() - 1];
     {
         // Compute powers of tau
         {
@@ -287,11 +287,11 @@ where
     powers_of_tau.ifft(&worker);
     let powers_of_tau = powers_of_tau.into_coeffs();
 
-    let mut a = vec![E::G1::zero(); assembly.num_inputs + assembly.num_aux];
-    let mut b_g1 = vec![E::G1::zero(); assembly.num_inputs + assembly.num_aux];
-    let mut b_g2 = vec![E::G2::zero(); assembly.num_inputs + assembly.num_aux];
-    let mut ic = vec![E::G1::zero(); assembly.num_inputs];
-    let mut l = vec![E::G1::zero(); assembly.num_aux];
+    let mut a = vec![E::G1::identity(); assembly.num_inputs + assembly.num_aux];
+    let mut b_g1 = vec![E::G1::identity(); assembly.num_inputs + assembly.num_aux];
+    let mut b_g2 = vec![E::G2::identity(); assembly.num_inputs + assembly.num_aux];
+    let mut ic = vec![E::G1::identity(); assembly.num_inputs];
+    let mut l = vec![E::G1::identity(); assembly.num_aux];
 
     fn eval<E: Engine>(
         // wNAF window tables
@@ -446,7 +446,7 @@ where
     // Don't allow any elements be unconstrained, so that
     // the L query is always fully dense.
     for e in l.iter() {
-        if e.is_zero() {
+        if e.is_identity() {
             return Err(SynthesisError::UnconstrainedVariable);
         }
     }
@@ -472,19 +472,19 @@ where
         // Filter points at infinity away from A/B queries
         a: Arc::new(
             a.into_iter()
-                .filter(|e| !e.is_zero())
+                .filter(|e| !e.is_identity())
                 .map(|e| e.into_affine())
                 .collect(),
         ),
         b_g1: Arc::new(
             b_g1.into_iter()
-                .filter(|e| !e.is_zero())
+                .filter(|e| !e.is_identity())
                 .map(|e| e.into_affine())
                 .collect(),
         ),
         b_g2: Arc::new(
             b_g2.into_iter()
-                .filter(|e| !e.is_zero())
+                .filter(|e| !e.is_identity())
                 .map(|e| e.into_affine())
                 .collect(),
         ),
