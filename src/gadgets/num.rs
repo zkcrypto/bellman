@@ -424,15 +424,15 @@ impl<E: ScalarEngine> Num<E> {
         Num { value, lc }
     }
 
-    pub fn scale(self, scalar: E::Fr) -> Self {
-        let lc =
-            self.lc
-                .as_ref()
-                .iter()
-                .fold(LinearCombination::zero(), |acc, (variable, mut fr)| {
-                    fr.mul_assign(&scalar);
-                    acc + (fr, *variable)
-                });
+    pub fn scale(mut self, scalar: E::Fr) -> Self {
+        let lc = self
+            .lc
+            .0
+            .iter_mut()
+            .fold(LinearCombination::zero(), |acc, (variable, fr)| {
+                fr.mul_assign(&scalar);
+                acc + (*fr, *variable)
+            });
 
         let value = match self.value {
             Some(v) => {

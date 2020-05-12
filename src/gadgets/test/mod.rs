@@ -63,9 +63,9 @@ impl Ord for OrderedVariable {
     }
 }
 
-fn proc_lc<E: ScalarEngine>(terms: &[(Variable, E::Fr)]) -> BTreeMap<OrderedVariable, E::Fr> {
+fn proc_lc<E: ScalarEngine>(terms: &LinearCombination<E>) -> BTreeMap<OrderedVariable, E::Fr> {
     let mut map = BTreeMap::new();
-    for &(var, coeff) in terms {
+    for (&var, &coeff) in terms.0.iter() {
         map.entry(OrderedVariable(var))
             .or_insert_with(E::Fr::zero)
             .add_assign(&coeff);
@@ -86,7 +86,7 @@ fn proc_lc<E: ScalarEngine>(terms: &[(Variable, E::Fr)]) -> BTreeMap<OrderedVari
     map
 }
 
-fn hash_lc<E: ScalarEngine>(terms: &[(Variable, E::Fr)], h: &mut Blake2sState) {
+fn hash_lc<E: ScalarEngine>(terms: &LinearCombination<E>, h: &mut Blake2sState) {
     let map = proc_lc::<E>(terms);
 
     let mut buf = [0u8; 9 + 32];
@@ -112,13 +112,13 @@ fn hash_lc<E: ScalarEngine>(terms: &[(Variable, E::Fr)], h: &mut Blake2sState) {
 }
 
 fn eval_lc<E: ScalarEngine>(
-    terms: &[(Variable, E::Fr)],
+    terms: &LinearCombination<E>,
     inputs: &[(E::Fr, String)],
     aux: &[(E::Fr, String)],
 ) -> E::Fr {
     let mut acc = E::Fr::zero();
 
-    for &(var, ref coeff) in terms {
+    for (&var, coeff) in terms.0.iter() {
         let mut tmp = match var.get_unchecked() {
             Index::Input(index) => inputs[index].0,
             Index::Aux(index) => aux[index].0,
@@ -164,7 +164,7 @@ impl<E: ScalarEngine> TestConstraintSystem<E> {
         let pp = |s: &mut String, lc: &LinearCombination<E>| {
             write!(s, "(").unwrap();
             let mut is_first = true;
-            for (var, coeff) in proc_lc::<E>(lc.as_ref()) {
+            for (var, coeff) in proc_lc::<E>(&lc) {
                 if coeff == negone {
                     write!(s, " - ").unwrap();
                 } else if !is_first {
@@ -227,9 +227,9 @@ impl<E: ScalarEngine> TestConstraintSystem<E> {
         }
 
         for constraint in &self.constraints {
-            hash_lc::<E>(constraint.0.as_ref(), &mut h);
-            hash_lc::<E>(constraint.1.as_ref(), &mut h);
-            hash_lc::<E>(constraint.2.as_ref(), &mut h);
+            hash_lc::<E>(&constraint.0, &mut h);
+            hash_lc::<E>(&constraint.1, &mut h);
+            hash_lc::<E>(&constraint.2, &mut h);
         }
 
         let mut s = String::new();
@@ -242,9 +242,9 @@ impl<E: ScalarEngine> TestConstraintSystem<E> {
 
     pub fn which_is_unsatisfied(&self) -> Option<&str> {
         for &(ref a, ref b, ref c, ref path) in &self.constraints {
-            let mut a = eval_lc::<E>(a.as_ref(), &self.inputs, &self.aux);
-            let b = eval_lc::<E>(b.as_ref(), &self.inputs, &self.aux);
-            let c = eval_lc::<E>(c.as_ref(), &self.inputs, &self.aux);
+            let mut a = eval_lc::<E>(a, &self.inputs, &self.aux);
+            let b = eval_lc::<E>(b, &self.inputs, &self.aux);
+            let c = eval_lc::<E>(c, &self.inputs, &self.aux);
 
             a.mul_assign(&b);
 

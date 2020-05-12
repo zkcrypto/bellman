@@ -29,7 +29,7 @@ fn eval<E: Engine>(
 ) -> E::Fr {
     let mut acc = E::Fr::zero();
 
-    for &(index, coeff) in lc.0.iter() {
+    for (&index, &coeff) in lc.0.iter() {
         let mut tmp;
 
         match index {

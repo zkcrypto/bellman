@@ -152,7 +152,7 @@ pub use gpu::GPU_NVIDIA_DEVICES;
 
 use ff::{Field, ScalarEngine};
 
-use std::collections::HashMap;
+use ahash::AHashMap as HashMap;
 use std::io;
 use std::marker::PhantomData;
 use std::ops::{Add, Sub};
@@ -169,7 +169,7 @@ pub trait Circuit<E: ScalarEngine> {
 }
 
 /// Represents a variable in our constraint system.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Variable(Index);
 
 impl Variable {
@@ -197,24 +197,18 @@ pub enum Index {
 /// This represents a linear combination of some variables, with coefficients
 /// in the scalar field of a pairing-friendly elliptic curve group.
 #[derive(Clone)]
-pub struct LinearCombination<E: ScalarEngine>(
-    Vec<(Variable, E::Fr)>,
-    Option<HashMap<Index, E::Fr>>,
-);
-
-impl<E: ScalarEngine> AsRef<[(Variable, E::Fr)]> for LinearCombination<E> {
-    fn as_ref(&self) -> &[(Variable, E::Fr)] {
-        &self.0
-    }
-}
+pub struct LinearCombination<E: ScalarEngine>(HashMap<Variable, E::Fr>);
 
 impl<E: ScalarEngine> LinearCombination<E> {
     pub fn zero() -> LinearCombination<E> {
-        LinearCombination(vec![], None)
+        LinearCombination(HashMap::new())
     }
 
     pub fn add_unsimplified(mut self, (coeff, var): (E::Fr, Variable)) -> LinearCombination<E> {
-        self.0.push((var, coeff));
+        self.0
+            .entry(var)
+            .or_insert(E::Fr::zero())
+            .add_assign(&coeff);
 
         self
     }
@@ -224,21 +218,10 @@ impl<E: ScalarEngine> Add<(E::Fr, Variable)> for LinearCombination<E> {
     type Output = LinearCombination<E>;
 
     fn add(mut self, (coeff, var): (E::Fr, Variable)) -> LinearCombination<E> {
-        let mut found = false;
-
-        for i in 0..self.0.len() {
-            let (v, mut c) = self.0[i];
-
-            if v.0 == var.0 {
-                c.add_assign(&coeff);
-                self.0[i] = (v, c);
-                found = true;
-            }
-        }
-
-        if !found {
-            self.0.push((var, coeff));
-        }
+        self.0
+            .entry(var)
+            .or_insert(E::Fr::zero())
+            .add_assign(&coeff);
 
         self
     }
@@ -275,28 +258,8 @@ impl<'a, E: ScalarEngine> Add<&'a LinearCombination<E>> for LinearCombination<E>
     type Output = LinearCombination<E>;
 
     fn add(mut self, other: &'a LinearCombination<E>) -> LinearCombination<E> {
-        if self.1.is_none() {
-            self.1 = Some(self.0.iter().map(|(var, val)| (var.0, *val)).collect());
-        }
-
-        match self.1.take() {
-            Some(mut map) => {
-                for (var, val) in &other.0 {
-                    if let Some(v) = map.get_mut(&var.0) {
-                        v.add_assign(val);
-                    } else {
-                        map.insert(var.0, *val);
-                    }
-                }
-
-                self.0.clear();
-                self.0
-                    .extend(map.iter().map(|(index, val)| (Variable(*index), *val)));
-                self.1 = Some(map);
-            }
-            None => {
-                unreachable!("ensure_hashmap guarantees Some(map)");
-            }
+        for (var, val) in &other.0 {
+            self.0.entry(*var).or_insert(E::Fr::zero()).add_assign(val);
         }
 
         self
@@ -307,8 +270,8 @@ impl<'a, E: ScalarEngine> Sub<&'a LinearCombination<E>> for LinearCombination<E>
     type Output = LinearCombination<E>;
 
     fn sub(mut self, other: &'a LinearCombination<E>) -> LinearCombination<E> {
-        for s in &other.0 {
-            self = self - (s.1, s.0);
+        for (var, val) in &other.0 {
+            self = self - (*val, *var);
         }
 
         self
@@ -320,9 +283,9 @@ impl<'a, E: ScalarEngine> Add<(E::Fr, &'a LinearCombination<E>)> for LinearCombi
 
     fn add(mut self, (coeff, other): (E::Fr, &'a LinearCombination<E>)) -> LinearCombination<E> {
         for s in &other.0 {
-            let mut tmp = s.1;
+            let mut tmp = *s.1;
             tmp.mul_assign(&coeff);
-            self = self + (tmp, s.0);
+            self = self + (tmp, *s.0);
         }
 
         self
@@ -334,9 +297,9 @@ impl<'a, E: ScalarEngine> Sub<(E::Fr, &'a LinearCombination<E>)> for LinearCombi
 
     fn sub(mut self, (coeff, other): (E::Fr, &'a LinearCombination<E>)) -> LinearCombination<E> {
         for s in &other.0 {
-            let mut tmp = s.1;
+            let mut tmp = *s.1;
             tmp.mul_assign(&coeff);
-            self = self - (tmp, s.0);
+            self = self - (tmp, *s.0);
         }
 
         self
