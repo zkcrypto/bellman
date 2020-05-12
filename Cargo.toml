@@ -37,6 +37,7 @@ hex-literal = "0.2"
 rand_xorshift = "0.2"
 sha2 = "0.8"
 env_logger = "0.7.1"
+criterion = "0.3.2"
 
 [features]
 default = ["groth16", "multicore"]
@@ -51,3 +52,9 @@ required-features = ["groth16"]
 
 [badges]
 maintenance = { status = "actively-developed" }
+
+
+
+[[bench]]
+name = "lc"
+harness = false
