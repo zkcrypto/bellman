@@ -204,6 +204,10 @@ impl<E: ScalarEngine> LinearCombination<E> {
         LinearCombination(HashMap::new())
     }
 
+    pub fn iter(&self) -> impl Iterator<Item = (&Variable, &E::Fr)> + '_ {
+        self.0.iter()
+    }
+
     pub fn add_unsimplified(mut self, (coeff, var): (E::Fr, Variable)) -> LinearCombination<E> {
         self.0
             .entry(var)
