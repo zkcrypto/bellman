@@ -126,11 +126,11 @@ where
         })
         .collect();
 
+    let mut multiexp_kern = get_verifier_kernel(pi_num);
+
     // create group element corresponding to public input combination
     // This roughly corresponds to Accum_Gamma in spec
     let mut acc_pi = pvk.ic[0].mul(sum_r.into_repr());
-    let log_d = (pi_num as f32).log2().ceil() as usize;
-    let mut multiexp_kern = Some(LockedMultiexpKernel::<E>::new(log_d, false));
     acc_pi.add_assign(
         &multiexp(
             &worker,
@@ -187,4 +187,19 @@ where
 
     let res = E::miller_loop(&parts);
     Ok(E::final_exponentiation(&res).unwrap() == acc_y)
+}
+
+fn get_verifier_kernel<E: Engine>(pi_num: usize) -> Option<LockedMultiexpKernel<E>> {
+    match &std::env::var("BELLMAN_VERIFIER")
+        .unwrap_or("auto".to_string())
+        .to_lowercase()[..]
+    {
+        "gpu" => {
+            let log_d = (pi_num as f32).log2().ceil() as usize;
+            Some(LockedMultiexpKernel::<E>::new(log_d, false))
+        }
+        "cpu" => None,
+        "auto" => None,
+        s => panic!("Invalid verifier device selected: {}", s),
+    }
 }
