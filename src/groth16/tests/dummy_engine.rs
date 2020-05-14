@@ -4,6 +4,7 @@ use pairing::{Engine, PairingCurveAffine};
 
 use rand_core::RngCore;
 use std::fmt;
+use std::iter::Sum;
 use std::num::Wrapping;
 use std::ops::{Add, AddAssign, BitAnd, Mul, MulAssign, Neg, Shr, Sub, SubAssign};
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
@@ -44,6 +45,18 @@ impl ConditionallySelectable for Fr {
             &(b.0).0,
             choice,
         )))
+    }
+}
+
+impl Sum for Fr {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.fold(Self::zero(), ::std::ops::Add::add)
+    }
+}
+
+impl<'r> Sum<&'r Fr> for Fr {
+    fn sum<I: Iterator<Item = &'r Fr>>(iter: I) -> Self {
+        iter.fold(Self::zero(), ::std::ops::Add::add)
     }
 }
 
