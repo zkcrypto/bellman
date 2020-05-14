@@ -367,6 +367,7 @@ impl Engine for DummyEngine {
 
 impl Group for Fr {
     type Subgroup = Fr;
+    type Scalar = Fr;
 
     fn random<R: RngCore + ?Sized>(rng: &mut R) -> Self {
         <Fr as Field>::random(rng)
@@ -394,18 +395,11 @@ impl PrimeGroup for Fr {}
 impl CurveProjective for Fr {
     type Affine = Fr;
     type Base = Fr;
-    type Scalar = Fr;
 
     fn batch_normalization(_: &mut [Self]) {}
 
     fn is_normalized(&self) -> bool {
         true
-    }
-
-    fn mul_assign<S: Into<<Self::Scalar as PrimeField>::Repr>>(&mut self, other: S) {
-        let tmp = Fr::from_repr(other.into()).unwrap();
-
-        MulAssign::mul_assign(self, &tmp);
     }
 
     fn into_affine(&self) -> Fr {

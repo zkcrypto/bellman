@@ -317,7 +317,7 @@ where
     let mut a_answer = a_inputs.wait()?;
     AddAssign::<&E::G1>::add_assign(&mut a_answer, &a_aux.wait()?);
     AddAssign::<&E::G1>::add_assign(&mut g_a, &a_answer);
-    a_answer.mul_assign(s);
+    MulAssign::<E::Fr>::mul_assign(&mut a_answer, s);
     AddAssign::<&E::G1>::add_assign(&mut g_c, &a_answer);
 
     let mut b1_answer: E::G1 = b_g1_inputs.wait()?;
@@ -326,7 +326,7 @@ where
     AddAssign::<&E::G2>::add_assign(&mut b2_answer, &b_g2_aux.wait()?);
 
     AddAssign::<&E::G2>::add_assign(&mut g_b, &b2_answer);
-    b1_answer.mul_assign(r);
+    MulAssign::<E::Fr>::mul_assign(&mut b1_answer, r);
     AddAssign::<&E::G1>::add_assign(&mut g_c, &b1_answer);
     AddAssign::<&E::G1>::add_assign(&mut g_c, &h.wait()?);
     AddAssign::<&E::G1>::add_assign(&mut g_c, &l.wait()?);
