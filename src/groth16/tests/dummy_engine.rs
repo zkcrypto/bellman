@@ -381,6 +381,10 @@ impl Group for Fr {
     fn is_identity(&self) -> bool {
         <Fr as Field>::is_zero(self)
     }
+
+    fn double(&self) -> Self {
+        <Fr as Field>::double(self)
+    }
 }
 
 impl PrimeGroup for Fr {}
@@ -394,10 +398,6 @@ impl CurveProjective for Fr {
 
     fn is_normalized(&self) -> bool {
         true
-    }
-
-    fn double(&self) -> Self {
-        <Fr as Field>::double(self)
     }
 
     fn mul_assign<S: Into<<Self::Scalar as PrimeField>::Repr>>(&mut self, other: S) {
