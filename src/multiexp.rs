@@ -314,6 +314,7 @@ fn test_with_bls12() {
         acc
     }
 
+    use group::Group;
     use pairing::{bls12_381::Bls12, Engine};
     use rand;
 

@@ -1,5 +1,5 @@
 use ff::{Field, PrimeField, ScalarEngine};
-use group::{CurveAffine, CurveProjective, EncodedPoint, GroupDecodingError};
+use group::{CurveAffine, CurveProjective, EncodedPoint, Group, GroupDecodingError, PrimeGroup};
 use pairing::{Engine, PairingCurveAffine};
 
 use rand_core::RngCore;
@@ -352,11 +352,7 @@ impl Engine for DummyEngine {
     }
 }
 
-impl CurveProjective for Fr {
-    type Affine = Fr;
-    type Base = Fr;
-    type Scalar = Fr;
-
+impl Group for Fr {
     fn random<R: RngCore + ?Sized>(rng: &mut R) -> Self {
         <Fr as Field>::random(rng)
     }
@@ -372,6 +368,14 @@ impl CurveProjective for Fr {
     fn is_identity(&self) -> bool {
         <Fr as Field>::is_zero(self)
     }
+}
+
+impl PrimeGroup for Fr {}
+
+impl CurveProjective for Fr {
+    type Affine = Fr;
+    type Base = Fr;
+    type Scalar = Fr;
 
     fn batch_normalization(_: &mut [Self]) {}
 
