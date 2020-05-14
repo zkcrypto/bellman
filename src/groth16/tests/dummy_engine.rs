@@ -366,6 +366,8 @@ impl Engine for DummyEngine {
 }
 
 impl Group for Fr {
+    type Subgroup = Fr;
+
     fn random<R: RngCore + ?Sized>(rng: &mut R) -> Self {
         <Fr as Field>::random(rng)
     }
