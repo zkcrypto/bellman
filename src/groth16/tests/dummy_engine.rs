@@ -381,8 +381,8 @@ impl Group for Fr {
         <Fr as Field>::one()
     }
 
-    fn is_identity(&self) -> bool {
-        <Fr as Field>::is_zero(self)
+    fn is_identity(&self) -> Choice {
+        Choice::from(if <Fr as Field>::is_zero(self) { 1 } else { 0 })
     }
 
     fn double(&self) -> Self {

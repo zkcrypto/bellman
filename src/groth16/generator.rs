@@ -446,7 +446,7 @@ where
     // Don't allow any elements be unconstrained, so that
     // the L query is always fully dense.
     for e in l.iter() {
-        if e.is_identity() {
+        if e.is_identity().into() {
             return Err(SynthesisError::UnconstrainedVariable);
         }
     }
@@ -472,19 +472,19 @@ where
         // Filter points at infinity away from A/B queries
         a: Arc::new(
             a.into_iter()
-                .filter(|e| !e.is_identity())
+                .filter(|e| bool::from(!e.is_identity()))
                 .map(|e| e.into_affine())
                 .collect(),
         ),
         b_g1: Arc::new(
             b_g1.into_iter()
-                .filter(|e| !e.is_identity())
+                .filter(|e| bool::from(!e.is_identity()))
                 .map(|e| e.into_affine())
                 .collect(),
         ),
         b_g2: Arc::new(
             b_g2.into_iter()
-                .filter(|e| !e.is_identity())
+                .filter(|e| bool::from(!e.is_identity()))
                 .map(|e| e.into_affine())
                 .collect(),
         ),
