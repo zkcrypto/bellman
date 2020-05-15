@@ -295,7 +295,7 @@ where
     );
     let b_g2_aux = multiexp(&worker, b_g2_aux_source, b_aux_density, aux_assignment);
 
-    if vk.delta_g1.is_identity() || vk.delta_g2.is_identity() {
+    if bool::from(vk.delta_g1.is_identity() | vk.delta_g2.is_identity()) {
         // If this element is zero, someone is trying to perform a
         // subversion-CRS attack.
         return Err(SynthesisError::UnexpectedIdentity);

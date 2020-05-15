@@ -55,7 +55,7 @@ impl<G: CurveAffine> Source<G> for (Arc<Vec<G>>, usize) {
             .into());
         }
 
-        if self.0[self.1].is_identity() {
+        if self.0[self.1].is_identity().into() {
             return Err(SynthesisError::UnexpectedIdentity);
         }
 

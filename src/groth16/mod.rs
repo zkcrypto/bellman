@@ -54,7 +54,7 @@ impl<E: Engine> Proof<E> {
             .into_affine()
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
             .and_then(|e| {
-                if e.is_identity() {
+                if e.is_identity().into() {
                     Err(io::Error::new(
                         io::ErrorKind::InvalidData,
                         "point at infinity",
@@ -69,7 +69,7 @@ impl<E: Engine> Proof<E> {
             .into_affine()
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
             .and_then(|e| {
-                if e.is_identity() {
+                if e.is_identity().into() {
                     Err(io::Error::new(
                         io::ErrorKind::InvalidData,
                         "point at infinity",
@@ -84,7 +84,7 @@ impl<E: Engine> Proof<E> {
             .into_affine()
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
             .and_then(|e| {
-                if e.is_identity() {
+                if e.is_identity().into() {
                     Err(io::Error::new(
                         io::ErrorKind::InvalidData,
                         "point at infinity",
@@ -198,7 +198,7 @@ impl<E: Engine> VerifyingKey<E> {
                 .into_affine()
                 .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
                 .and_then(|e| {
-                    if e.is_identity() {
+                    if e.is_identity().into() {
                         Err(io::Error::new(
                             io::ErrorKind::InvalidData,
                             "point at infinity",
@@ -303,7 +303,7 @@ impl<E: Engine> Parameters<E> {
             }
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
             .and_then(|e| {
-                if e.is_identity() {
+                if e.is_identity().into() {
                     Err(io::Error::new(
                         io::ErrorKind::InvalidData,
                         "point at infinity",
@@ -325,7 +325,7 @@ impl<E: Engine> Parameters<E> {
             }
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
             .and_then(|e| {
-                if e.is_identity() {
+                if e.is_identity().into() {
                     Err(io::Error::new(
                         io::ErrorKind::InvalidData,
                         "point at infinity",
