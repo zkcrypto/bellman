@@ -1,4 +1,3 @@
-use ff::PrimeField;
 use group::{CurveAffine, CurveProjective};
 use pairing::{Engine, PairingCurveAffine};
 use std::ops::{AddAssign, Neg};
@@ -31,7 +30,7 @@ pub fn verify_proof<'a, E: Engine>(
     let mut acc = pvk.ic[0].into_projective();
 
     for (i, b) in public_inputs.iter().zip(pvk.ic.iter().skip(1)) {
-        AddAssign::<&E::G1>::add_assign(&mut acc, &b.mul(i.to_repr()));
+        AddAssign::<&E::G1>::add_assign(&mut acc, &(*b * i));
     }
 
     // The original verification equation is:

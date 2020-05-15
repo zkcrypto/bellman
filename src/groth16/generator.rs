@@ -463,12 +463,12 @@ where
     let g2 = g2.into_affine();
 
     let vk = VerifyingKey::<E> {
-        alpha_g1: g1.mul(alpha).into_affine(),
-        beta_g1: g1.mul(beta).into_affine(),
-        beta_g2: g2.mul(beta).into_affine(),
-        gamma_g2: g2.mul(gamma).into_affine(),
-        delta_g1: g1.mul(delta).into_affine(),
-        delta_g2: g2.mul(delta).into_affine(),
+        alpha_g1: (g1 * &alpha).into_affine(),
+        beta_g1: (g1 * &beta).into_affine(),
+        beta_g2: (g2 * &beta).into_affine(),
+        gamma_g2: (g2 * &gamma).into_affine(),
+        delta_g1: (g1 * &delta).into_affine(),
+        delta_g2: (g2 * &delta).into_affine(),
         ic,
     };
 

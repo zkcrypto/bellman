@@ -308,7 +308,7 @@ fn test_with_bls12() {
         let mut acc = G::identity();
 
         for (base, exp) in bases.iter().zip(exponents.iter()) {
-            AddAssign::<&G>::add_assign(&mut acc, &base.mul(exp.to_repr()));
+            AddAssign::<&G>::add_assign(&mut acc, &(*base * *exp));
         }
 
         acc

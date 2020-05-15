@@ -475,15 +475,6 @@ impl CurveAffine for Fr {
         Choice::from(if <Fr as Field>::is_zero(self) { 1 } else { 0 })
     }
 
-    fn mul<S: Into<<Self::Scalar as PrimeField>::Repr>>(&self, other: S) -> Self::Projective {
-        let mut res = *self;
-        let tmp = Fr::from_repr(other.into()).unwrap();
-
-        MulAssign::mul_assign(&mut res, &tmp);
-
-        res
-    }
-
     fn into_projective(&self) -> Self::Projective {
         *self
     }

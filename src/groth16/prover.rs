@@ -301,18 +301,18 @@ where
         return Err(SynthesisError::UnexpectedIdentity);
     }
 
-    let mut g_a = vk.delta_g1.mul(r);
+    let mut g_a = vk.delta_g1 * &r;
     AddAssign::<&E::G1Affine>::add_assign(&mut g_a, &vk.alpha_g1);
-    let mut g_b = vk.delta_g2.mul(s);
+    let mut g_b = vk.delta_g2 * &s;
     AddAssign::<&E::G2Affine>::add_assign(&mut g_b, &vk.beta_g2);
     let mut g_c;
     {
         let mut rs = r;
         rs.mul_assign(&s);
 
-        g_c = vk.delta_g1.mul(rs);
-        AddAssign::<&E::G1>::add_assign(&mut g_c, &vk.alpha_g1.mul(s));
-        AddAssign::<&E::G1>::add_assign(&mut g_c, &vk.beta_g1.mul(r));
+        g_c = vk.delta_g1 * &rs;
+        AddAssign::<&E::G1>::add_assign(&mut g_c, &(vk.alpha_g1 * &s));
+        AddAssign::<&E::G1>::add_assign(&mut g_c, &(vk.beta_g1 * &r));
     }
     let mut a_answer = a_inputs.wait()?;
     AddAssign::<&E::G1>::add_assign(&mut a_answer, &a_aux.wait()?);
