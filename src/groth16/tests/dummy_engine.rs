@@ -396,10 +396,12 @@ impl CurveProjective for Fr {
     type Affine = Fr;
     type Base = Fr;
 
-    fn batch_normalization(_: &mut [Self]) {}
+    fn batch_normalize(p: &[Self], q: &mut [Self::Affine]) {
+        assert_eq!(p.len(), q.len());
 
-    fn is_normalized(&self) -> bool {
-        true
+        for (p, q) in p.iter().zip(q.iter_mut()) {
+            *q = p.into_affine();
+        }
     }
 
     fn into_affine(&self) -> Fr {

@@ -234,7 +234,7 @@ where
 
     let worker = Worker::new();
 
-    let mut h = vec![E::G1::identity(); powers_of_tau.as_ref().len() - 1];
+    let mut h = vec![E::G1Affine::identity(); powers_of_tau.as_ref().len() - 1];
     {
         // Compute powers of tau
         {
@@ -267,17 +267,20 @@ where
 
                 scope.spawn(move |_scope| {
                     // Set values of the H query to g1^{(tau^i * t(tau)) / delta}
-                    for (h, p) in h.iter_mut().zip(p.iter()) {
-                        // Compute final exponent
-                        let mut exp = p.0;
-                        exp.mul_assign(&coeff);
+                    let h_proj: Vec<_> = p[..h.len()]
+                        .iter()
+                        .map(|p| {
+                            // Compute final exponent
+                            let mut exp = p.0;
+                            exp.mul_assign(&coeff);
 
-                        // Exponentiate
-                        *h = g1_wnaf.scalar(&exp);
-                    }
+                            // Exponentiate
+                            g1_wnaf.scalar(&exp)
+                        })
+                        .collect();
 
                     // Batch normalize
-                    E::G1::batch_normalization(h);
+                    E::G1::batch_normalize(&h_proj, h);
                 });
             }
         });
@@ -287,11 +290,11 @@ where
     powers_of_tau.ifft(&worker);
     let powers_of_tau = powers_of_tau.into_coeffs();
 
-    let mut a = vec![E::G1::identity(); assembly.num_inputs + assembly.num_aux];
-    let mut b_g1 = vec![E::G1::identity(); assembly.num_inputs + assembly.num_aux];
-    let mut b_g2 = vec![E::G2::identity(); assembly.num_inputs + assembly.num_aux];
-    let mut ic = vec![E::G1::identity(); assembly.num_inputs];
-    let mut l = vec![E::G1::identity(); assembly.num_aux];
+    let mut a = vec![E::G1Affine::identity(); assembly.num_inputs + assembly.num_aux];
+    let mut b_g1 = vec![E::G1Affine::identity(); assembly.num_inputs + assembly.num_aux];
+    let mut b_g2 = vec![E::G2Affine::identity(); assembly.num_inputs + assembly.num_aux];
+    let mut ic = vec![E::G1Affine::identity(); assembly.num_inputs];
+    let mut l = vec![E::G1Affine::identity(); assembly.num_aux];
 
     fn eval<E: Engine>(
         // wNAF window tables
@@ -307,10 +310,10 @@ where
         ct: &[Vec<(E::Fr, usize)>],
 
         // Resulting evaluated QAP polynomials
-        a: &mut [E::G1],
-        b_g1: &mut [E::G1],
-        b_g2: &mut [E::G2],
-        ext: &mut [E::G1],
+        a: &mut [E::G1Affine],
+        b_g1: &mut [E::G1Affine],
+        b_g2: &mut [E::G2Affine],
+        ext: &mut [E::G1Affine],
 
         // Inverse coefficient for ext elements
         inv: &E::Fr,
@@ -345,11 +348,16 @@ where
                 let mut g2_wnaf = g2_wnaf.shared();
 
                 scope.spawn(move |_scope| {
-                    for ((((((a, b_g1), b_g2), ext), at), bt), ct) in a
+                    let mut a_proj = vec![E::G1::identity(); a.len()];
+                    let mut b_g1_proj = vec![E::G1::identity(); b_g1.len()];
+                    let mut b_g2_proj = vec![E::G2::identity(); b_g2.len()];
+                    let mut ext_proj = vec![E::G1::identity(); ext.len()];
+
+                    for ((((((a, b_g1), b_g2), ext), at), bt), ct) in a_proj
                         .iter_mut()
-                        .zip(b_g1.iter_mut())
-                        .zip(b_g2.iter_mut())
-                        .zip(ext.iter_mut())
+                        .zip(b_g1_proj.iter_mut())
+                        .zip(b_g2_proj.iter_mut())
+                        .zip(ext_proj.iter_mut())
                         .zip(at.iter())
                         .zip(bt.iter())
                         .zip(ct.iter())
@@ -398,10 +406,10 @@ where
                     }
 
                     // Batch normalize
-                    E::G1::batch_normalization(a);
-                    E::G1::batch_normalization(b_g1);
-                    E::G2::batch_normalization(b_g2);
-                    E::G1::batch_normalization(ext);
+                    E::G1::batch_normalize(&a_proj, a);
+                    E::G1::batch_normalize(&b_g1_proj, b_g1);
+                    E::G2::batch_normalize(&b_g2_proj, b_g2);
+                    E::G1::batch_normalize(&ext_proj, ext);
                 });
             }
         });
@@ -461,31 +469,28 @@ where
         gamma_g2: g2.mul(gamma).into_affine(),
         delta_g1: g1.mul(delta).into_affine(),
         delta_g2: g2.mul(delta).into_affine(),
-        ic: ic.into_iter().map(|e| e.into_affine()).collect(),
+        ic,
     };
 
     Ok(Parameters {
         vk,
-        h: Arc::new(h.into_iter().map(|e| e.into_affine()).collect()),
-        l: Arc::new(l.into_iter().map(|e| e.into_affine()).collect()),
+        h: Arc::new(h),
+        l: Arc::new(l),
 
         // Filter points at infinity away from A/B queries
         a: Arc::new(
             a.into_iter()
                 .filter(|e| bool::from(!e.is_identity()))
-                .map(|e| e.into_affine())
                 .collect(),
         ),
         b_g1: Arc::new(
             b_g1.into_iter()
                 .filter(|e| bool::from(!e.is_identity()))
-                .map(|e| e.into_affine())
                 .collect(),
         ),
         b_g2: Arc::new(
             b_g2.into_iter()
                 .filter(|e| bool::from(!e.is_identity()))
-                .map(|e| e.into_affine())
                 .collect(),
         ),
     })
