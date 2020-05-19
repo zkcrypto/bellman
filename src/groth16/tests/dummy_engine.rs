@@ -1,5 +1,5 @@
 use ff::{Field, PrimeField, ScalarEngine};
-use group::{CurveAffine, CurveProjective, EncodedPoint, Group, GroupDecodingError, PrimeGroup};
+use group::{CurveAffine, CurveProjective, EncodedPoint, Group, PrimeGroup};
 use pairing::{Engine, PairingCurveAffine};
 
 use rand_core::RngCore;
@@ -443,14 +443,6 @@ impl EncodedPoint for FakePoint {
         unimplemented!()
     }
 
-    fn into_affine(&self) -> Result<Self::Affine, GroupDecodingError> {
-        unimplemented!()
-    }
-
-    fn into_affine_unchecked(&self) -> Result<Self::Affine, GroupDecodingError> {
-        unimplemented!()
-    }
-
     fn from_affine(_: Self::Affine) -> Self {
         unimplemented!()
     }
@@ -477,6 +469,22 @@ impl CurveAffine for Fr {
 
     fn into_projective(&self) -> Self::Projective {
         *self
+    }
+
+    fn from_compressed(_bytes: &Self::Compressed) -> CtOption<Self> {
+        unimplemented!()
+    }
+
+    fn from_compressed_unchecked(_bytes: &Self::Compressed) -> CtOption<Self> {
+        unimplemented!()
+    }
+
+    fn from_uncompressed(_bytes: &Self::Uncompressed) -> CtOption<Self> {
+        unimplemented!()
+    }
+
+    fn from_uncompressed_unchecked(_bytes: &Self::Uncompressed) -> CtOption<Self> {
+        unimplemented!()
     }
 }
 
