@@ -332,8 +332,8 @@ where
     AddAssign::<&E::G1>::add_assign(&mut g_c, &l.wait()?);
 
     Ok(Proof {
-        a: g_a.into_affine(),
-        b: g_b.into_affine(),
-        c: g_c.into_affine(),
+        a: g_a.to_affine(),
+        b: g_b.to_affine(),
+        c: g_c.to_affine(),
     })
 }

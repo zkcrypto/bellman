@@ -400,11 +400,11 @@ impl CurveProjective for Fr {
         assert_eq!(p.len(), q.len());
 
         for (p, q) in p.iter().zip(q.iter_mut()) {
-            *q = p.into_affine();
+            *q = p.to_affine();
         }
     }
 
-    fn into_affine(&self) -> Fr {
+    fn to_affine(&self) -> Fr {
         *self
     }
 
@@ -451,7 +451,7 @@ impl CurveAffine for Fr {
         Choice::from(if <Fr as Field>::is_zero(self) { 1 } else { 0 })
     }
 
-    fn into_projective(&self) -> Self::Projective {
+    fn to_projective(&self) -> Self::Projective {
         *self
     }
 
@@ -463,7 +463,7 @@ impl CurveAffine for Fr {
         unimplemented!()
     }
 
-    fn into_compressed(&self) -> Self::Compressed {
+    fn to_compressed(&self) -> Self::Compressed {
         unimplemented!()
     }
 
@@ -475,7 +475,7 @@ impl CurveAffine for Fr {
         unimplemented!()
     }
 
-    fn into_uncompressed(&self) -> Self::Uncompressed {
+    fn to_uncompressed(&self) -> Self::Uncompressed {
         unimplemented!()
     }
 }

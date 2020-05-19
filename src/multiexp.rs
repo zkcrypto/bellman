@@ -328,7 +328,7 @@ fn test_with_bls12() {
     );
     let g = Arc::new(
         (0..SAMPLES)
-            .map(|_| <Bls12 as Engine>::G1::random(rng).into_affine())
+            .map(|_| <Bls12 as Engine>::G1::random(rng).to_affine())
             .collect::<Vec<_>>(),
     );
 

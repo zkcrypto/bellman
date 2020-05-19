@@ -459,16 +459,16 @@ where
         }
     }
 
-    let g1 = g1.into_affine();
-    let g2 = g2.into_affine();
+    let g1 = g1.to_affine();
+    let g2 = g2.to_affine();
 
     let vk = VerifyingKey::<E> {
-        alpha_g1: (g1 * &alpha).into_affine(),
-        beta_g1: (g1 * &beta).into_affine(),
-        beta_g2: (g2 * &beta).into_affine(),
-        gamma_g2: (g2 * &gamma).into_affine(),
-        delta_g1: (g1 * &delta).into_affine(),
-        delta_g2: (g2 * &delta).into_affine(),
+        alpha_g1: (g1 * &alpha).to_affine(),
+        beta_g1: (g1 * &beta).to_affine(),
+        beta_g2: (g2 * &beta).to_affine(),
+        gamma_g2: (g2 * &gamma).to_affine(),
+        delta_g1: (g1 * &delta).to_affine(),
+        delta_g2: (g2 * &delta).to_affine(),
         ic,
     };
 
