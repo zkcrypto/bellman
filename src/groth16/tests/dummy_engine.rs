@@ -1,5 +1,5 @@
 use ff::{Field, PrimeField, ScalarEngine};
-use group::{CurveAffine, CurveProjective, EncodedPoint, Group, PrimeGroup};
+use group::{CurveAffine, CurveProjective, Group, PrimeGroup};
 use pairing::{Engine, PairingCurveAffine};
 
 use rand_core::RngCore;
@@ -417,7 +417,7 @@ impl CurveProjective for Fr {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Default)]
 pub struct FakePoint;
 
 impl AsMut<[u8]> for FakePoint {
@@ -428,22 +428,6 @@ impl AsMut<[u8]> for FakePoint {
 
 impl AsRef<[u8]> for FakePoint {
     fn as_ref(&self) -> &[u8] {
-        unimplemented!()
-    }
-}
-
-impl EncodedPoint for FakePoint {
-    type Affine = Fr;
-
-    fn empty() -> Self {
-        unimplemented!()
-    }
-
-    fn size() -> usize {
-        unimplemented!()
-    }
-
-    fn from_affine(_: Self::Affine) -> Self {
         unimplemented!()
     }
 }
@@ -479,11 +463,19 @@ impl CurveAffine for Fr {
         unimplemented!()
     }
 
+    fn into_compressed(&self) -> Self::Compressed {
+        unimplemented!()
+    }
+
     fn from_uncompressed(_bytes: &Self::Uncompressed) -> CtOption<Self> {
         unimplemented!()
     }
 
     fn from_uncompressed_unchecked(_bytes: &Self::Uncompressed) -> CtOption<Self> {
+        unimplemented!()
+    }
+
+    fn into_uncompressed(&self) -> Self::Uncompressed {
         unimplemented!()
     }
 }
