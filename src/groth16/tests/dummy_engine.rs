@@ -391,7 +391,6 @@ impl PrimeGroup for Fr {}
 
 impl CurveProjective for Fr {
     type Affine = Fr;
-    type Base = Fr;
 
     fn batch_normalize(p: &[Self], q: &mut [Self::Affine]) {
         assert_eq!(p.len(), q.len());
@@ -433,7 +432,6 @@ impl CurveAffine for Fr {
     type Compressed = FakePoint;
     type Uncompressed = FakePoint;
     type Projective = Fr;
-    type Base = Fr;
     type Scalar = Fr;
 
     fn identity() -> Self {
