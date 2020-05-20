@@ -396,14 +396,6 @@ impl PrimeGroup for Fr {}
 impl CurveProjective for Fr {
     type Affine = Fr;
 
-    fn batch_normalize(p: &[Self], q: &mut [Self::Affine]) {
-        assert_eq!(p.len(), q.len());
-
-        for (p, q) in p.iter().zip(q.iter_mut()) {
-            *q = p.to_affine();
-        }
-    }
-
     fn to_affine(&self) -> Fr {
         *self
     }
