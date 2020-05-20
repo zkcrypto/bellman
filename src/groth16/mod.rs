@@ -2,7 +2,7 @@
 //!
 //! [Groth16]: https://eprint.iacr.org/2016/260
 
-use group::CurveAffine;
+use group::{CurveAffine, UncompressedEncoding};
 use pairing::{Engine, MultiMillerLoop};
 
 use crate::SynthesisError;
@@ -158,7 +158,7 @@ impl<E: Engine> VerifyingKey<E> {
 
     pub fn read<R: Read>(mut reader: R) -> io::Result<Self> {
         let read_g1 = |reader: &mut R| -> io::Result<E::G1Affine> {
-            let mut g1_repr = <E::G1Affine as CurveAffine>::Uncompressed::default();
+            let mut g1_repr = <E::G1Affine as UncompressedEncoding>::Uncompressed::default();
             reader.read_exact(g1_repr.as_mut())?;
 
             let affine = E::G1Affine::from_uncompressed(&g1_repr);
@@ -170,7 +170,7 @@ impl<E: Engine> VerifyingKey<E> {
         };
 
         let read_g2 = |reader: &mut R| -> io::Result<E::G2Affine> {
-            let mut g2_repr = <E::G2Affine as CurveAffine>::Uncompressed::default();
+            let mut g2_repr = <E::G2Affine as UncompressedEncoding>::Uncompressed::default();
             reader.read_exact(g2_repr.as_mut())?;
 
             let affine = E::G2Affine::from_uncompressed(&g2_repr);
@@ -289,7 +289,7 @@ impl<E: Engine> Parameters<E> {
 
     pub fn read<R: Read>(mut reader: R, checked: bool) -> io::Result<Self> {
         let read_g1 = |reader: &mut R| -> io::Result<E::G1Affine> {
-            let mut repr = <E::G1Affine as CurveAffine>::Uncompressed::default();
+            let mut repr = <E::G1Affine as UncompressedEncoding>::Uncompressed::default();
             reader.read_exact(repr.as_mut())?;
 
             let affine = if checked {
@@ -317,7 +317,7 @@ impl<E: Engine> Parameters<E> {
         };
 
         let read_g2 = |reader: &mut R| -> io::Result<E::G2Affine> {
-            let mut repr = <E::G2Affine as CurveAffine>::Uncompressed::default();
+            let mut repr = <E::G2Affine as UncompressedEncoding>::Uncompressed::default();
             reader.read_exact(repr.as_mut())?;
 
             let affine = if checked {

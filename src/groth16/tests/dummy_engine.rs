@@ -1,5 +1,5 @@
 use ff::{Field, PrimeField};
-use group::{CurveAffine, CurveProjective, Group, PrimeGroup};
+use group::{CurveAffine, CurveProjective, Group, PrimeGroup, UncompressedEncoding};
 use pairing::{Engine, MillerLoopResult, MultiMillerLoop, PairingCurveAffine};
 
 use rand_core::RngCore;
@@ -434,7 +434,6 @@ impl AsRef<[u8]> for FakePoint {
 
 impl CurveAffine for Fr {
     type Compressed = FakePoint;
-    type Uncompressed = FakePoint;
     type Projective = Fr;
     type Scalar = Fr;
 
@@ -465,6 +464,10 @@ impl CurveAffine for Fr {
     fn to_compressed(&self) -> Self::Compressed {
         unimplemented!()
     }
+}
+
+impl UncompressedEncoding for Fr {
+    type Uncompressed = FakePoint;
 
     fn from_uncompressed(_bytes: &Self::Uncompressed) -> CtOption<Self> {
         unimplemented!()
