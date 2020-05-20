@@ -330,8 +330,6 @@ impl Engine for DummyEngine {
     type G1Affine = Fr;
     type G2 = Fr;
     type G2Affine = Fr;
-    type Fq = Fr;
-    type Fqe = Fr;
 
     // TODO: This should be F_645131 or something. Doesn't matter for now.
     type Fqk = Fr;
