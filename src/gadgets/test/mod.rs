@@ -157,6 +157,16 @@ impl<E: ScalarEngine> TestConstraintSystem<E> {
             tmp
         };
 
+        for input in &self.inputs {
+            write!(s, "{}\n", input.1).unwrap();
+        }
+        write!(s, "\n\n").unwrap();
+
+        for aux in &self.aux {
+            write!(s, "{}\n", aux.1).unwrap();
+        }
+        write!(s, "\n\n").unwrap();
+
         let powers_of_two = (0..E::Fr::NUM_BITS)
             .map(|i| E::Fr::from_str("2").unwrap().pow(&[u64::from(i)]))
             .collect::<Vec<_>>();
