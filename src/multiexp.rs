@@ -2,7 +2,7 @@ use super::multicore::Worker;
 use bit_vec::{self, BitVec};
 use ff::{Endianness, Field, PrimeField};
 use futures::Future;
-use group::{CofactorCurve, CurveAffine};
+use group::cofactor::{CofactorCurve, CofactorCurveAffine};
 use std::io;
 use std::iter;
 use std::ops::AddAssign;
@@ -11,14 +11,14 @@ use std::sync::Arc;
 use super::SynthesisError;
 
 /// An object that builds a source of bases.
-pub trait SourceBuilder<G: CurveAffine>: Send + Sync + 'static + Clone {
+pub trait SourceBuilder<G: CofactorCurveAffine>: Send + Sync + 'static + Clone {
     type Source: Source<G>;
 
     fn new(self) -> Self::Source;
 }
 
 /// A source of bases, like an iterator.
-pub trait Source<G: CurveAffine> {
+pub trait Source<G: CofactorCurveAffine> {
     fn next(&mut self) -> Result<&G, SynthesisError>;
 
     /// Skips `amt` elements from the source, avoiding deserialization.
@@ -37,7 +37,7 @@ pub trait AddAssignFromSource: CofactorCurve {
 }
 impl<G> AddAssignFromSource for G where G: CofactorCurve {}
 
-impl<G: CurveAffine> SourceBuilder<G> for (Arc<Vec<G>>, usize) {
+impl<G: CofactorCurveAffine> SourceBuilder<G> for (Arc<Vec<G>>, usize) {
     type Source = (Arc<Vec<G>>, usize);
 
     fn new(self) -> (Arc<Vec<G>>, usize) {
@@ -45,7 +45,7 @@ impl<G: CurveAffine> SourceBuilder<G> for (Arc<Vec<G>>, usize) {
     }
 }
 
-impl<G: CurveAffine> Source<G> for (Arc<Vec<G>>, usize) {
+impl<G: CofactorCurveAffine> Source<G> for (Arc<Vec<G>>, usize) {
     fn next(&mut self) -> Result<&G, SynthesisError> {
         if self.0.len() <= self.1 {
             return Err(io::Error::new(
@@ -311,7 +311,7 @@ fn test_with_bls12() {
         acc
     }
 
-    use group::Group;
+    use group::{Curve, Group};
     use pairing::{
         bls12_381::{Bls12, Fr},
         Engine,

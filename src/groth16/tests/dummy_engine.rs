@@ -1,5 +1,9 @@
 use ff::{Field, PrimeField};
-use group::{CurveAffine, CofactorCurve, Group, GroupEncoding, PrimeGroup, UncompressedEncoding};
+use group::{
+    cofactor::{CofactorCurve, CofactorCurveAffine, CofactorGroup},
+    prime::PrimeGroup,
+    Curve, Group, GroupEncoding, UncompressedEncoding,
+};
 use pairing::{Engine, MillerLoopResult, MultiMillerLoop, PairingCurveAffine};
 
 use rand_core::RngCore;
@@ -367,7 +371,6 @@ impl MillerLoopResult for Fr {
 }
 
 impl Group for Fr {
-    type Subgroup = Fr;
     type Scalar = Fr;
 
     fn random<R: RngCore + ?Sized>(rng: &mut R) -> Self {
@@ -393,8 +396,20 @@ impl Group for Fr {
 
 impl PrimeGroup for Fr {}
 
-impl CofactorCurve for Fr {
-    type Affine = Fr;
+impl CofactorGroup for Fr {
+    type Subgroup = Fr;
+
+    fn mul_by_cofactor(&self) -> Self::Subgroup {
+        *self
+    }
+
+    fn into_subgroup(self) -> CtOption<Self::Subgroup> {
+        CtOption::new(self, Choice::from(1))
+    }
+}
+
+impl Curve for Fr {
+    type AffineRepr = Fr;
 
     fn to_affine(&self) -> Fr {
         *self
@@ -407,6 +422,10 @@ impl CofactorCurve for Fr {
     fn recommended_wnaf_for_num_scalars(_: usize) -> usize {
         3
     }
+}
+
+impl CofactorCurve for Fr {
+    type Affine = Fr;
 }
 
 #[derive(Copy, Clone, Default)]
@@ -424,7 +443,7 @@ impl AsRef<[u8]> for FakePoint {
     }
 }
 
-impl CurveAffine for Fr {
+impl CofactorCurveAffine for Fr {
     type Curve = Fr;
     type Scalar = Fr;
 

@@ -12,7 +12,7 @@
 //! [Groth16]: https://eprint.iacr.org/2016/260
 
 use ff::PrimeField;
-use group::CofactorCurve;
+use group::cofactor::CofactorCurve;
 
 use super::SynthesisError;
 

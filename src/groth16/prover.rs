@@ -5,7 +5,7 @@ use std::sync::Arc;
 use futures::Future;
 
 use ff::{Field, PrimeField};
-use group::{CurveAffine, CofactorCurve};
+use group::{cofactor::CofactorCurveAffine, Curve};
 use pairing::Engine;
 
 use super::{ParameterSource, Proof};
