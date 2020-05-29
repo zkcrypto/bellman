@@ -1,5 +1,5 @@
 use ff::{Field, PrimeField};
-use group::{CurveAffine, CurveProjective, Group, GroupEncoding, PrimeGroup, UncompressedEncoding};
+use group::{CurveAffine, CofactorCurve, Group, GroupEncoding, PrimeGroup, UncompressedEncoding};
 use pairing::{Engine, MillerLoopResult, MultiMillerLoop, PairingCurveAffine};
 
 use rand_core::RngCore;
@@ -393,7 +393,7 @@ impl Group for Fr {
 
 impl PrimeGroup for Fr {}
 
-impl CurveProjective for Fr {
+impl CofactorCurve for Fr {
     type Affine = Fr;
 
     fn to_affine(&self) -> Fr {
@@ -425,7 +425,7 @@ impl AsRef<[u8]> for FakePoint {
 }
 
 impl CurveAffine for Fr {
-    type Projective = Fr;
+    type Curve = Fr;
     type Scalar = Fr;
 
     fn identity() -> Self {
@@ -440,7 +440,7 @@ impl CurveAffine for Fr {
         Choice::from(if <Fr as Field>::is_zero(self) { 1 } else { 0 })
     }
 
-    fn to_projective(&self) -> Self::Projective {
+    fn to_curve(&self) -> Self::Curve {
         *self
     }
 }

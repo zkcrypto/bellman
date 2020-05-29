@@ -1,4 +1,4 @@
-use group::{CurveAffine, CurveProjective};
+use group::{CurveAffine, CofactorCurve};
 use pairing::{MillerLoopResult, MultiMillerLoop};
 use std::ops::{AddAssign, Neg};
 
@@ -27,7 +27,7 @@ pub fn verify_proof<'a, E: MultiMillerLoop>(
         return Err(SynthesisError::MalformedVerifyingKey);
     }
 
-    let mut acc = pvk.ic[0].to_projective();
+    let mut acc = pvk.ic[0].to_curve();
 
     for (i, b) in public_inputs.iter().zip(pvk.ic.iter().skip(1)) {
         AddAssign::<&E::G1>::add_assign(&mut acc, &(*b * i));

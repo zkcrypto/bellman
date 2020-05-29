@@ -12,7 +12,7 @@
 //! [Groth16]: https://eprint.iacr.org/2016/260
 
 use ff::PrimeField;
-use group::CurveProjective;
+use group::CofactorCurve;
 
 use super::SynthesisError;
 
@@ -196,23 +196,23 @@ pub trait Group<Scalar: PrimeField>: Sized + Copy + Clone + Send + Sync {
     fn group_sub_assign(&mut self, other: &Self);
 }
 
-pub struct Point<G: CurveProjective>(pub G);
+pub struct Point<G: CofactorCurve>(pub G);
 
-impl<G: CurveProjective> PartialEq for Point<G> {
+impl<G: CofactorCurve> PartialEq for Point<G> {
     fn eq(&self, other: &Point<G>) -> bool {
         self.0 == other.0
     }
 }
 
-impl<G: CurveProjective> Copy for Point<G> {}
+impl<G: CofactorCurve> Copy for Point<G> {}
 
-impl<G: CurveProjective> Clone for Point<G> {
+impl<G: CofactorCurve> Clone for Point<G> {
     fn clone(&self) -> Point<G> {
         *self
     }
 }
 
-impl<G: CurveProjective> Group<G::Scalar> for Point<G> {
+impl<G: CofactorCurve> Group<G::Scalar> for Point<G> {
     fn group_zero() -> Self {
         Point(G::identity())
     }
