@@ -446,17 +446,17 @@ impl CurveAffine for Fr {
 }
 
 impl GroupEncoding for Fr {
-    type Compressed = FakePoint;
+    type Repr = FakePoint;
 
-    fn from_compressed(_bytes: &Self::Compressed) -> CtOption<Self> {
+    fn from_bytes(_bytes: &Self::Repr) -> CtOption<Self> {
         unimplemented!()
     }
 
-    fn from_compressed_unchecked(_bytes: &Self::Compressed) -> CtOption<Self> {
+    fn from_bytes_unchecked(_bytes: &Self::Repr) -> CtOption<Self> {
         unimplemented!()
     }
 
-    fn to_compressed(&self) -> Self::Compressed {
+    fn to_bytes(&self) -> Self::Repr {
         unimplemented!()
     }
 }

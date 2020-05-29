@@ -38,19 +38,19 @@ impl<E: Engine> PartialEq for Proof<E> {
 
 impl<E: Engine> Proof<E> {
     pub fn write<W: Write>(&self, mut writer: W) -> io::Result<()> {
-        writer.write_all(self.a.to_compressed().as_ref())?;
-        writer.write_all(self.b.to_compressed().as_ref())?;
-        writer.write_all(self.c.to_compressed().as_ref())?;
+        writer.write_all(self.a.to_bytes().as_ref())?;
+        writer.write_all(self.b.to_bytes().as_ref())?;
+        writer.write_all(self.c.to_bytes().as_ref())?;
 
         Ok(())
     }
 
     pub fn read<R: Read>(mut reader: R) -> io::Result<Self> {
         let read_g1 = |reader: &mut R| -> io::Result<E::G1Affine> {
-            let mut g1_repr = <E::G1Affine as GroupEncoding>::Compressed::default();
+            let mut g1_repr = <E::G1Affine as GroupEncoding>::Repr::default();
             reader.read_exact(g1_repr.as_mut())?;
 
-            let affine = E::G1Affine::from_compressed(&g1_repr);
+            let affine = E::G1Affine::from_bytes(&g1_repr);
             let affine = if affine.is_some().into() {
                 Ok(affine.unwrap())
             } else {
@@ -70,10 +70,10 @@ impl<E: Engine> Proof<E> {
         };
 
         let read_g2 = |reader: &mut R| -> io::Result<E::G2Affine> {
-            let mut g2_repr = <E::G2Affine as GroupEncoding>::Compressed::default();
+            let mut g2_repr = <E::G2Affine as GroupEncoding>::Repr::default();
             reader.read_exact(g2_repr.as_mut())?;
 
-            let affine = E::G2Affine::from_compressed(&g2_repr);
+            let affine = E::G2Affine::from_bytes(&g2_repr);
             let affine = if affine.is_some().into() {
                 Ok(affine.unwrap())
             } else {
