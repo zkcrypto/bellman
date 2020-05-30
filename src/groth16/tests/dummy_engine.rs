@@ -1,6 +1,6 @@
 use ff::{Field, PrimeField};
 use group::{CurveAffine, CurveProjective, Group, PrimeGroup};
-use pairing::{Engine, MillerLoopResult, PairingCurveAffine};
+use pairing::{Engine, MillerLoopResult, MultiMillerLoop, PairingCurveAffine};
 
 use rand_core::RngCore;
 use std::fmt;
@@ -332,21 +332,26 @@ impl Engine for DummyEngine {
     type G2Affine = Fr;
 
     // TODO: This should be F_645131 or something. Doesn't matter for now.
-    type MillerLoopResult = Fr;
     type Gt = Fr;
 
-    fn miller_loop<'a, I>(i: I) -> Self::MillerLoopResult
-    where
-        I: IntoIterator<
-            Item = &'a (
-                &'a <Self::G1Affine as PairingCurveAffine>::Prepared,
-                &'a <Self::G2Affine as PairingCurveAffine>::Prepared,
-            ),
-        >,
-    {
+    fn pairing(p: &Self::G1Affine, q: &Self::G2Affine) -> Self::Gt {
+        Self::multi_miller_loop(&[(p, &(q.prepare()))]).final_exponentiation()
+    }
+}
+
+impl MultiMillerLoop for DummyEngine {
+    // TODO: This should be F_645131 or something. Doesn't matter for now.
+    type Result = Fr;
+
+    fn multi_miller_loop(
+        terms: &[(
+            &Self::G1Affine,
+            &<Self::G2Affine as PairingCurveAffine>::Prepared,
+        )],
+    ) -> Self::Result {
         let mut acc = <Fr as Field>::zero();
 
-        for &(a, b) in i {
+        for &(a, b) in terms {
             let mut tmp = *a;
             MulAssign::mul_assign(&mut tmp, b);
             AddAssign::add_assign(&mut acc, &tmp);
