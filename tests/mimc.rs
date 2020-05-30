@@ -4,10 +4,8 @@ use rand::thread_rng;
 // For benchmarking
 use std::time::{Duration, Instant};
 
-// Bring in some tools for using pairing-friendly curves
-use ff::{Field, ScalarEngine};
-use pairing::Engine;
-use std::ops::{AddAssign, MulAssign};
+// Bring in some tools for using finite fiels
+use ff::{Field, PrimeField};
 
 // We're going to use the BLS12-381 pairing-friendly elliptic curve.
 use pairing::bls12_381::Bls12;
@@ -35,7 +33,7 @@ const MIMC_ROUNDS: usize = 322;
 ///     return xL
 /// }
 /// ```
-fn mimc<E: Engine>(mut xl: E::Fr, mut xr: E::Fr, constants: &[E::Fr]) -> E::Fr {
+fn mimc<Scalar: PrimeField>(mut xl: Scalar, mut xr: Scalar, constants: &[Scalar]) -> Scalar {
     assert_eq!(constants.len(), MIMC_ROUNDS);
 
     for i in 0..MIMC_ROUNDS {
@@ -53,17 +51,17 @@ fn mimc<E: Engine>(mut xl: E::Fr, mut xr: E::Fr, constants: &[E::Fr]) -> E::Fr {
 
 /// This is our demo circuit for proving knowledge of the
 /// preimage of a MiMC hash invocation.
-struct MiMCDemo<'a, E: Engine> {
-    xl: Option<E::Fr>,
-    xr: Option<E::Fr>,
-    constants: &'a [E::Fr],
+struct MiMCDemo<'a, Scalar: PrimeField> {
+    xl: Option<Scalar>,
+    xr: Option<Scalar>,
+    constants: &'a [Scalar],
 }
 
 /// Our demo circuit implements this `Circuit` trait which
 /// is used during paramgen and proving in order to
 /// synthesize the constraint system.
-impl<'a, E: Engine> Circuit<E> for MiMCDemo<'a, E> {
-    fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
+impl<'a, Scalar: PrimeField> Circuit<Scalar> for MiMCDemo<'a, Scalar> {
+    fn synthesize<CS: ConstraintSystem<Scalar>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         assert_eq!(self.constants.len(), MIMC_ROUNDS);
 
         // Allocate the first component of the preimage.
@@ -147,6 +145,8 @@ impl<'a, E: Engine> Circuit<E> for MiMCDemo<'a, E> {
 
 #[test]
 fn test_mimc() {
+    use ff::ScalarEngine;
+
     // This may not be cryptographically safe, use
     // `OsRng` (for example) in production software.
     let rng = &mut thread_rng();
@@ -160,13 +160,13 @@ fn test_mimc() {
 
     // Create parameters for our circuit
     let params = {
-        let c = MiMCDemo::<Bls12> {
+        let c = MiMCDemo {
             xl: None,
             xr: None,
             constants: &constants,
         };
 
-        generate_random_parameters(c, rng).unwrap()
+        generate_random_parameters::<Bls12, _, _>(c, rng).unwrap()
     };
 
     // Prepare the verification key (for proof verification)
@@ -187,7 +187,7 @@ fn test_mimc() {
         // Generate a random preimage and compute the image
         let xl = <Bls12 as ScalarEngine>::Fr::random(rng);
         let xr = <Bls12 as ScalarEngine>::Fr::random(rng);
-        let image = mimc::<Bls12>(xl, xr, &constants);
+        let image = mimc(xl, xr, &constants);
 
         proof_vec.truncate(0);
 

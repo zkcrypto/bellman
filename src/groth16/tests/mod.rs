@@ -1,5 +1,4 @@
 use ff::{Field, PrimeField};
-use pairing::Engine;
 
 mod dummy_engine;
 use self::dummy_engine::*;
@@ -11,22 +10,22 @@ use crate::{Circuit, ConstraintSystem, SynthesisError};
 
 use super::{create_proof, generate_parameters, prepare_verifying_key, verify_proof};
 
-struct XORDemo<E: Engine> {
+struct XORDemo<Scalar: PrimeField> {
     a: Option<bool>,
     b: Option<bool>,
-    _marker: PhantomData<E>,
+    _marker: PhantomData<Scalar>,
 }
 
-impl<E: Engine> Circuit<E> for XORDemo<E> {
-    fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
+impl<Scalar: PrimeField> Circuit<Scalar> for XORDemo<Scalar> {
+    fn synthesize<CS: ConstraintSystem<Scalar>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let a_var = cs.alloc(
             || "a",
             || {
                 if self.a.is_some() {
                     if self.a.unwrap() {
-                        Ok(E::Fr::one())
+                        Ok(Scalar::one())
                     } else {
-                        Ok(E::Fr::zero())
+                        Ok(Scalar::zero())
                     }
                 } else {
                     Err(SynthesisError::AssignmentMissing)
@@ -46,9 +45,9 @@ impl<E: Engine> Circuit<E> for XORDemo<E> {
             || {
                 if self.b.is_some() {
                     if self.b.unwrap() {
-                        Ok(E::Fr::one())
+                        Ok(Scalar::one())
                     } else {
-                        Ok(E::Fr::zero())
+                        Ok(Scalar::zero())
                     }
                 } else {
                     Err(SynthesisError::AssignmentMissing)
@@ -68,9 +67,9 @@ impl<E: Engine> Circuit<E> for XORDemo<E> {
             || {
                 if self.a.is_some() && self.b.is_some() {
                     if self.a.unwrap() ^ self.b.unwrap() {
-                        Ok(E::Fr::one())
+                        Ok(Scalar::one())
                     } else {
-                        Ok(E::Fr::zero())
+                        Ok(Scalar::zero())
                     }
                 } else {
                     Err(SynthesisError::AssignmentMissing)
@@ -100,13 +99,13 @@ fn test_xordemo() {
     let tau = Fr::from_str("3673").unwrap();
 
     let params = {
-        let c = XORDemo::<DummyEngine> {
+        let c = XORDemo {
             a: None,
             b: None,
             _marker: PhantomData,
         };
 
-        generate_parameters(c, g1, g2, alpha, beta, gamma, delta, tau).unwrap()
+        generate_parameters::<DummyEngine, _>(c, g1, g2, alpha, beta, gamma, delta, tau).unwrap()
     };
 
     // This will synthesize the constraint system:

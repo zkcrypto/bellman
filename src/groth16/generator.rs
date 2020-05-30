@@ -2,7 +2,7 @@ use rand_core::RngCore;
 use std::ops::{AddAssign, MulAssign};
 use std::sync::Arc;
 
-use ff::Field;
+use ff::{Field, PrimeField};
 use group::{CurveAffine, CurveProjective, Group, Wnaf};
 use pairing::Engine;
 
@@ -22,7 +22,7 @@ pub fn generate_random_parameters<E, C, R>(
 ) -> Result<Parameters<E>, SynthesisError>
 where
     E: Engine,
-    C: Circuit<E>,
+    C: Circuit<E::Fr>,
     R: RngCore,
 {
     let g1 = E::G1::random(rng);
@@ -38,24 +38,24 @@ where
 
 /// This is our assembly structure that we'll use to synthesize the
 /// circuit into a QAP.
-struct KeypairAssembly<E: Engine> {
+struct KeypairAssembly<Scalar: PrimeField> {
     num_inputs: usize,
     num_aux: usize,
     num_constraints: usize,
-    at_inputs: Vec<Vec<(E::Fr, usize)>>,
-    bt_inputs: Vec<Vec<(E::Fr, usize)>>,
-    ct_inputs: Vec<Vec<(E::Fr, usize)>>,
-    at_aux: Vec<Vec<(E::Fr, usize)>>,
-    bt_aux: Vec<Vec<(E::Fr, usize)>>,
-    ct_aux: Vec<Vec<(E::Fr, usize)>>,
+    at_inputs: Vec<Vec<(Scalar, usize)>>,
+    bt_inputs: Vec<Vec<(Scalar, usize)>>,
+    ct_inputs: Vec<Vec<(Scalar, usize)>>,
+    at_aux: Vec<Vec<(Scalar, usize)>>,
+    bt_aux: Vec<Vec<(Scalar, usize)>>,
+    ct_aux: Vec<Vec<(Scalar, usize)>>,
 }
 
-impl<E: Engine> ConstraintSystem<E> for KeypairAssembly<E> {
+impl<Scalar: PrimeField> ConstraintSystem<Scalar> for KeypairAssembly<Scalar> {
     type Root = Self;
 
     fn alloc<F, A, AR>(&mut self, _: A, _: F) -> Result<Variable, SynthesisError>
     where
-        F: FnOnce() -> Result<E::Fr, SynthesisError>,
+        F: FnOnce() -> Result<Scalar, SynthesisError>,
         A: FnOnce() -> AR,
         AR: Into<String>,
     {
@@ -74,7 +74,7 @@ impl<E: Engine> ConstraintSystem<E> for KeypairAssembly<E> {
 
     fn alloc_input<F, A, AR>(&mut self, _: A, _: F) -> Result<Variable, SynthesisError>
     where
-        F: FnOnce() -> Result<E::Fr, SynthesisError>,
+        F: FnOnce() -> Result<Scalar, SynthesisError>,
         A: FnOnce() -> AR,
         AR: Into<String>,
     {
@@ -95,14 +95,14 @@ impl<E: Engine> ConstraintSystem<E> for KeypairAssembly<E> {
     where
         A: FnOnce() -> AR,
         AR: Into<String>,
-        LA: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
-        LB: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
-        LC: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
+        LA: FnOnce(LinearCombination<Scalar>) -> LinearCombination<Scalar>,
+        LB: FnOnce(LinearCombination<Scalar>) -> LinearCombination<Scalar>,
+        LC: FnOnce(LinearCombination<Scalar>) -> LinearCombination<Scalar>,
     {
-        fn eval<E: Engine>(
-            l: LinearCombination<E>,
-            inputs: &mut [Vec<(E::Fr, usize)>],
-            aux: &mut [Vec<(E::Fr, usize)>],
+        fn eval<Scalar: PrimeField>(
+            l: LinearCombination<Scalar>,
+            inputs: &mut [Vec<(Scalar, usize)>],
+            aux: &mut [Vec<(Scalar, usize)>],
             this_constraint: usize,
         ) {
             for (index, coeff) in l.0 {
@@ -165,7 +165,7 @@ pub fn generate_parameters<E, C>(
 ) -> Result<Parameters<E>, SynthesisError>
 where
     E: Engine,
-    C: Circuit<E>,
+    C: Circuit<E::Fr>,
 {
     let mut assembly = KeypairAssembly {
         num_inputs: 0,
@@ -192,7 +192,7 @@ where
     }
 
     // Create bases for blind evaluation of polynomials at tau
-    let powers_of_tau = vec![Scalar::<E>(E::Fr::zero()); assembly.num_constraints];
+    let powers_of_tau = vec![Scalar::<E::Fr>(E::Fr::zero()); assembly.num_constraints];
     let mut powers_of_tau = EvaluationDomain::from_coeffs(powers_of_tau)?;
 
     // Compute G1 window table
@@ -302,7 +302,7 @@ where
         g2_wnaf: &Wnaf<usize, &[E::G2], &mut Vec<i64>>,
 
         // Lagrange coefficients for tau
-        powers_of_tau: &[Scalar<E>],
+        powers_of_tau: &[Scalar<E::Fr>],
 
         // QAP polynomials
         at: &[Vec<(E::Fr, usize)>],
@@ -362,11 +362,11 @@ where
                         .zip(bt.iter())
                         .zip(ct.iter())
                     {
-                        fn eval_at_tau<E: Engine>(
-                            powers_of_tau: &[Scalar<E>],
-                            p: &[(E::Fr, usize)],
-                        ) -> E::Fr {
-                            let mut acc = E::Fr::zero();
+                        fn eval_at_tau<S: PrimeField>(
+                            powers_of_tau: &[Scalar<S>],
+                            p: &[(S, usize)],
+                        ) -> S {
+                            let mut acc = S::zero();
 
                             for &(ref coeff, index) in p {
                                 let mut n = powers_of_tau[index].0;
@@ -416,7 +416,7 @@ where
     }
 
     // Evaluate for inputs.
-    eval(
+    eval::<E>(
         &g1_wnaf,
         &g2_wnaf,
         &powers_of_tau,
@@ -434,7 +434,7 @@ where
     );
 
     // Evaluate for auxiliary variables.
-    eval(
+    eval::<E>(
         &g1_wnaf,
         &g2_wnaf,
         &powers_of_tau,

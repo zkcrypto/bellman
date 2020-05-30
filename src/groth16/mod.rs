@@ -479,20 +479,20 @@ mod test_with_bls12_381 {
     use super::*;
     use crate::{Circuit, ConstraintSystem, SynthesisError};
 
-    use ff::Field;
+    use ff::{Field, PrimeField};
     use pairing::bls12_381::{Bls12, Fr};
     use rand::thread_rng;
     use std::ops::MulAssign;
 
     #[test]
     fn serialization() {
-        struct MySillyCircuit<E: Engine> {
-            a: Option<E::Fr>,
-            b: Option<E::Fr>,
+        struct MySillyCircuit<Scalar: PrimeField> {
+            a: Option<Scalar>,
+            b: Option<Scalar>,
         }
 
-        impl<E: Engine> Circuit<E> for MySillyCircuit<E> {
-            fn synthesize<CS: ConstraintSystem<E>>(
+        impl<Scalar: PrimeField> Circuit<Scalar> for MySillyCircuit<Scalar> {
+            fn synthesize<CS: ConstraintSystem<Scalar>>(
                 self,
                 cs: &mut CS,
             ) -> Result<(), SynthesisError> {

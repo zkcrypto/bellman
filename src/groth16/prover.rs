@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use futures::Future;
 
-use ff::Field;
+use ff::{Field, PrimeField};
 use group::{CurveAffine, CurveProjective};
 use pairing::Engine;
 
@@ -18,14 +18,14 @@ use crate::multiexp::{multiexp, DensityTracker, FullDensity};
 
 use crate::multicore::Worker;
 
-fn eval<E: Engine>(
-    lc: &LinearCombination<E>,
+fn eval<S: PrimeField>(
+    lc: &LinearCombination<S>,
     mut input_density: Option<&mut DensityTracker>,
     mut aux_density: Option<&mut DensityTracker>,
-    input_assignment: &[E::Fr],
-    aux_assignment: &[E::Fr],
-) -> E::Fr {
-    let mut acc = E::Fr::zero();
+    input_assignment: &[S],
+    aux_assignment: &[S],
+) -> S {
+    let mut acc = S::zero();
 
     for &(index, coeff) in lc.0.iter() {
         let mut tmp;
@@ -45,7 +45,7 @@ fn eval<E: Engine>(
             }
         }
 
-        if coeff == E::Fr::one() {
+        if coeff == S::one() {
             acc.add_assign(&tmp);
         } else {
             tmp.mul_assign(&coeff);
@@ -56,28 +56,28 @@ fn eval<E: Engine>(
     acc
 }
 
-struct ProvingAssignment<E: Engine> {
+struct ProvingAssignment<S: PrimeField> {
     // Density of queries
     a_aux_density: DensityTracker,
     b_input_density: DensityTracker,
     b_aux_density: DensityTracker,
 
     // Evaluations of A, B, C polynomials
-    a: Vec<Scalar<E>>,
-    b: Vec<Scalar<E>>,
-    c: Vec<Scalar<E>>,
+    a: Vec<Scalar<S>>,
+    b: Vec<Scalar<S>>,
+    c: Vec<Scalar<S>>,
 
     // Assignments of variables
-    input_assignment: Vec<E::Fr>,
-    aux_assignment: Vec<E::Fr>,
+    input_assignment: Vec<S>,
+    aux_assignment: Vec<S>,
 }
 
-impl<E: Engine> ConstraintSystem<E> for ProvingAssignment<E> {
+impl<S: PrimeField> ConstraintSystem<S> for ProvingAssignment<S> {
     type Root = Self;
 
     fn alloc<F, A, AR>(&mut self, _: A, f: F) -> Result<Variable, SynthesisError>
     where
-        F: FnOnce() -> Result<E::Fr, SynthesisError>,
+        F: FnOnce() -> Result<S, SynthesisError>,
         A: FnOnce() -> AR,
         AR: Into<String>,
     {
@@ -90,7 +90,7 @@ impl<E: Engine> ConstraintSystem<E> for ProvingAssignment<E> {
 
     fn alloc_input<F, A, AR>(&mut self, _: A, f: F) -> Result<Variable, SynthesisError>
     where
-        F: FnOnce() -> Result<E::Fr, SynthesisError>,
+        F: FnOnce() -> Result<S, SynthesisError>,
         A: FnOnce() -> AR,
         AR: Into<String>,
     {
@@ -104,9 +104,9 @@ impl<E: Engine> ConstraintSystem<E> for ProvingAssignment<E> {
     where
         A: FnOnce() -> AR,
         AR: Into<String>,
-        LA: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
-        LB: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
-        LC: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
+        LA: FnOnce(LinearCombination<S>) -> LinearCombination<S>,
+        LB: FnOnce(LinearCombination<S>) -> LinearCombination<S>,
+        LC: FnOnce(LinearCombination<S>) -> LinearCombination<S>,
     {
         let a = a(LinearCombination::zero());
         let b = b(LinearCombination::zero());
@@ -166,7 +166,7 @@ pub fn create_random_proof<E, C, R, P: ParameterSource<E>>(
 ) -> Result<Proof<E>, SynthesisError>
 where
     E: Engine,
-    C: Circuit<E>,
+    C: Circuit<E::Fr>,
     R: RngCore,
 {
     let r = E::Fr::random(rng);
@@ -183,7 +183,7 @@ pub fn create_proof<E, C, P: ParameterSource<E>>(
 ) -> Result<Proof<E>, SynthesisError>
 where
     E: Engine,
-    C: Circuit<E>,
+    C: Circuit<E::Fr>,
 {
     let mut prover = ProvingAssignment {
         a_aux_density: DensityTracker::new(),

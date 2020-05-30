@@ -1,7 +1,6 @@
 //! Gadgets representing numbers in the scalar field of the underlying curve.
 
-use ff::{BitIterator, Field, PrimeField, ScalarEngine};
-use std::ops::{AddAssign, MulAssign};
+use ff::{BitIterator, PrimeField};
 
 use crate::{ConstraintSystem, LinearCombination, SynthesisError, Variable};
 
@@ -9,12 +8,12 @@ use super::Assignment;
 
 use super::boolean::{self, AllocatedBit, Boolean};
 
-pub struct AllocatedNum<E: ScalarEngine> {
-    value: Option<E::Fr>,
+pub struct AllocatedNum<Scalar: PrimeField> {
+    value: Option<Scalar>,
     variable: Variable,
 }
 
-impl<E: ScalarEngine> Clone for AllocatedNum<E> {
+impl<Scalar: PrimeField> Clone for AllocatedNum<Scalar> {
     fn clone(&self) -> Self {
         AllocatedNum {
             value: self.value,
@@ -23,11 +22,11 @@ impl<E: ScalarEngine> Clone for AllocatedNum<E> {
     }
 }
 
-impl<E: ScalarEngine> AllocatedNum<E> {
+impl<Scalar: PrimeField> AllocatedNum<Scalar> {
     pub fn alloc<CS, F>(mut cs: CS, value: F) -> Result<Self, SynthesisError>
     where
-        CS: ConstraintSystem<E>,
-        F: FnOnce() -> Result<E::Fr, SynthesisError>,
+        CS: ConstraintSystem<Scalar>,
+        F: FnOnce() -> Result<Scalar, SynthesisError>,
     {
         let mut new_value = None;
         let var = cs.alloc(
@@ -49,7 +48,7 @@ impl<E: ScalarEngine> AllocatedNum<E> {
 
     pub fn inputize<CS>(&self, mut cs: CS) -> Result<(), SynthesisError>
     where
-        CS: ConstraintSystem<E>,
+        CS: ConstraintSystem<Scalar>,
     {
         let input = cs.alloc_input(|| "input variable", || Ok(*self.value.get()?))?;
 
@@ -70,15 +69,15 @@ impl<E: ScalarEngine> AllocatedNum<E> {
     /// congruency is not allowed.)
     pub fn to_bits_le_strict<CS>(&self, mut cs: CS) -> Result<Vec<Boolean>, SynthesisError>
     where
-        CS: ConstraintSystem<E>,
+        CS: ConstraintSystem<Scalar>,
     {
-        pub fn kary_and<E, CS>(
+        pub fn kary_and<Scalar, CS>(
             mut cs: CS,
             v: &[AllocatedBit],
         ) -> Result<AllocatedBit, SynthesisError>
         where
-            E: ScalarEngine,
-            CS: ConstraintSystem<E>,
+            Scalar: PrimeField,
+            CS: ConstraintSystem<Scalar>,
         {
             assert!(!v.is_empty());
 
@@ -104,7 +103,7 @@ impl<E: ScalarEngine> AllocatedNum<E> {
         // We want to ensure that the bit representation of a is
         // less than or equal to r - 1.
         let mut a = self.value.map(|e| BitIterator::<u8, _>::new(e.to_repr()));
-        let b = (-E::Fr::one()).to_repr();
+        let b = (-Scalar::one()).to_repr();
 
         let mut result = vec![];
 
@@ -171,7 +170,7 @@ impl<E: ScalarEngine> AllocatedNum<E> {
         // However, now we have to unpack self!
 
         let mut lc = LinearCombination::zero();
-        let mut coeff = E::Fr::one();
+        let mut coeff = Scalar::one();
 
         for bit in result.iter().rev() {
             lc = lc + (coeff, bit.get_variable());
@@ -192,12 +191,12 @@ impl<E: ScalarEngine> AllocatedNum<E> {
     /// "in the field."
     pub fn to_bits_le<CS>(&self, mut cs: CS) -> Result<Vec<Boolean>, SynthesisError>
     where
-        CS: ConstraintSystem<E>,
+        CS: ConstraintSystem<Scalar>,
     {
         let bits = boolean::field_into_allocated_bits_le(&mut cs, self.value)?;
 
         let mut lc = LinearCombination::zero();
-        let mut coeff = E::Fr::one();
+        let mut coeff = Scalar::one();
 
         for bit in bits.iter() {
             lc = lc + (coeff, bit.get_variable());
@@ -214,7 +213,7 @@ impl<E: ScalarEngine> AllocatedNum<E> {
 
     pub fn mul<CS>(&self, mut cs: CS, other: &Self) -> Result<Self, SynthesisError>
     where
-        CS: ConstraintSystem<E>,
+        CS: ConstraintSystem<Scalar>,
     {
         let mut value = None;
 
@@ -246,7 +245,7 @@ impl<E: ScalarEngine> AllocatedNum<E> {
 
     pub fn square<CS>(&self, mut cs: CS) -> Result<Self, SynthesisError>
     where
-        CS: ConstraintSystem<E>,
+        CS: ConstraintSystem<Scalar>,
     {
         let mut value = None;
 
@@ -277,7 +276,7 @@ impl<E: ScalarEngine> AllocatedNum<E> {
 
     pub fn assert_nonzero<CS>(&self, mut cs: CS) -> Result<(), SynthesisError>
     where
-        CS: ConstraintSystem<E>,
+        CS: ConstraintSystem<Scalar>,
     {
         let inv = cs.alloc(
             || "ephemeral inverse",
@@ -315,7 +314,7 @@ impl<E: ScalarEngine> AllocatedNum<E> {
         condition: &Boolean,
     ) -> Result<(Self, Self), SynthesisError>
     where
-        CS: ConstraintSystem<E>,
+        CS: ConstraintSystem<Scalar>,
     {
         let c = Self::alloc(cs.namespace(|| "conditional reversal result 1"), || {
             if *condition.get_value().get()? {
@@ -328,7 +327,7 @@ impl<E: ScalarEngine> AllocatedNum<E> {
         cs.enforce(
             || "first conditional reversal",
             |lc| lc + a.variable - b.variable,
-            |_| condition.lc(CS::one(), E::Fr::one()),
+            |_| condition.lc(CS::one(), Scalar::one()),
             |lc| lc + a.variable - c.variable,
         );
 
@@ -343,14 +342,14 @@ impl<E: ScalarEngine> AllocatedNum<E> {
         cs.enforce(
             || "second conditional reversal",
             |lc| lc + b.variable - a.variable,
-            |_| condition.lc(CS::one(), E::Fr::one()),
+            |_| condition.lc(CS::one(), Scalar::one()),
             |lc| lc + b.variable - d.variable,
         );
 
         Ok((c, d))
     }
 
-    pub fn get_value(&self) -> Option<E::Fr> {
+    pub fn get_value(&self) -> Option<Scalar> {
         self.value
     }
 
@@ -359,37 +358,37 @@ impl<E: ScalarEngine> AllocatedNum<E> {
     }
 }
 
-pub struct Num<E: ScalarEngine> {
-    value: Option<E::Fr>,
-    lc: LinearCombination<E>,
+pub struct Num<Scalar: PrimeField> {
+    value: Option<Scalar>,
+    lc: LinearCombination<Scalar>,
 }
 
-impl<E: ScalarEngine> From<AllocatedNum<E>> for Num<E> {
-    fn from(num: AllocatedNum<E>) -> Num<E> {
+impl<Scalar: PrimeField> From<AllocatedNum<Scalar>> for Num<Scalar> {
+    fn from(num: AllocatedNum<Scalar>) -> Num<Scalar> {
         Num {
             value: num.value,
-            lc: LinearCombination::<E>::zero() + num.variable,
+            lc: LinearCombination::<Scalar>::zero() + num.variable,
         }
     }
 }
 
-impl<E: ScalarEngine> Num<E> {
+impl<Scalar: PrimeField> Num<Scalar> {
     pub fn zero() -> Self {
         Num {
-            value: Some(E::Fr::zero()),
+            value: Some(Scalar::zero()),
             lc: LinearCombination::zero(),
         }
     }
 
-    pub fn get_value(&self) -> Option<E::Fr> {
+    pub fn get_value(&self) -> Option<Scalar> {
         self.value
     }
 
-    pub fn lc(&self, coeff: E::Fr) -> LinearCombination<E> {
+    pub fn lc(&self, coeff: Scalar) -> LinearCombination<Scalar> {
         LinearCombination::zero() + (coeff, &self.lc)
     }
 
-    pub fn add_bool_with_coeff(self, one: Variable, bit: &Boolean, coeff: E::Fr) -> Self {
+    pub fn add_bool_with_coeff(self, one: Variable, bit: &Boolean, coeff: Scalar) -> Self {
         let newval = match (self.value, bit.get_value()) {
             (Some(mut curval), Some(bval)) => {
                 if bval {
@@ -412,7 +411,7 @@ impl<E: ScalarEngine> Num<E> {
 mod test {
     use crate::ConstraintSystem;
     use ff::{BitIterator, Field, PrimeField};
-    use pairing::bls12_381::{Bls12, Fr};
+    use pairing::bls12_381::Fr;
     use rand_core::SeedableRng;
     use rand_xorshift::XorShiftRng;
     use std::ops::{Neg, SubAssign};
@@ -422,7 +421,7 @@ mod test {
 
     #[test]
     fn test_allocated_num() {
-        let mut cs = TestConstraintSystem::<Bls12>::new();
+        let mut cs = TestConstraintSystem::new();
 
         AllocatedNum::alloc(&mut cs, || Ok(Fr::one())).unwrap();
 
@@ -431,7 +430,7 @@ mod test {
 
     #[test]
     fn test_num_squaring() {
-        let mut cs = TestConstraintSystem::<Bls12>::new();
+        let mut cs = TestConstraintSystem::new();
 
         let n = AllocatedNum::alloc(&mut cs, || Ok(Fr::from_str("3").unwrap())).unwrap();
         let n2 = n.square(&mut cs).unwrap();
@@ -445,7 +444,7 @@ mod test {
 
     #[test]
     fn test_num_multiplication() {
-        let mut cs = TestConstraintSystem::<Bls12>::new();
+        let mut cs = TestConstraintSystem::new();
 
         let n =
             AllocatedNum::alloc(cs.namespace(|| "a"), || Ok(Fr::from_str("12").unwrap())).unwrap();
@@ -467,7 +466,7 @@ mod test {
             0xbc, 0xe5,
         ]);
         {
-            let mut cs = TestConstraintSystem::<Bls12>::new();
+            let mut cs = TestConstraintSystem::new();
 
             let a = AllocatedNum::alloc(cs.namespace(|| "a"), || Ok(Fr::random(&mut rng))).unwrap();
             let b = AllocatedNum::alloc(cs.namespace(|| "b"), || Ok(Fr::random(&mut rng))).unwrap();
@@ -481,7 +480,7 @@ mod test {
         }
 
         {
-            let mut cs = TestConstraintSystem::<Bls12>::new();
+            let mut cs = TestConstraintSystem::new();
 
             let a = AllocatedNum::alloc(cs.namespace(|| "a"), || Ok(Fr::random(&mut rng))).unwrap();
             let b = AllocatedNum::alloc(cs.namespace(|| "b"), || Ok(Fr::random(&mut rng))).unwrap();
@@ -498,7 +497,7 @@ mod test {
     #[test]
     fn test_num_nonzero() {
         {
-            let mut cs = TestConstraintSystem::<Bls12>::new();
+            let mut cs = TestConstraintSystem::new();
 
             let n = AllocatedNum::alloc(&mut cs, || Ok(Fr::from_str("3").unwrap())).unwrap();
             n.assert_nonzero(&mut cs).unwrap();
@@ -508,7 +507,7 @@ mod test {
             assert!(cs.which_is_unsatisfied() == Some("nonzero assertion constraint"));
         }
         {
-            let mut cs = TestConstraintSystem::<Bls12>::new();
+            let mut cs = TestConstraintSystem::new();
 
             let n = AllocatedNum::alloc(&mut cs, || Ok(Fr::zero())).unwrap();
             assert!(n.assert_nonzero(&mut cs).is_err());
@@ -519,7 +518,7 @@ mod test {
     fn test_into_bits_strict() {
         let negone = Fr::one().neg();
 
-        let mut cs = TestConstraintSystem::<Bls12>::new();
+        let mut cs = TestConstraintSystem::new();
 
         let n = AllocatedNum::alloc(&mut cs, || Ok(negone)).unwrap();
         n.to_bits_le_strict(&mut cs).unwrap();
@@ -545,7 +544,7 @@ mod test {
 
         for i in 0..200 {
             let r = Fr::random(&mut rng);
-            let mut cs = TestConstraintSystem::<Bls12>::new();
+            let mut cs = TestConstraintSystem::new();
 
             let n = AllocatedNum::alloc(&mut cs, || Ok(r)).unwrap();
 
