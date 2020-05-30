@@ -11,7 +11,7 @@ pub fn prepare_verifying_key<E: Engine>(vk: &VerifyingKey<E>) -> PreparedVerifyi
     let delta = vk.delta_g2.neg();
 
     PreparedVerifyingKey {
-        alpha_g1_beta_g2: E::pairing(vk.alpha_g1, vk.beta_g2),
+        alpha_g1_beta_g2: E::pairing(&vk.alpha_g1, &vk.beta_g2),
         neg_gamma_g2: gamma.prepare(),
         neg_delta_g2: delta.prepare(),
         ic: vk.ic.clone(),
