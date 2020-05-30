@@ -332,9 +332,10 @@ impl Engine for DummyEngine {
     type G2Affine = Fr;
 
     // TODO: This should be F_645131 or something. Doesn't matter for now.
-    type Fqk = Fr;
+    type MillerLoopResult = Fr;
+    type Gt = Fr;
 
-    fn miller_loop<'a, I>(i: I) -> Self::Fqk
+    fn miller_loop<'a, I>(i: I) -> Self::MillerLoopResult
     where
         I: IntoIterator<
             Item = &'a (
@@ -355,7 +356,7 @@ impl Engine for DummyEngine {
     }
 
     /// Perform final exponentiation of the result of a miller loop.
-    fn final_exponentiation(this: &Self::Fqk) -> CtOption<Self::Fqk> {
+    fn final_exponentiation(this: &Self::MillerLoopResult) -> CtOption<Self::Gt> {
         CtOption::new(*this, Choice::from(1))
     }
 }
