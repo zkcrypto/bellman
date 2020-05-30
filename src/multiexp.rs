@@ -293,9 +293,6 @@ where
     multiexp_inner(pool, bases, density_map, exponents, 0, c, true)
 }
 
-#[cfg(all(test, feature = "pairing"))]
-use ff::ScalarEngine;
-
 #[cfg(feature = "pairing")]
 #[test]
 fn test_with_bls12() {
@@ -315,17 +312,16 @@ fn test_with_bls12() {
     }
 
     use group::Group;
-    use pairing::{bls12_381::Bls12, Engine};
+    use pairing::{
+        bls12_381::{Bls12, Fr},
+        Engine,
+    };
     use rand;
 
     const SAMPLES: usize = 1 << 14;
 
     let rng = &mut rand::thread_rng();
-    let v = Arc::new(
-        (0..SAMPLES)
-            .map(|_| <Bls12 as ScalarEngine>::Fr::random(rng))
-            .collect::<Vec<_>>(),
-    );
+    let v = Arc::new((0..SAMPLES).map(|_| Fr::random(rng)).collect::<Vec<_>>());
     let g = Arc::new(
         (0..SAMPLES)
             .map(|_| <Bls12 as Engine>::G1::random(rng).to_affine())

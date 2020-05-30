@@ -1,4 +1,4 @@
-use ff::{Field, PrimeField, ScalarEngine};
+use ff::{Field, PrimeField};
 use group::{CurveAffine, CurveProjective, Group, PrimeGroup};
 use pairing::{Engine, PairingCurveAffine};
 
@@ -324,11 +324,8 @@ impl PrimeField for Fr {
 #[derive(Clone)]
 pub struct DummyEngine;
 
-impl ScalarEngine for DummyEngine {
-    type Fr = Fr;
-}
-
 impl Engine for DummyEngine {
+    type Fr = Fr;
     type G1 = Fr;
     type G1Affine = Fr;
     type G2 = Fr;
