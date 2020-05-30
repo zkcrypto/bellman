@@ -1,5 +1,5 @@
 use group::{CurveAffine, CurveProjective};
-use pairing::{Engine, PairingCurveAffine};
+use pairing::{Engine, MillerLoopResult, PairingCurveAffine};
 use std::ops::{AddAssign, Neg};
 
 use super::{PreparedVerifyingKey, Proof, VerifyingKey};
@@ -41,14 +41,14 @@ pub fn verify_proof<'a, E: Engine>(
     // A * B + inputs * (-gamma) + C * (-delta) = alpha * beta
     // which allows us to do a single final exponentiation.
 
-    Ok(E::final_exponentiation(&E::miller_loop(
+    Ok(E::miller_loop(
         [
             (&proof.a.prepare(), &proof.b.prepare()),
             (&acc.to_affine().prepare(), &pvk.neg_gamma_g2),
             (&proof.c.prepare(), &pvk.neg_delta_g2),
         ]
         .iter(),
-    ))
-    .unwrap()
+    )
+    .final_exponentiation()
         == pvk.alpha_g1_beta_g2)
 }
