@@ -335,20 +335,16 @@ impl Engine for DummyEngine {
     type Gt = Fr;
 
     fn pairing(p: &Self::G1Affine, q: &Self::G2Affine) -> Self::Gt {
-        Self::multi_miller_loop(&[(p, &(q.prepare()))]).final_exponentiation()
+        Self::multi_miller_loop(&[(p, &(*q).into())]).final_exponentiation()
     }
 }
 
 impl MultiMillerLoop for DummyEngine {
+    type G2Prepared = Fr;
     // TODO: This should be F_645131 or something. Doesn't matter for now.
     type Result = Fr;
 
-    fn multi_miller_loop(
-        terms: &[(
-            &Self::G1Affine,
-            &<Self::G2Affine as PairingCurveAffine>::Prepared,
-        )],
-    ) -> Self::Result {
+    fn multi_miller_loop(terms: &[(&Self::G1Affine, &Self::G2Prepared)]) -> Self::Result {
         let mut acc = <Fr as Field>::zero();
 
         for &(a, b) in terms {
@@ -484,13 +480,8 @@ impl CurveAffine for Fr {
 }
 
 impl PairingCurveAffine for Fr {
-    type Prepared = Fr;
     type Pair = Fr;
     type PairingResult = Fr;
-
-    fn prepare(&self) -> Self::Prepared {
-        *self
-    }
 
     fn pairing_with(&self, other: &Self::Pair) -> Self::PairingResult {
         self.mul(*other)

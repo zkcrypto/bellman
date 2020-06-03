@@ -1,19 +1,19 @@
 use group::{CurveAffine, CurveProjective};
-use pairing::{Engine, MillerLoopResult, MultiMillerLoop, PairingCurveAffine};
+use pairing::{MillerLoopResult, MultiMillerLoop};
 use std::ops::{AddAssign, Neg};
 
 use super::{PreparedVerifyingKey, Proof, VerifyingKey};
 
 use crate::SynthesisError;
 
-pub fn prepare_verifying_key<E: Engine>(vk: &VerifyingKey<E>) -> PreparedVerifyingKey<E> {
+pub fn prepare_verifying_key<E: MultiMillerLoop>(vk: &VerifyingKey<E>) -> PreparedVerifyingKey<E> {
     let gamma = vk.gamma_g2.neg();
     let delta = vk.delta_g2.neg();
 
     PreparedVerifyingKey {
         alpha_g1_beta_g2: E::pairing(&vk.alpha_g1, &vk.beta_g2),
-        neg_gamma_g2: gamma.prepare(),
-        neg_delta_g2: delta.prepare(),
+        neg_gamma_g2: gamma.into(),
+        neg_delta_g2: delta.into(),
         ic: vk.ic.clone(),
     }
 }
@@ -42,7 +42,7 @@ pub fn verify_proof<'a, E: MultiMillerLoop>(
     // which allows us to do a single final exponentiation.
 
     Ok(E::multi_miller_loop(&[
-        (&proof.a, &proof.b.prepare()),
+        (&proof.a, &proof.b.into()),
         (&acc.to_affine(), &pvk.neg_gamma_g2),
         (&proof.c, &pvk.neg_delta_g2),
     ])

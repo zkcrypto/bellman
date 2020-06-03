@@ -3,7 +3,7 @@
 //! [Groth16]: https://eprint.iacr.org/2016/260
 
 use group::CurveAffine;
-use pairing::{Engine, PairingCurveAffine};
+use pairing::{Engine, MultiMillerLoop};
 
 use crate::SynthesisError;
 
@@ -398,13 +398,13 @@ impl<E: Engine> Parameters<E> {
     }
 }
 
-pub struct PreparedVerifyingKey<E: Engine> {
+pub struct PreparedVerifyingKey<E: MultiMillerLoop> {
     /// Pairing result of alpha*beta
     alpha_g1_beta_g2: E::Gt,
     /// -gamma in G2
-    neg_gamma_g2: <E::G2Affine as PairingCurveAffine>::Prepared,
+    neg_gamma_g2: E::G2Prepared,
     /// -delta in G2
-    neg_delta_g2: <E::G2Affine as PairingCurveAffine>::Prepared,
+    neg_delta_g2: E::G2Prepared,
     /// Copy of IC from `VerifiyingKey`.
     ic: Vec<E::G1Affine>,
 }
