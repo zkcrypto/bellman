@@ -44,6 +44,15 @@ Example
 env::set_var("BELLMAN_CPU_UTILIZATION", "0.5");
 ```
 
+`BELLMAN_VERIFIER`
+
+Chooses the device in which the batched verifier is going to run. Can be `cpu`, `gpu` or `auto`.
+
+```
+Example
+env::set_var("BELLMAN_VERIFIER", "gpu");
+```
+
 #### Supported / Tested Cards
 
 Currently only Nvidia hardware is supported, see [issue](https://github.com/finalitylabs/bellman/issues/3). Depending on the size of the proof being passed to the gpu for work, certain cards will not be able to allocate enough memory to either the FFT or Multiexp kernel. Below are a list of devices that work for small sets. In the future we will add the cuttoff point at which a given card will not be able to allocate enough memory to utilize the GPU.
