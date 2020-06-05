@@ -3,7 +3,7 @@ use std::ops::{AddAssign, MulAssign};
 use std::sync::Arc;
 
 use ff::{Field, PrimeField};
-use group::{cofactor::CofactorCurveAffine, Curve, Group, Wnaf};
+use group::{cofactor::CofactorCurveAffine, Curve, Group, Wnaf, WnafGroup};
 use pairing::Engine;
 
 use super::{Parameters, VerifyingKey};
@@ -22,6 +22,8 @@ pub fn generate_random_parameters<E, C, R>(
 ) -> Result<Parameters<E>, SynthesisError>
 where
     E: Engine,
+    E::G1: WnafGroup,
+    E::G2: WnafGroup,
     C: Circuit<E::Fr>,
     R: RngCore,
 {
@@ -165,6 +167,8 @@ pub fn generate_parameters<E, C>(
 ) -> Result<Parameters<E>, SynthesisError>
 where
     E: Engine,
+    E::G1: WnafGroup,
+    E::G2: WnafGroup,
     C: Circuit<E::Fr>,
 {
     let mut assembly = KeypairAssembly {

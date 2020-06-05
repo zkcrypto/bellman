@@ -2,7 +2,7 @@ use ff::{Field, PrimeField};
 use group::{
     cofactor::{CofactorCurve, CofactorCurveAffine, CofactorGroup},
     prime::PrimeGroup,
-    Curve, Group, GroupEncoding, UncompressedEncoding,
+    Curve, Group, GroupEncoding, UncompressedEncoding, WnafGroup,
 };
 use pairing::{Engine, MillerLoopResult, MultiMillerLoop, PairingCurveAffine};
 
@@ -414,7 +414,9 @@ impl Curve for Fr {
     fn to_affine(&self) -> Fr {
         *self
     }
+}
 
+impl WnafGroup for Fr {
     fn recommended_wnaf_for_scalar(_: &Self::Scalar) -> usize {
         3
     }
