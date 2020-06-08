@@ -12,7 +12,24 @@ mod implementation {
     use crossbeam::{self, thread::Scope};
     use futures::{Future, IntoFuture, Poll};
     use futures_cpupool::{CpuFuture, CpuPool};
+    use lazy_static::lazy_static;
     use num_cpus;
+
+    lazy_static! {
+        static ref NUM_CPUS: usize = if let Ok(num) = env::var("BELLMAN_NUM_CPUS") {
+            if let Ok(num) = num.parse() {
+                num
+            } else {
+                num_cpus::get()
+            }
+        } else {
+            num_cpus::get()
+        };
+        pub static ref THREAD_POOL: rayon::ThreadPool = rayon::ThreadPoolBuilder::new()
+            .num_threads(*NUM_CPUS)
+            .build()
+            .unwrap();
+    }
 
     #[derive(Clone)]
     pub struct Worker {
@@ -32,17 +49,7 @@ mod implementation {
         }
 
         pub fn new() -> Worker {
-            let cpus = if let Ok(num) = env::var("BELLMAN_NUM_CPUS") {
-                if let Ok(num) = num.parse() {
-                    num
-                } else {
-                    num_cpus::get()
-                }
-            } else {
-                num_cpus::get()
-            };
-
-            Self::new_with_cpus(cpus)
+            Self::new_with_cpus(*NUM_CPUS)
         }
 
         pub fn log_num_cpus(&self) -> u32 {
