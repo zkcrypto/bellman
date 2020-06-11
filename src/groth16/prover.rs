@@ -10,7 +10,7 @@ use rayon::prelude::*;
 use super::{ParameterSource, Proof};
 use crate::domain::{EvaluationDomain, Scalar};
 use crate::gpu::{LockedFFTKernel, LockedMultiexpKernel};
-use crate::multicore::Worker;
+use crate::multicore::{Worker, THREAD_POOL};
 use crate::multiexp::{multiexp, DensityTracker, FullDensity};
 use crate::{
     Circuit, ConstraintSystem, Index, LinearCombination, SynthesisError, Variable, BELLMAN_VERSION,
@@ -180,7 +180,7 @@ where
 
 pub fn create_proof_batch_priority<E, C, P: ParameterSource<E>>(
     circuits: Vec<C>,
-    mut params: P,
+    params: P,
     r_s: Vec<E::Fr>,
     s_s: Vec<E::Fr>,
     priority: bool,
@@ -191,6 +191,20 @@ where
 {
     info!("Bellperson {} is being used!", BELLMAN_VERSION);
 
+    THREAD_POOL.install(|| create_proof_batch_priority_inner(circuits, params, r_s, s_s, priority))
+}
+
+fn create_proof_batch_priority_inner<E, C, P: ParameterSource<E>>(
+    circuits: Vec<C>,
+    mut params: P,
+    r_s: Vec<E::Fr>,
+    s_s: Vec<E::Fr>,
+    priority: bool,
+) -> Result<Vec<Proof<E>>, SynthesisError>
+where
+    E: Engine,
+    C: Circuit<E> + Send,
+{
     let mut provers = circuits
         .into_par_iter()
         .map(|circuit| -> Result<_, SynthesisError> {

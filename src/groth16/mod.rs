@@ -693,7 +693,7 @@ pub struct BatchPreparedVerifyingKey<E: Engine> {
     ic: Vec<E::G1Affine>,
 }
 
-pub trait ParameterSource<E: Engine> {
+pub trait ParameterSource<E: Engine>: Send {
     type G1Builder: SourceBuilder<E::G1Affine>;
     type G2Builder: SourceBuilder<E::G2Affine>;
 
