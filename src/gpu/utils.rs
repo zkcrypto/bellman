@@ -1,7 +1,7 @@
 use crate::gpu::error::{GPUError, GPUResult};
 use ocl::{Device, Platform};
 
-use log::info;
+use log::{info, warn};
 use std::collections::HashMap;
 use std::env;
 
@@ -64,10 +64,21 @@ lazy_static::lazy_static! {
     };
 }
 
+const DEFAULT_CORE_COUNT: usize = 2560;
 pub fn get_core_count(d: Device) -> GPUResult<usize> {
-    match CORE_COUNTS.get(&d.name()?[..]) {
+    let name = d.name()?;
+    match CORE_COUNTS.get(&name[..]) {
         Some(&cores) => Ok(cores),
-        None => Err(GPUError::Simple("Device unknown!")),
+        None => {
+            warn!(
+                "Number of CUDA cores for your device ({}) is unknown! Best performance is \
+                 only achieved when the number of CUDA cores is known! You can find the \
+                 instructions on how to support custom GPUs here: \
+                 https://lotu.sh/en+hardware-mining",
+                name
+            );
+            Ok(DEFAULT_CORE_COUNT)
+        }
     }
 }
 
