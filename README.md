@@ -63,6 +63,7 @@ Currently only Nvidia hardware is supported, see [issue](https://github.com/fina
 ("Tesla V100", 5120),
 ("Tesla P100", 3584),
 ("Tesla T4", 2560),
+("Quadro M5000", 2048),
 ("GeForce RTX 2080 Ti", 4352),
 ("GeForce RTX 2080 SUPER", 3072),
 ("GeForce RTX 2080", 2944),
