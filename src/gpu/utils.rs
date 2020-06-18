@@ -1,7 +1,7 @@
 use crate::gpu::error::{GPUError, GPUResult};
 use ocl::{Device, Platform};
 
-use log::info;
+use log::{info, warn};
 use std::collections::HashMap;
 use std::env;
 
@@ -26,6 +26,8 @@ pub fn get_devices(platform_name: &str) -> GPUResult<Vec<Device>> {
 lazy_static::lazy_static! {
     static ref CORE_COUNTS: HashMap<String, usize> = {
         let mut core_counts : HashMap<String, usize> = vec![
+            ("Quadro RTX 6000".to_string(), 4608),
+
             ("TITAN RTX".to_string(), 4608),
 
             ("Tesla V100".to_string(), 5120),
@@ -63,10 +65,21 @@ lazy_static::lazy_static! {
     };
 }
 
+const DEFAULT_CORE_COUNT: usize = 2560;
 pub fn get_core_count(d: Device) -> GPUResult<usize> {
-    match CORE_COUNTS.get(&d.name()?[..]) {
+    let name = d.name()?;
+    match CORE_COUNTS.get(&name[..]) {
         Some(&cores) => Ok(cores),
-        None => Err(GPUError::Simple("Device unknown!")),
+        None => {
+            warn!(
+                "Number of CUDA cores for your device ({}) is unknown! Best performance is \
+                 only achieved when the number of CUDA cores is known! You can find the \
+                 instructions on how to support custom GPUs here: \
+                 https://lotu.sh/en+hardware-mining",
+                name
+            );
+            Ok(DEFAULT_CORE_COUNT)
+        }
     }
 }
 

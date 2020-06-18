@@ -59,6 +59,7 @@ Currently only Nvidia hardware is supported, see [issue](https://github.com/fina
 
 ```
 ("Device_Name", Cores),
+("Quadro RTX 6000", 4608),
 ("TITAN RTX", 4608),
 ("Tesla V100", 5120),
 ("Tesla P100", 3584),
