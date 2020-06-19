@@ -196,7 +196,7 @@ where
 
 fn create_proof_batch_priority_inner<E, C, P: ParameterSource<E>>(
     circuits: Vec<C>,
-    mut params: P,
+    params: P,
     r_s: Vec<E::Fr>,
     s_s: Vec<E::Fr>,
     priority: bool,
