@@ -73,9 +73,72 @@ struct ProvingAssignment<E: Engine> {
     input_assignment: Vec<E::Fr>,
     aux_assignment: Vec<E::Fr>,
 }
+use std::fmt;
+
+impl<E: Engine> fmt::Debug for ProvingAssignment<E> {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        fmt.debug_struct("ProvingAssignment")
+            .field("a_aux_density", &self.a_aux_density)
+            .field("b_input_density", &self.b_input_density)
+            .field("b_aux_density", &self.b_aux_density)
+            .field(
+                "a",
+                &self
+                    .a
+                    .iter()
+                    .map(|v| format!("Fr({:?})", v.0))
+                    .collect::<Vec<_>>(),
+            )
+            .field(
+                "b",
+                &self
+                    .b
+                    .iter()
+                    .map(|v| format!("Fr({:?})", v.0))
+                    .collect::<Vec<_>>(),
+            )
+            .field(
+                "c",
+                &self
+                    .c
+                    .iter()
+                    .map(|v| format!("Fr({:?})", v.0))
+                    .collect::<Vec<_>>(),
+            )
+            .field("input_assignment", &self.input_assignment)
+            .field("aux_assignment", &self.aux_assignment)
+            .finish()
+    }
+}
+
+impl<E: Engine> PartialEq for ProvingAssignment<E> {
+    fn eq(&self, other: &ProvingAssignment<E>) -> bool {
+        self.a_aux_density == other.a_aux_density
+            && self.b_input_density == other.b_input_density
+            && self.b_aux_density == other.b_aux_density
+            && self.a == other.a
+            && self.b == other.b
+            && self.c == other.c
+            && self.input_assignment == other.input_assignment
+            && self.aux_assignment == other.aux_assignment
+    }
+}
 
 impl<E: Engine> ConstraintSystem<E> for ProvingAssignment<E> {
     type Root = Self;
+
+    fn new() -> Self {
+        Self {
+            a_aux_density: DensityTracker::new(),
+            b_input_density: DensityTracker::new(),
+            b_aux_density: DensityTracker::new(),
+            a: vec![],
+            b: vec![],
+            c: vec![],
+            input_assignment: vec![],
+            aux_assignment: vec![],
+        }
+    }
 
     fn alloc<F, A, AR>(&mut self, _: A, f: F) -> Result<Variable, SynthesisError>
     where
@@ -159,6 +222,25 @@ impl<E: Engine> ConstraintSystem<E> for ProvingAssignment<E> {
     fn get_root(&mut self) -> &mut Self::Root {
         self
     }
+
+    fn is_extensible() -> bool {
+        true
+    }
+
+    fn extend(&mut self, other: Self) {
+        self.a_aux_density.extend(other.a_aux_density, false);
+        self.b_input_density.extend(other.b_input_density, true);
+        self.b_aux_density.extend(other.b_aux_density, false);
+
+        self.a.extend(other.a);
+        self.b.extend(other.b);
+        self.c.extend(other.c);
+
+        self.input_assignment
+            // Skip first input, which must have been a temporarily allocated one variable.
+            .extend(&other.input_assignment[1..]);
+        self.aux_assignment.extend(other.aux_assignment);
+    }
 }
 
 pub fn create_random_proof_batch_priority<E, C, R, P: ParameterSource<E>>(
@@ -208,16 +290,7 @@ where
     let mut provers = circuits
         .into_par_iter()
         .map(|circuit| -> Result<_, SynthesisError> {
-            let mut prover = ProvingAssignment {
-                a_aux_density: DensityTracker::new(),
-                b_input_density: DensityTracker::new(),
-                b_aux_density: DensityTracker::new(),
-                a: vec![],
-                b: vec![],
-                c: vec![],
-                input_assignment: vec![],
-                aux_assignment: vec![],
-            };
+            let mut prover = ProvingAssignment::new();
 
             prover.alloc_input(|| "", || Ok(E::Fr::one()))?;
 
@@ -390,6 +463,7 @@ where
                 input_assignment.clone(),
                 &mut multiexp_kern,
             );
+
             let b_g1_aux = multiexp(
                 &worker,
                 b_g1_aux_source,
@@ -489,4 +563,75 @@ where
         .collect::<Result<Vec<_>, SynthesisError>>()?;
 
     Ok(proofs)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use paired::bls12_381::{Bls12, Fr};
+    use rand::Rng;
+    use rand_core::SeedableRng;
+    use rand_xorshift::XorShiftRng;
+
+    #[test]
+    fn test_proving_assignment_extend() {
+        let mut rng = XorShiftRng::from_seed([
+            0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06,
+            0xbc, 0xe5,
+        ]);
+
+        for k in &[2, 4, 8] {
+            for j in &[10, 20, 50] {
+                let count: usize = k * j;
+
+                let mut full_assignment = ProvingAssignment::<Bls12>::new();
+                full_assignment
+                    .alloc_input(|| "one", || Ok(Fr::one()))
+                    .unwrap();
+
+                let mut partial_assignments = Vec::with_capacity(count / k);
+                for i in 0..count {
+                    if i % k == 0 {
+                        let mut p = ProvingAssignment::new();
+                        p.alloc_input(|| "one", || Ok(Fr::one())).unwrap();
+                        partial_assignments.push(p)
+                    }
+
+                    let index: usize = i / k;
+                    let partial_assignment = &mut partial_assignments[index];
+
+                    if rng.gen() {
+                        let el = Fr::random(&mut rng);
+                        full_assignment
+                            .alloc(|| format!("alloc:{},{}", i, k), || Ok(el.clone()))
+                            .unwrap();
+                        partial_assignment
+                            .alloc(|| format!("alloc:{},{}", i, k), || Ok(el))
+                            .unwrap();
+                    }
+
+                    if rng.gen() {
+                        let el = Fr::random(&mut rng);
+                        full_assignment
+                            .alloc_input(|| format!("alloc_input:{},{}", i, k), || Ok(el.clone()))
+                            .unwrap();
+                        partial_assignment
+                            .alloc_input(|| format!("alloc_input:{},{}", i, k), || Ok(el))
+                            .unwrap();
+                    }
+
+                    // TODO: LinearCombination
+                }
+
+                let mut combined = ProvingAssignment::new();
+                combined.alloc_input(|| "one", || Ok(Fr::one())).unwrap();
+
+                for assignment in partial_assignments.into_iter() {
+                    combined.extend(assignment);
+                }
+                assert_eq!(combined, full_assignment);
+            }
+        }
+    }
 }

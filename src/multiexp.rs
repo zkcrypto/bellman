@@ -111,9 +111,10 @@ impl<'a> QueryDensity for &'a FullDensity {
     }
 }
 
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct DensityTracker {
-    bv: BitVec,
-    total_density: usize,
+    pub bv: BitVec,
+    pub total_density: usize,
 }
 
 impl<'a> QueryDensity for &'a DensityTracker {
@@ -149,6 +150,35 @@ impl DensityTracker {
 
     pub fn get_total_density(&self) -> usize {
         self.total_density
+    }
+
+    /// Extend by concatenating `other`. If `is_input_density` is true, then we are tracking an input density,
+    /// and other may contain a redundant input for the `One` element. Coalesce those as needed and track the result.
+    pub fn extend(&mut self, other: Self, is_input_density: bool) {
+        if is_input_density {
+            if !other.bv.is_empty() {
+                if other.bv[0] {
+                    // If the bit is set for other's first input,
+
+                    let first_input_bit_set = !self.bv.is_empty() && self.bv[0];
+                    // If own first input is also set, decrement total density so the final total density sum doesn't overcount.
+                    self.total_density -= first_input_bit_set as usize;
+
+                    if !self.bv.is_empty() {
+                        // Either set the bit for self's first input (if there is one),
+                        self.bv.set(0, true);
+                    } else {
+                        // Or else add a bit so other's first input becomes self's first.
+                        self.bv.push(true);
+                    }
+                }
+            }
+
+            self.bv.extend(other.bv.iter().skip(1));
+        } else {
+            self.bv.extend(other.bv);
+        }
+        self.total_density += other.total_density;
     }
 }
 
@@ -299,7 +329,6 @@ where
     if let Some(query_size) = density_map.as_ref().get_query_size() {
         // If the density map has a known query size, it should not be
         // inconsistent with the number of exponents.
-
         assert!(query_size == exponents.len());
     }
 
@@ -429,5 +458,59 @@ pub fn gpu_multiexp_consistency() {
         println!("============================");
 
         bases = [bases.clone(), bases.clone()].concat();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use rand::Rng;
+    use rand_core::SeedableRng;
+    use rand_xorshift::XorShiftRng;
+
+    #[test]
+    fn test_extend_density_regular() {
+        let mut rng = XorShiftRng::from_seed([
+            0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06,
+            0xbc, 0xe5,
+        ]);
+
+        for k in &[2, 4, 8] {
+            for j in &[10, 20, 50] {
+                let count: usize = k * j;
+
+                let mut tracker_full = DensityTracker::new();
+                let mut partial_trackers: Vec<DensityTracker> = Vec::with_capacity(count / k);
+                for i in 0..count {
+                    if i % k == 0 {
+                        partial_trackers.push(DensityTracker::new());
+                    }
+
+                    let index: usize = i / k;
+                    if rng.gen() {
+                        tracker_full.add_element();
+                        partial_trackers[index].add_element();
+                    }
+
+                    if !partial_trackers[index].bv.is_empty() {
+                        let idx = rng.gen_range(0, partial_trackers[index].bv.len());
+                        let offset: usize = partial_trackers
+                            .iter()
+                            .take(index)
+                            .map(|t| t.bv.len())
+                            .sum();
+                        tracker_full.inc(offset + idx);
+                        partial_trackers[index].inc(idx);
+                    }
+                }
+
+                let mut tracker_combined = DensityTracker::new();
+                for tracker in partial_trackers.into_iter() {
+                    tracker_combined.extend(tracker, false);
+                }
+                assert_eq!(tracker_combined, tracker_full);
+            }
+        }
     }
 }

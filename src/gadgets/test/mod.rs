@@ -132,22 +132,6 @@ fn eval_lc<E: ScalarEngine>(
 }
 
 impl<E: ScalarEngine> TestConstraintSystem<E> {
-    pub fn new() -> TestConstraintSystem<E> {
-        let mut map = HashMap::new();
-        map.insert(
-            "ONE".into(),
-            NamedObject::Var(TestConstraintSystem::<E>::one()),
-        );
-
-        TestConstraintSystem {
-            named_objects: map,
-            current_namespace: vec![],
-            constraints: vec![],
-            inputs: vec![(E::Fr::one(), "ONE".into())],
-            aux: vec![],
-        }
-    }
-
     pub fn pretty_print(&self) -> String {
         let mut s = String::new();
 
@@ -347,6 +331,22 @@ fn compute_path(ns: &[String], this: String) -> String {
 
 impl<E: ScalarEngine> ConstraintSystem<E> for TestConstraintSystem<E> {
     type Root = Self;
+
+    fn new() -> TestConstraintSystem<E> {
+        let mut map = HashMap::new();
+        map.insert(
+            "ONE".into(),
+            NamedObject::Var(TestConstraintSystem::<E>::one()),
+        );
+
+        TestConstraintSystem {
+            named_objects: map,
+            current_namespace: vec![],
+            constraints: vec![],
+            inputs: vec![(E::Fr::one(), "ONE".into())],
+            aux: vec![],
+        }
+    }
 
     fn alloc<F, A, AR>(&mut self, annotation: A, f: F) -> Result<Variable, SynthesisError>
     where

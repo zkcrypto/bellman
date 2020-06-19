@@ -53,6 +53,30 @@ struct KeypairAssembly<E: Engine> {
 impl<E: Engine> ConstraintSystem<E> for KeypairAssembly<E> {
     type Root = Self;
 
+    fn new() -> Self {
+        KeypairAssembly {
+            num_inputs: 0,
+            num_aux: 0,
+            num_constraints: 0,
+            at_inputs: vec![],
+            bt_inputs: vec![],
+            ct_inputs: vec![],
+            at_aux: vec![],
+            bt_aux: vec![],
+            ct_aux: vec![],
+        }
+    }
+
+    /// Explicitly declare this `ConstraintSystem` is not extensible as a reminder to future implementers.
+    /// By forbidding use of `ConstraintSystem::extend` when generating Groth parameters, we enforce
+    /// the requirement of a well-defined sequential circuit synthesis. This also means we know that any
+    /// synthesized `ProvingAssignment` is well-formed if it leads to a verifiable proof using the resulting
+    /// groth parameters and verifying key. This is true even if the `ProvingAssignment` was synthesized
+    /// in parallel components which were then joined by `ConstraintSystem::extend`.
+    fn is_extensible() -> bool {
+        false
+    }
+
     fn alloc<F, A, AR>(&mut self, _: A, _: F) -> Result<Variable, SynthesisError>
     where
         F: FnOnce() -> Result<E::Fr, SynthesisError>,
@@ -167,17 +191,7 @@ where
     E: Engine,
     C: Circuit<E>,
 {
-    let mut assembly = KeypairAssembly {
-        num_inputs: 0,
-        num_aux: 0,
-        num_constraints: 0,
-        at_inputs: vec![],
-        bt_inputs: vec![],
-        ct_inputs: vec![],
-        at_aux: vec![],
-        bt_aux: vec![],
-        ct_aux: vec![],
-    };
+    let mut assembly = KeypairAssembly::new();
 
     // Allocate the "one" input variable
     assembly.alloc_input(|| "", || Ok(E::Fr::one()))?;
