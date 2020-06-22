@@ -155,29 +155,39 @@ impl DensityTracker {
     /// Extend by concatenating `other`. If `is_input_density` is true, then we are tracking an input density,
     /// and other may contain a redundant input for the `One` element. Coalesce those as needed and track the result.
     pub fn extend(&mut self, other: Self, is_input_density: bool) {
+        if other.bv.is_empty() {
+            // Nothing to do if other is empty.
+            return;
+        }
+
+        if self.bv.is_empty() {
+            // If self is empty, assume other's density.
+            self.total_density = other.total_density;
+            self.bv = other.bv;
+            return;
+        }
+
         if is_input_density {
-            if !other.bv.is_empty() {
-                if other.bv[0] {
-                    // If the bit is set for other's first input,
+            // Input densities need special handling to coalesce their first inputs.
 
-                    let first_input_bit_set = !self.bv.is_empty() && self.bv[0];
-                    // If own first input is also set, decrement total density so the final total density sum doesn't overcount.
-                    self.total_density -= first_input_bit_set as usize;
-
-                    if !self.bv.is_empty() {
-                        // Either set the bit for self's first input (if there is one),
-                        self.bv.set(0, true);
-                    } else {
-                        // Or else add a bit so other's first input becomes self's first.
-                        self.bv.push(true);
-                    }
+            if other.bv[0] {
+                // If other's first bit is set,
+                if self.bv[0] {
+                    // And own first bit is set, then decrement total density so the final sum doesn't overcount.
+                    self.total_density -= 1;
+                } else {
+                    // Otherwise, set own first bit.
+                    self.bv.set(0, true);
                 }
             }
-
+            // Now discard other's first bit, having accounted for it above, and extend self by remaining bits.
             self.bv.extend(other.bv.iter().skip(1));
         } else {
+            // Not an input density, just extend straightforwardly.
             self.bv.extend(other.bv);
         }
+
+        // Since any needed adjustments to total densities have been made, just sum the totals and keep the sum.
         self.total_density += other.total_density;
     }
 }
@@ -510,6 +520,117 @@ mod tests {
                     tracker_combined.extend(tracker, false);
                 }
                 assert_eq!(tracker_combined, tracker_full);
+            }
+        }
+    }
+
+    #[test]
+    fn test_extend_density_input() {
+        let mut rng = XorShiftRng::from_seed([
+            0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06,
+            0xbc, 0xe5,
+        ]);
+        let trials = 10;
+        let max_bits = 10;
+        let max_density = max_bits;
+
+        // Create an empty DensityTracker.
+        let empty = || DensityTracker::new();
+
+        // Create a random DensityTracker with first bit unset.
+        let unset = |rng: &mut XorShiftRng| {
+            let mut dt = DensityTracker::new();
+            dt.add_element();
+            let n = rng.gen_range(1, max_bits);
+            let target_density = rng.gen_range(0, max_density);
+            for _ in 1..n {
+                dt.add_element();
+            }
+
+            for _ in 0..target_density {
+                if n > 1 {
+                    let to_inc = rng.gen_range(1, n);
+                    dt.inc(to_inc);
+                }
+            }
+            assert!(!dt.bv[0]);
+            assert_eq!(n, dt.bv.len());
+            dbg!(&target_density, &dt.total_density);
+
+            dt
+        };
+
+        // Create a random DensityTracker with first bit set.
+        let set = |mut rng: &mut XorShiftRng| {
+            let mut dt = unset(&mut rng);
+            dt.inc(0);
+            dt
+        };
+
+        for _ in 0..trials {
+            {
+                // Both empty.
+                let (mut e1, e2) = (empty(), empty());
+                e1.extend(e2, true);
+                assert_eq!(empty(), e1);
+            }
+            {
+                // First empty, second unset.
+                let (mut e1, u1) = (empty(), unset(&mut rng));
+                e1.extend(u1.clone(), true);
+                assert_eq!(u1, e1);
+            }
+            {
+                // First empty, second set.
+                let (mut e1, s1) = (empty(), set(&mut rng));
+                e1.extend(s1.clone(), true);
+                assert_eq!(s1, e1);
+            }
+            {
+                // First set, second empty.
+                let (mut s1, e1) = (set(&mut rng), empty());
+                let s2 = s1.clone();
+                s1.extend(e1, true);
+                assert_eq!(s1, s2);
+            }
+            {
+                // First unset, second empty.
+                let (mut u1, e1) = (unset(&mut rng), empty());
+                let u2 = u1.clone();
+                u1.extend(e1, true);
+                assert_eq!(u1, u2);
+            }
+            {
+                // First unset, second unset.
+                let (mut u1, u2) = (unset(&mut rng), unset(&mut rng));
+                let expected_total = u1.total_density + u2.total_density;
+                u1.extend(u2, true);
+                assert_eq!(expected_total, u1.total_density);
+                assert!(!u1.bv[0]);
+            }
+            {
+                // First unset, second set.
+                let (mut u1, s1) = (unset(&mut rng), set(&mut rng));
+                let expected_total = u1.total_density + s1.total_density;
+                u1.extend(s1, true);
+                assert_eq!(expected_total, u1.total_density);
+                assert!(u1.bv[0]);
+            }
+            {
+                // First set, second unset.
+                let (mut s1, u1) = (set(&mut rng), unset(&mut rng));
+                let expected_total = s1.total_density + u1.total_density;
+                s1.extend(u1, true);
+                assert_eq!(expected_total, s1.total_density);
+                assert!(s1.bv[0]);
+            }
+            {
+                // First set, second set.
+                let (mut s1, s2) = (set(&mut rng), set(&mut rng));
+                let expected_total = s1.total_density + s2.total_density - 1;
+                s1.extend(s2, true);
+                assert_eq!(expected_total, s1.total_density);
+                assert!(s1.bv[0]);
             }
         }
     }

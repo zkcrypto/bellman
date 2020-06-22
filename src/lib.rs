@@ -147,6 +147,8 @@ pub mod groth16;
 pub mod multicore;
 pub mod multiexp;
 
+pub mod util_cs;
+
 #[cfg(feature = "gpu")]
 pub use gpu::GPU_NVIDIA_DEVICES;
 
