@@ -10,7 +10,7 @@ version = "0.6.0"
 edition = "2018"
 
 [dependencies]
-bit-vec = "0.4.4"
+bit-vec = "0.6"
 blake2s_simd = "0.5"
 ff = { version = "0.6", path = "../ff" }
 futures = "0.1"
