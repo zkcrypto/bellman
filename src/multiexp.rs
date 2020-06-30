@@ -421,6 +421,9 @@ pub fn gpu_multiexp_consistency() {
     use paired::bls12_381::Bls12;
     use std::time::Instant;
 
+    let _ = env_logger::try_init();
+    gpu::dump_device_list();
+
     const MAX_LOG_D: usize = 20;
     const START_LOG_D: usize = 10;
     let mut kern = Some(gpu::LockedMultiexpKernel::<Bls12>::new(MAX_LOG_D, false));

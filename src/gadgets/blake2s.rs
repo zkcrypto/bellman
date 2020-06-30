@@ -184,14 +184,14 @@ fn blake2s_compression<E: ScalarEngine, CS: ConstraintSystem<E>>(
 
     let mut v = Vec::with_capacity(16);
     v.extend_from_slice(h);
-    v.push(UInt32::constant(0x6A09E667));
-    v.push(UInt32::constant(0xBB67AE85));
-    v.push(UInt32::constant(0x3C6EF372));
-    v.push(UInt32::constant(0xA54FF53A));
-    v.push(UInt32::constant(0x510E527F));
-    v.push(UInt32::constant(0x9B05688C));
-    v.push(UInt32::constant(0x1F83D9AB));
-    v.push(UInt32::constant(0x5BE0CD19));
+    v.push(UInt32::constant(0x6A09_E667));
+    v.push(UInt32::constant(0xBB67_AE85));
+    v.push(UInt32::constant(0x3C6E_F372));
+    v.push(UInt32::constant(0xA54F_F53A));
+    v.push(UInt32::constant(0x510E_527F));
+    v.push(UInt32::constant(0x9B05_688C));
+    v.push(UInt32::constant(0x1F83_D9AB));
+    v.push(UInt32::constant(0x5BE0_CD19));
 
     assert_eq!(v.len(), 16);
 
@@ -348,19 +348,19 @@ pub fn blake2s<E: ScalarEngine, CS: ConstraintSystem<E>>(
     assert!(input.len() % 8 == 0);
 
     let mut h = Vec::with_capacity(8);
-    h.push(UInt32::constant(0x6A09E667 ^ 0x01010000 ^ 32));
-    h.push(UInt32::constant(0xBB67AE85));
-    h.push(UInt32::constant(0x3C6EF372));
-    h.push(UInt32::constant(0xA54FF53A));
-    h.push(UInt32::constant(0x510E527F));
-    h.push(UInt32::constant(0x9B05688C));
+    h.push(UInt32::constant(0x6A09_E667 ^ 0x0101_0000 ^ 32));
+    h.push(UInt32::constant(0xBB67_AE85));
+    h.push(UInt32::constant(0x3C6E_F372));
+    h.push(UInt32::constant(0xA54F_F53A));
+    h.push(UInt32::constant(0x510E_527F));
+    h.push(UInt32::constant(0x9B05_688C));
 
     // Personalization is stored here
     h.push(UInt32::constant(
-        0x1F83D9AB ^ LittleEndian::read_u32(&personalization[0..4]),
+        0x1F83_D9AB ^ LittleEndian::read_u32(&personalization[0..4]),
     ));
     h.push(UInt32::constant(
-        0x5BE0CD19 ^ LittleEndian::read_u32(&personalization[4..8]),
+        0x5BE0_CD19 ^ LittleEndian::read_u32(&personalization[4..8]),
     ));
 
     let mut blocks: Vec<Vec<UInt32>> = vec![];

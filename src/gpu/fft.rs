@@ -1,6 +1,7 @@
+use crate::gpu::get_platform;
 use crate::gpu::{
     error::{GPUError, GPUResult},
-    locks, sources, structs, GPU_NVIDIA_DEVICES,
+    get_devices, locks, sources, structs,
 };
 use ff::Field;
 use log::info;
@@ -33,14 +34,25 @@ where
 {
     pub fn create(n: u32, priority: bool) -> GPUResult<FFTKernel<E>> {
         let lock = locks::GPULock::lock();
-
         let src = sources::kernel::<E>();
-        let devices = &GPU_NVIDIA_DEVICES;
+
+        let platform = get_platform(None)?;
+        info!("Platform selected: {}", platform.name()?);
+
+        let devices = get_devices(&platform).unwrap_or_default();
         if devices.is_empty() {
             return Err(GPUError::Simple("No working GPUs found!"));
         }
-        let device = devices[0]; // Select the first device for FFT
-        let pq = ProQue::builder().device(device).src(src).dims(n).build()?;
+
+        // Select the first device for FFT
+        let device = devices[0];
+
+        let pq = ProQue::builder()
+            .platform(platform)
+            .device(device)
+            .src(src)
+            .dims(n)
+            .build()?;
 
         let srcbuff = Buffer::builder()
             .queue(pq.queue().clone())

@@ -37,7 +37,7 @@ __kernel void radix_fft(__global FIELD* x, // Source buffer
   uint counte = counts + count / lsize;
 
   // Compute powers of twiddle
-  FIELD twiddle = FIELD_pow_lookup(omegas, (n >> lgp >> deg) * k);
+  const FIELD twiddle = FIELD_pow_lookup(omegas, (n >> lgp >> deg) * k);
   FIELD tmp = FIELD_pow(twiddle, counts);
   for(uint i = counts; i < counte; i++) {
     u[i] = FIELD_mul(tmp, x[i*t]);
@@ -45,13 +45,13 @@ __kernel void radix_fft(__global FIELD* x, // Source buffer
   }
   barrier(CLK_LOCAL_MEM_FENCE);
 
-  uint pqshift = max_deg - deg;
+  const uint pqshift = max_deg - deg;
   for(uint rnd = 0; rnd < deg; rnd++) {
-    uint bit = counth >> rnd;
+    const uint bit = counth >> rnd;
     for(uint i = counts >> 1; i < counte >> 1; i++) {
-      uint di = i & (bit - 1);
-      uint i0 = (i << 1) - di;
-      uint i1 = i0 + bit;
+      const uint di = i & (bit - 1);
+      const uint i0 = (i << 1) - di;
+      const uint i1 = i0 + bit;
       tmp = u[i0];
       u[i0] = FIELD_add(u[i0], u[i1]);
       u[i1] = FIELD_sub(tmp, u[i1]);
@@ -71,6 +71,6 @@ __kernel void radix_fft(__global FIELD* x, // Source buffer
 __kernel void mul_by_field(__global FIELD* elements,
                         uint n,
                         FIELD field) {
-  uint gid = get_global_id(0);
+  const uint gid = get_global_id(0);
   elements[gid] = FIELD_mul(elements[gid], field);
 }

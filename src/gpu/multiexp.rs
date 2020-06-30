@@ -3,13 +3,14 @@ use super::locks;
 use super::sources;
 use super::structs;
 use super::utils;
-use super::GPU_NVIDIA_DEVICES;
+use crate::gpu::{get_devices, get_platform};
 use crate::multicore::Worker;
 use crate::multiexp::{multiexp as cpu_multiexp, FullDensity};
 use crossbeam::thread;
 use ff::{PrimeField, ScalarEngine};
 use futures::Future;
 use groupy::{CurveAffine, CurveProjective};
+use log::debug;
 use log::{error, info};
 use ocl::{Buffer, Device, MemFlags, ProQue};
 use paired::Engine;
@@ -61,7 +62,7 @@ where
 
 fn calc_num_groups(core_count: usize, num_windows: usize) -> usize {
     // Observations show that we get the best performance when num_groups * num_windows ~= 2 * CUDA_CORES
-    return 2 * core_count / num_windows;
+    2 * core_count / num_windows
 }
 
 fn calc_window_size(n: usize, exp_bits: usize, core_count: usize) -> usize {
@@ -79,7 +80,8 @@ fn calc_window_size(n: usize, exp_bits: usize, core_count: usize) -> usize {
             return w;
         }
     }
-    return MAX_WINDOW_SIZE;
+
+    MAX_WINDOW_SIZE
 }
 
 fn calc_best_chunk_size(max_window_size: usize, core_count: usize, exp_bits: usize) -> usize {
@@ -111,7 +113,11 @@ where
 {
     pub fn create(d: Device, priority: bool) -> GPUResult<SingleMultiexpKernel<E>> {
         let src = sources::kernel::<E>();
-        let pq = ProQue::builder().device(d).src(src).dims(1).build()?;
+
+        let platform = match d.info(ocl::enums::DeviceInfo::Platform)? {
+            ocl::enums::DeviceInfoResult::Platform(p) => ocl::Platform::new(p),
+            _ => ocl::Platform::default(),
+        };
 
         let exp_bits = std::mem::size_of::<E::Fr>() * 8;
         let core_count = utils::get_core_count(d)?;
@@ -120,6 +126,17 @@ where
         let best_n = calc_best_chunk_size(MAX_WINDOW_SIZE, core_count, exp_bits);
         let n = std::cmp::min(max_n, best_n);
         let max_bucket_len = 1 << MAX_WINDOW_SIZE;
+
+        let pq = ProQue::builder()
+            .platform(platform)
+            .device(d)
+            .src(src)
+            .dims(1)
+            .build()
+            .map_err(|err| {
+                debug!("{:?}", err);
+                err
+            })?;
 
         // Each group will have `num_windows` threads and as there are `num_groups` groups, there will
         // be `num_groups` * `num_windows` threads in total.
@@ -172,7 +189,7 @@ where
             g2_bucket_buffer: g2buckbuff,
             g2_result_buffer: g2resbuff,
             exp_buffer: expbuff,
-            core_count: core_count,
+            core_count,
             n,
             priority,
         })
@@ -303,12 +320,18 @@ where
     pub fn create(priority: bool) -> GPUResult<MultiexpKernel<E>> {
         let lock = locks::GPULock::lock();
 
-        let kernels: Vec<_> = GPU_NVIDIA_DEVICES
+        let platform = get_platform(None)?;
+        let devices = &get_devices(&platform).unwrap_or_default();
+
+        info!("Platform selected: {}", platform.name()?);
+
+        let kernels: Vec<_> = devices
             .iter()
             .map(|d| SingleMultiexpKernel::<E>::create(*d, priority))
             .filter(|res| res.is_ok())
             .map(|res| res.unwrap())
             .collect();
+
         if kernels.is_empty() {
             return Err(GPUError::Simple("No working GPUs found!"));
         }
@@ -325,10 +348,10 @@ where
                 k.n
             );
         }
-        return Ok(MultiexpKernel::<E> {
+        Ok(MultiexpKernel::<E> {
             kernels,
             _lock: lock,
-        });
+        })
     }
 
     pub fn multiexp<G>(

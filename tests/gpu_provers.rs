@@ -55,7 +55,7 @@ pub fn test_parallel_prover() {
     use std::thread;
     use std::time::{Duration, Instant};
 
-    env_logger::init();
+    let _ = env_logger::try_init();
     let rng = &mut thread_rng();
 
     println!("Initializing circuit...");

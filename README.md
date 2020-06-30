@@ -11,38 +11,34 @@ booleans and number abstractions.
 This fork contains GPU parallel acceleration to the FFT and Multiexponentation algorithms in the groth16 prover codebase under a conditional compilation feature `#[cfg(feature = "gpu")]` and `gpu-test` for testing.
 
 ### Requirements
-- NVIDIA GPU Graphics Driver
-
+- NVIDIA or AMD GPU Graphics Driver 
 - OpenCL
+
+( For AMD devices we recommend [ROCm](https://rocm-documentation.readthedocs.io/en/latest/Installation_Guide/Installation-Guide.html) )
 
 ### Environment variables
 
 The gpu extension contains some env vars that may be set externally to this library.
 
-`BELLMAN_NO_GPU`
+- `BELLMAN_NO_GPU`
 
-Will disable the GPU feature from the library and force usage of the CPU.
-```
-Example
-env::set_var("BELLMAN_NO_GPU", "1");
-```
+    Will disable the GPU feature from the library and force usage of the CPU.
 
-`BELLMAN_CUSTOM_GPU`
+    ```rust
+    // Example
+    env::set_var("BELLMAN_NO_GPU", "1");
+    ```
 
-Will allow for adding a GPU not in the tested list. This requires researching the name of the GPU device and the number of cores in the format `["name:cores"]`.
-```
-Example
-env::set_var("BELLMAN_CUSTOM_GPU", "GeForce RTX 2080 Ti:4352, GeForce GTX 1060:1280");
-```
+- `BELLMAN_PLATFORM`
 
-`BELLMAN_CPU_UTILIZATION`
+    Can be used to select the default OpenCL platform:
 
-Can be set in the interval [0,1] to designate a proportion of the multiexponenation calculation to be moved to cpu in parallel to the GPU to keep all hardware occupied.
+    ```rust
+    // Example
+    env::set_var("BELLMAN_PLATFORM", "AMD Accelerated Parallel Processing");
+    ```
 
-```
-Example
-env::set_var("BELLMAN_CPU_UTILIZATION", "0.5");
-```
+    Some possible values:
 
 `BELLMAN_VERIFIER`
 
@@ -53,38 +49,77 @@ Example
 env::set_var("BELLMAN_VERIFIER", "gpu");
 ```
 
+  - NVIDIA CUDA
+  - AMD Accelerated Parallel Processing
+
+    If not set, and the code does not select any platform, "NVIDIA CUDA" will be selected.
+
+- `BELLMAN_CUSTOM_GPU`
+
+    Will allow for adding a GPU not in the tested list. This requires researching the name of the GPU device and the number of cores in the format `["name:cores"]`.
+
+    ```rust
+    // Example
+    env::set_var("BELLMAN_CUSTOM_GPU", "GeForce RTX 2080 Ti:4352, GeForce GTX 1060:1280");
+    ```
+
+- `BELLMAN_CPU_UTILIZATION`
+
+    Can be set in the interval [0,1] to designate a proportion of the multiexponenation calculation to be moved to cpu in parallel to the GPU to keep all hardware occupied.
+
+    ```rust
+    // Example
+    env::set_var("BELLMAN_CPU_UTILIZATION", "0.5");
+    ```
+
 #### Supported / Tested Cards
 
-Currently only Nvidia hardware is supported, see [issue](https://github.com/finalitylabs/bellman/issues/3). Depending on the size of the proof being passed to the gpu for work, certain cards will not be able to allocate enough memory to either the FFT or Multiexp kernel. Below are a list of devices that work for small sets. In the future we will add the cuttoff point at which a given card will not be able to allocate enough memory to utilize the GPU.
+Depending on the size of the proof being passed to the gpu for work, certain cards will not be able to allocate enough memory to either the FFT or Multiexp kernel. Below are a list of devices that work for small sets. In the future we will add the cuttoff point at which a given card will not be able to allocate enough memory to utilize the GPU.
 
+| Device Name            | Cores | Comments       |
+|------------------------|-------|----------------|
+| Quadro RTX 6000        | 4608  |                |
+| TITAN RTX              | 4608  |                |
+| Tesla V100             | 5120  |                |
+| Tesla P100             | 3584  |                |
+| Tesla T4               | 2560  |                |
+| Quadro M5000           | 2048  |                |
+| GeForce RTX 2080 Ti    | 4352  |                |
+| GeForce RTX 2080 SUPER | 3072  |                |
+| GeForce RTX 2080       | 2944  |                |
+| GeForce RTX 2070 SUPER | 2560  |                |
+| GeForce GTX 1080 Ti    | 3584  |                |
+| GeForce GTX 1080       | 2560  |                |
+| GeForce GTX 2060       | 1920  |                |
+| GeForce GTX 1660 Ti    | 1536  |                |
+| GeForce GTX 1060       | 1280  |                |
+| GeForce GTX 1650 SUPER | 1280  |                |
+| GeForce GTX 1650       | 896   |                |
+|                        |       |                |
+| gfx1010                | 2560  | AMD RX 5700 XT |
+
+### Running Tests
+
+To run the multiexp_consistency test you can use:
+
+```bash
+RUST_LOG=info cargo test --features gpu -- --exact multiexp::gpu_multiexp_consistency --nocapture
 ```
-("Device_Name", Cores),
-("Quadro RTX 6000", 4608),
-("TITAN RTX", 4608),
-("Tesla V100", 5120),
-("Tesla P100", 3584),
-("Tesla T4", 2560),
-("Quadro M5000", 2048),
-("GeForce RTX 2080 Ti", 4352),
-("GeForce RTX 2080 SUPER", 3072),
-("GeForce RTX 2080", 2944),
-("GeForce RTX 2070 SUPER", 2560),
-("GeForce GTX 1080 Ti", 3584),
-("GeForce GTX 1080", 2560),
-("GeForce GTX 2060", 1920),
-("GeForce GTX 1660 Ti", 1536),
-("GeForce GTX 1060", 1280),
-("GeForce GTX 1650 SUPER", 1280),
-("GeForce GTX 1650", 896),
+
+to run on some specific platform you can do
+
+```bash
+export BELLMAN_PLATFORM="AMD Accelerated Parallel Processing" 
+RUST_LOG=info cargo test --features gpu -- --exact multiexp::gpu_multiexp_consistency --nocapture
 ```
 
 ## License
 
 Licensed under either of
 
- * Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
+- Apache License, Version 2.0, |[LICENSE-APACHE](LICENSE-APACHE) or
    http://www.apache.org/licenses/LICENSE-2.0)
- * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+- MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 
 at your option.
 

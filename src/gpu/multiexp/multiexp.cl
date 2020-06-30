@@ -19,24 +19,26 @@ __kernel void POINT_bellman_multiexp(
     uint window_size) {
 
   // We have `num_windows` * `num_groups` threads per multiexp.
-  uint gid = get_global_id(0);
+  const uint gid = get_global_id(0);
   if(gid >= num_windows * num_groups) return;
 
   // We have (2^window_size - 1) buckets.
-  uint bucket_len = ((1 << window_size) - 1);
+  const uint bucket_len = ((1 << window_size) - 1);
 
   // Each thread has its own set of buckets in global memory.
   buckets += bucket_len * gid;
-  for(uint i = 0; i < bucket_len; i++) buckets[i] = POINT_ZERO;
 
-  uint len = (uint)ceil(n / (float)num_groups); // Num of elements in each group
+  const POINT_projective local_zero = POINT_ZERO;
+  for(uint i = 0; i < bucket_len; i++) buckets[i] = local_zero;
+
+  const uint len = (uint)ceil(n / (float)num_groups); // Num of elements in each group
 
   // This thread runs the multiexp algorithm on elements from `nstart` to `nened`
   // on the window [`bits`, `bits` + `w`)
-  uint nstart = len * (gid / num_windows);
-  uint nend = min(nstart + len, n);
-  uint bits = (gid % num_windows) * window_size;
-  ushort w = min((ushort)window_size, (ushort)(EXPONENT_BITS - bits));
+  const uint nstart = len * (gid / num_windows);
+  const uint nend = min(nstart + len, n);
+  const uint bits = (gid % num_windows) * window_size;
+  const ushort w = min((ushort)window_size, (ushort)(EXPONENT_BITS - bits));
 
   POINT_projective res = POINT_ZERO;
   for(uint i = nstart; i < nend; i++) {

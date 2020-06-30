@@ -576,44 +576,57 @@ where
 }
 
 #[cfg(feature = "gpu")]
-#[test]
-pub fn gpu_fft_consistency() {
-    use paired::bls12_381::{Bls12, Fr};
-    use std::time::Instant;
-    let rng = &mut rand::thread_rng();
+#[cfg(test)]
+mod tests {
+    use crate::domain::{gpu_fft, parallel_fft, serial_fft, EvaluationDomain, Scalar};
+    use crate::gpu;
+    use crate::multicore::Worker;
+    use ff::Field;
 
-    let worker = Worker::new();
-    let log_cpus = worker.log_num_cpus();
-    let mut kern = gpu::FFTKernel::create(1 << 24, false).expect("Cannot initialize kernel!");
+    #[test]
+    pub fn gpu_fft_consistency() {
+        let _ = env_logger::try_init();
+        gpu::dump_device_list();
 
-    for log_d in 1..25 {
-        let d = 1 << log_d;
+        use paired::bls12_381::{Bls12, Fr};
+        use std::time::Instant;
+        let rng = &mut rand::thread_rng();
 
-        let elems = (0..d)
-            .map(|_| Scalar::<Bls12>(Fr::random(rng)))
-            .collect::<Vec<_>>();
-        let mut v1 = EvaluationDomain::from_coeffs(elems.clone()).unwrap();
-        let mut v2 = EvaluationDomain::from_coeffs(elems.clone()).unwrap();
+        let worker = Worker::new();
+        let log_cpus = worker.log_num_cpus();
+        let mut kern = gpu::FFTKernel::create(1 << 24, false).expect("Cannot initialize kernel!");
 
-        println!("Testing FFT for {} elements...", d);
+        for log_d in 1..25 {
+            let d = 1 << log_d;
 
-        let mut now = Instant::now();
-        gpu_fft(&mut kern, &mut v1.coeffs, &v1.omega, log_d).expect("GPU FFT failed!");
-        let gpu_dur = now.elapsed().as_secs() * 1000 as u64 + now.elapsed().subsec_millis() as u64;
-        println!("GPU took {}ms.", gpu_dur);
+            let elems = (0..d)
+                .map(|_| Scalar::<Bls12>(Fr::random(rng)))
+                .collect::<Vec<_>>();
+            let mut v1 = EvaluationDomain::from_coeffs(elems.clone()).unwrap();
+            let mut v2 = EvaluationDomain::from_coeffs(elems.clone()).unwrap();
 
-        now = Instant::now();
-        if log_d <= log_cpus {
-            serial_fft(&mut v2.coeffs, &v2.omega, log_d);
-        } else {
-            parallel_fft(&mut v2.coeffs, &worker, &v2.omega, log_d, log_cpus);
+            println!("Testing FFT for {} elements...", d);
+
+            let mut now = Instant::now();
+            gpu_fft(&mut kern, &mut v1.coeffs, &v1.omega, log_d).expect("GPU FFT failed!");
+            let gpu_dur =
+                now.elapsed().as_secs() * 1000 as u64 + now.elapsed().subsec_millis() as u64;
+            println!("GPU took {}ms.", gpu_dur);
+
+            now = Instant::now();
+            if log_d <= log_cpus {
+                serial_fft(&mut v2.coeffs, &v2.omega, log_d);
+            } else {
+                parallel_fft(&mut v2.coeffs, &worker, &v2.omega, log_d, log_cpus);
+            }
+            let cpu_dur =
+                now.elapsed().as_secs() * 1000 as u64 + now.elapsed().subsec_millis() as u64;
+            println!("CPU ({} cores) took {}ms.", 1 << log_cpus, cpu_dur);
+
+            println!("Speedup: x{}", cpu_dur as f32 / gpu_dur as f32);
+
+            assert!(v1.coeffs == v2.coeffs);
+            println!("============================");
         }
-        let cpu_dur = now.elapsed().as_secs() * 1000 as u64 + now.elapsed().subsec_millis() as u64;
-        println!("CPU ({} cores) took {}ms.", 1 << log_cpus, cpu_dur);
-
-        println!("Speedup: x{}", cpu_dur as f32 / gpu_dur as f32);
-
-        assert!(v1.coeffs == v2.coeffs);
-        println!("============================");
     }
 }
