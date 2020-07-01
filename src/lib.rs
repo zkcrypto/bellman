@@ -22,8 +22,9 @@
 //!     },
 //!     groth16, Circuit, ConstraintSystem, SynthesisError,
 //! };
+//! use bls12_381::Bls12;
 //! use ff::PrimeField;
-//! use pairing::{bls12_381::Bls12, Engine};
+//! use pairing::Engine;
 //! use rand::rngs::OsRng;
 //! use sha2::{Digest, Sha256};
 //!
