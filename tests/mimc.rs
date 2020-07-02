@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 use ff::{Field, PrimeField};
 
 // We're going to use the BLS12-381 pairing-friendly elliptic curve.
-use pairing::bls12_381::{Bls12, Fr};
+use bls12_381::{Bls12, Scalar};
 
 // We'll use these interfaces to construct our circuit.
 use bellman::{Circuit, ConstraintSystem, SynthesisError};
@@ -151,7 +151,7 @@ fn test_mimc() {
 
     // Generate the MiMC round constants
     let constants = (0..MIMC_ROUNDS)
-        .map(|_| Fr::random(rng))
+        .map(|_| Scalar::random(rng))
         .collect::<Vec<_>>();
 
     println!("Creating parameters...");
@@ -183,8 +183,8 @@ fn test_mimc() {
 
     for _ in 0..SAMPLES {
         // Generate a random preimage and compute the image
-        let xl = Fr::random(rng);
-        let xr = Fr::random(rng);
+        let xl = Scalar::random(rng);
+        let xr = Scalar::random(rng);
         let image = mimc(xl, xr, &constants);
 
         proof_vec.truncate(0);

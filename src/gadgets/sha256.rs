@@ -273,8 +273,8 @@ mod test {
     use super::*;
     use crate::gadgets::boolean::AllocatedBit;
     use crate::gadgets::test::TestConstraintSystem;
+    use bls12_381::Scalar;
     use hex_literal::hex;
-    use pairing::bls12_381::Fr;
     use rand_core::{RngCore, SeedableRng};
     use rand_xorshift::XorShiftRng;
 
@@ -282,7 +282,7 @@ mod test {
     fn test_blank_hash() {
         let iv = get_sha256_iv();
 
-        let mut cs = TestConstraintSystem::<Fr>::new();
+        let mut cs = TestConstraintSystem::<Scalar>::new();
         let mut input_bits: Vec<_> = (0..512).map(|_| Boolean::Constant(false)).collect();
         input_bits[0] = Boolean::Constant(true);
         let out = sha256_compression_function(&mut cs, &input_bits, &iv).unwrap();
@@ -312,7 +312,7 @@ mod test {
 
         let iv = get_sha256_iv();
 
-        let mut cs = TestConstraintSystem::<Fr>::new();
+        let mut cs = TestConstraintSystem::<Scalar>::new();
         let input_bits: Vec<_> = (0..512)
             .map(|i| {
                 Boolean::from(
@@ -346,7 +346,7 @@ mod test {
             h.update(&data);
             let hash_result = h.finalize();
 
-            let mut cs = TestConstraintSystem::<Fr>::new();
+            let mut cs = TestConstraintSystem::<Scalar>::new();
             let mut input_bits = vec![];
 
             for (byte_i, input_byte) in data.into_iter().enumerate() {

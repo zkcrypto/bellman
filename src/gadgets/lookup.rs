@@ -191,8 +191,8 @@ mod test {
     use crate::gadgets::boolean::{AllocatedBit, Boolean};
     use crate::gadgets::test::*;
 
+    use bls12_381::Scalar;
     use ff::Field;
-    use pairing::bls12_381::Fr;
     use rand_core::{RngCore, SeedableRng};
     use rand_xorshift::XorShiftRng;
     use std::ops::{AddAssign, Neg};
@@ -218,8 +218,8 @@ mod test {
 
             let bits = vec![a, b, c];
 
-            let points: Vec<(Fr, Fr)> = (0..8)
-                .map(|_| (Fr::random(&mut rng), Fr::random(&mut rng)))
+            let points: Vec<(Scalar, Scalar)> = (0..8)
+                .map(|_| (Scalar::random(&mut rng), Scalar::random(&mut rng)))
                 .collect();
 
             let res = lookup3_xy(&mut cs, &bits, &points).unwrap();
@@ -263,8 +263,8 @@ mod test {
 
             let bits = vec![a, b, c];
 
-            let points: Vec<(Fr, Fr)> = (0..4)
-                .map(|_| (Fr::random(&mut rng), Fr::random(&mut rng)))
+            let points: Vec<(Scalar, Scalar)> = (0..4)
+                .map(|_| (Scalar::random(&mut rng), Scalar::random(&mut rng)))
                 .collect();
 
             let res = lookup3_xy_with_conditional_negation(&mut cs, &bits, &points).unwrap();
@@ -297,15 +297,15 @@ mod test {
 
         let window_size = 4;
 
-        let mut assignment = vec![Fr::zero(); 1 << window_size];
+        let mut assignment = vec![Scalar::zero(); 1 << window_size];
         let constants: Vec<_> = (0..(1 << window_size))
-            .map(|_| Fr::random(&mut rng))
+            .map(|_| Scalar::random(&mut rng))
             .collect();
 
         synth(window_size, &constants, &mut assignment);
 
         for b in 0..(1 << window_size) {
-            let mut acc = Fr::zero();
+            let mut acc = Scalar::zero();
 
             for j in 0..(1 << window_size) {
                 if j & b == j {

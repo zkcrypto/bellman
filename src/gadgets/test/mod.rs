@@ -418,46 +418,46 @@ impl<Scalar: PrimeField> ConstraintSystem<Scalar> for TestConstraintSystem<Scala
 
 #[test]
 fn test_cs() {
-    use ff::{Field, PrimeField};
-    use pairing::bls12_381::Fr;
+    use bls12_381::Scalar;
+    use ff::PrimeField;
 
     let mut cs = TestConstraintSystem::new();
     assert!(cs.is_satisfied());
     assert_eq!(cs.num_constraints(), 0);
     let a = cs
         .namespace(|| "a")
-        .alloc(|| "var", || Ok(Fr::from_str("10").unwrap()))
+        .alloc(|| "var", || Ok(Scalar::from_str("10").unwrap()))
         .unwrap();
     let b = cs
         .namespace(|| "b")
-        .alloc(|| "var", || Ok(Fr::from_str("4").unwrap()))
+        .alloc(|| "var", || Ok(Scalar::from_str("4").unwrap()))
         .unwrap();
     let c = cs
-        .alloc(|| "product", || Ok(Fr::from_str("40").unwrap()))
+        .alloc(|| "product", || Ok(Scalar::from_str("40").unwrap()))
         .unwrap();
 
     cs.enforce(|| "mult", |lc| lc + a, |lc| lc + b, |lc| lc + c);
     assert!(cs.is_satisfied());
     assert_eq!(cs.num_constraints(), 1);
 
-    cs.set("a/var", Fr::from_str("4").unwrap());
+    cs.set("a/var", Scalar::from_str("4").unwrap());
 
-    let one = TestConstraintSystem::<Fr>::one();
+    let one = TestConstraintSystem::<Scalar>::one();
     cs.enforce(|| "eq", |lc| lc + a, |lc| lc + one, |lc| lc + b);
 
     assert!(!cs.is_satisfied());
     assert!(cs.which_is_unsatisfied() == Some("mult"));
 
-    assert!(cs.get("product") == Fr::from_str("40").unwrap());
+    assert!(cs.get("product") == Scalar::from_str("40").unwrap());
 
-    cs.set("product", Fr::from_str("16").unwrap());
+    cs.set("product", Scalar::from_str("16").unwrap());
     assert!(cs.is_satisfied());
 
     {
         let mut cs = cs.namespace(|| "test1");
         let mut cs = cs.namespace(|| "test2");
-        cs.alloc(|| "hehe", || Ok(Fr::one())).unwrap();
+        cs.alloc(|| "hehe", || Ok(Scalar::one())).unwrap();
     }
 
-    assert!(cs.get("test1/test2/hehe") == Fr::one());
+    assert!(cs.get("test1/test2/hehe") == Scalar::one());
 }

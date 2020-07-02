@@ -311,17 +311,19 @@ fn test_with_bls12() {
         acc
     }
 
+    use bls12_381::{Bls12, Scalar};
     use group::{Curve, Group};
-    use pairing::{
-        bls12_381::{Bls12, Fr},
-        Engine,
-    };
+    use pairing::Engine;
     use rand;
 
     const SAMPLES: usize = 1 << 14;
 
     let rng = &mut rand::thread_rng();
-    let v = Arc::new((0..SAMPLES).map(|_| Fr::random(rng)).collect::<Vec<_>>());
+    let v = Arc::new(
+        (0..SAMPLES)
+            .map(|_| Scalar::random(rng))
+            .collect::<Vec<_>>(),
+    );
     let g = Arc::new(
         (0..SAMPLES)
             .map(|_| <Bls12 as Engine>::G1::random(rng).to_affine())

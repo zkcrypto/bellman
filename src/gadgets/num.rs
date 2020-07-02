@@ -410,8 +410,8 @@ impl<Scalar: PrimeField> Num<Scalar> {
 #[cfg(test)]
 mod test {
     use crate::ConstraintSystem;
+    use bls12_381::Scalar;
     use ff::{BitIterator, Field, PrimeField};
-    use pairing::bls12_381::Fr;
     use rand_core::SeedableRng;
     use rand_xorshift::XorShiftRng;
     use std::ops::{Neg, SubAssign};
@@ -423,22 +423,22 @@ mod test {
     fn test_allocated_num() {
         let mut cs = TestConstraintSystem::new();
 
-        AllocatedNum::alloc(&mut cs, || Ok(Fr::one())).unwrap();
+        AllocatedNum::alloc(&mut cs, || Ok(Scalar::one())).unwrap();
 
-        assert!(cs.get("num") == Fr::one());
+        assert!(cs.get("num") == Scalar::one());
     }
 
     #[test]
     fn test_num_squaring() {
         let mut cs = TestConstraintSystem::new();
 
-        let n = AllocatedNum::alloc(&mut cs, || Ok(Fr::from_str("3").unwrap())).unwrap();
+        let n = AllocatedNum::alloc(&mut cs, || Ok(Scalar::from_str("3").unwrap())).unwrap();
         let n2 = n.square(&mut cs).unwrap();
 
         assert!(cs.is_satisfied());
-        assert!(cs.get("squared num") == Fr::from_str("9").unwrap());
-        assert!(n2.value.unwrap() == Fr::from_str("9").unwrap());
-        cs.set("squared num", Fr::from_str("10").unwrap());
+        assert!(cs.get("squared num") == Scalar::from_str("9").unwrap());
+        assert!(n2.value.unwrap() == Scalar::from_str("9").unwrap());
+        cs.set("squared num", Scalar::from_str("10").unwrap());
         assert!(!cs.is_satisfied());
     }
 
@@ -446,16 +446,16 @@ mod test {
     fn test_num_multiplication() {
         let mut cs = TestConstraintSystem::new();
 
-        let n =
-            AllocatedNum::alloc(cs.namespace(|| "a"), || Ok(Fr::from_str("12").unwrap())).unwrap();
-        let n2 =
-            AllocatedNum::alloc(cs.namespace(|| "b"), || Ok(Fr::from_str("10").unwrap())).unwrap();
+        let n = AllocatedNum::alloc(cs.namespace(|| "a"), || Ok(Scalar::from_str("12").unwrap()))
+            .unwrap();
+        let n2 = AllocatedNum::alloc(cs.namespace(|| "b"), || Ok(Scalar::from_str("10").unwrap()))
+            .unwrap();
         let n3 = n.mul(&mut cs, &n2).unwrap();
 
         assert!(cs.is_satisfied());
-        assert!(cs.get("product num") == Fr::from_str("120").unwrap());
-        assert!(n3.value.unwrap() == Fr::from_str("120").unwrap());
-        cs.set("product num", Fr::from_str("121").unwrap());
+        assert!(cs.get("product num") == Scalar::from_str("120").unwrap());
+        assert!(n3.value.unwrap() == Scalar::from_str("120").unwrap());
+        cs.set("product num", Scalar::from_str("121").unwrap());
         assert!(!cs.is_satisfied());
     }
 
@@ -468,8 +468,10 @@ mod test {
         {
             let mut cs = TestConstraintSystem::new();
 
-            let a = AllocatedNum::alloc(cs.namespace(|| "a"), || Ok(Fr::random(&mut rng))).unwrap();
-            let b = AllocatedNum::alloc(cs.namespace(|| "b"), || Ok(Fr::random(&mut rng))).unwrap();
+            let a =
+                AllocatedNum::alloc(cs.namespace(|| "a"), || Ok(Scalar::random(&mut rng))).unwrap();
+            let b =
+                AllocatedNum::alloc(cs.namespace(|| "b"), || Ok(Scalar::random(&mut rng))).unwrap();
             let condition = Boolean::constant(false);
             let (c, d) = AllocatedNum::conditionally_reverse(&mut cs, &a, &b, &condition).unwrap();
 
@@ -482,8 +484,10 @@ mod test {
         {
             let mut cs = TestConstraintSystem::new();
 
-            let a = AllocatedNum::alloc(cs.namespace(|| "a"), || Ok(Fr::random(&mut rng))).unwrap();
-            let b = AllocatedNum::alloc(cs.namespace(|| "b"), || Ok(Fr::random(&mut rng))).unwrap();
+            let a =
+                AllocatedNum::alloc(cs.namespace(|| "a"), || Ok(Scalar::random(&mut rng))).unwrap();
+            let b =
+                AllocatedNum::alloc(cs.namespace(|| "b"), || Ok(Scalar::random(&mut rng))).unwrap();
             let condition = Boolean::constant(true);
             let (c, d) = AllocatedNum::conditionally_reverse(&mut cs, &a, &b, &condition).unwrap();
 
@@ -499,24 +503,24 @@ mod test {
         {
             let mut cs = TestConstraintSystem::new();
 
-            let n = AllocatedNum::alloc(&mut cs, || Ok(Fr::from_str("3").unwrap())).unwrap();
+            let n = AllocatedNum::alloc(&mut cs, || Ok(Scalar::from_str("3").unwrap())).unwrap();
             n.assert_nonzero(&mut cs).unwrap();
 
             assert!(cs.is_satisfied());
-            cs.set("ephemeral inverse", Fr::from_str("3").unwrap());
+            cs.set("ephemeral inverse", Scalar::from_str("3").unwrap());
             assert!(cs.which_is_unsatisfied() == Some("nonzero assertion constraint"));
         }
         {
             let mut cs = TestConstraintSystem::new();
 
-            let n = AllocatedNum::alloc(&mut cs, || Ok(Fr::zero())).unwrap();
+            let n = AllocatedNum::alloc(&mut cs, || Ok(Scalar::zero())).unwrap();
             assert!(n.assert_nonzero(&mut cs).is_err());
         }
     }
 
     #[test]
     fn test_into_bits_strict() {
-        let negone = Fr::one().neg();
+        let negone = Scalar::one().neg();
 
         let mut cs = TestConstraintSystem::new();
 
@@ -526,7 +530,7 @@ mod test {
         assert!(cs.is_satisfied());
 
         // make the bit representation the characteristic
-        cs.set("bit 254/boolean", Fr::one());
+        cs.set("bit 254/boolean", Scalar::one());
 
         // this makes the conditional boolean constraint fail
         assert_eq!(
@@ -543,7 +547,7 @@ mod test {
         ]);
 
         for i in 0..200 {
-            let r = Fr::random(&mut rng);
+            let r = Scalar::random(&mut rng);
             let mut cs = TestConstraintSystem::new();
 
             let n = AllocatedNum::alloc(&mut cs, || Ok(r)).unwrap();
@@ -567,15 +571,15 @@ mod test {
                 }
             }
 
-            cs.set("num", Fr::random(&mut rng));
+            cs.set("num", Scalar::random(&mut rng));
             assert!(!cs.is_satisfied());
             cs.set("num", r);
             assert!(cs.is_satisfied());
 
-            for i in 0..Fr::NUM_BITS {
+            for i in 0..Scalar::NUM_BITS {
                 let name = format!("bit {}/boolean", i);
                 let cur = cs.get(&name);
-                let mut tmp = Fr::one();
+                let mut tmp = Scalar::one();
                 tmp.sub_assign(&cur);
                 cs.set(&name, tmp);
                 assert!(!cs.is_satisfied());

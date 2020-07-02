@@ -375,7 +375,7 @@ fn parallel_fft<S: PrimeField, T: Group<S>>(
 #[cfg(feature = "pairing")]
 #[test]
 fn polynomial_arith() {
-    use pairing::bls12_381::Fr;
+    use bls12_381::Scalar as Fr;
     use rand_core::RngCore;
 
     fn test_mul<S: PrimeField, R: RngCore>(rng: &mut R) {
@@ -422,7 +422,7 @@ fn polynomial_arith() {
 #[cfg(feature = "pairing")]
 #[test]
 fn fft_composition() {
-    use pairing::bls12_381::Fr;
+    use bls12_381::Scalar as Fr;
     use rand_core::RngCore;
 
     fn test_comp<S: PrimeField, R: RngCore>(rng: &mut R) {
@@ -460,7 +460,7 @@ fn fft_composition() {
 #[cfg(feature = "pairing")]
 #[test]
 fn parallel_fft_consistency() {
-    use pairing::bls12_381::Fr;
+    use bls12_381::Scalar as Fr;
     use rand_core::RngCore;
     use std::cmp::min;
 

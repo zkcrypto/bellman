@@ -749,19 +749,19 @@ mod test {
     use super::{field_into_allocated_bits_le, u64_into_boolean_vec_le, AllocatedBit, Boolean};
     use crate::gadgets::test::*;
     use crate::ConstraintSystem;
+    use bls12_381::Scalar;
     use ff::{Field, PrimeField};
-    use pairing::bls12_381::Fr;
 
     #[test]
     fn test_allocated_bit() {
         let mut cs = TestConstraintSystem::new();
 
         AllocatedBit::alloc(&mut cs, Some(true)).unwrap();
-        assert!(cs.get("boolean") == Fr::one());
+        assert!(cs.get("boolean") == Scalar::one());
         assert!(cs.is_satisfied());
-        cs.set("boolean", Fr::zero());
+        cs.set("boolean", Scalar::zero());
         assert!(cs.is_satisfied());
-        cs.set("boolean", Fr::from_str("2").unwrap());
+        cs.set("boolean", Scalar::from_str("2").unwrap());
         assert!(!cs.is_satisfied());
         assert!(cs.which_is_unsatisfied() == Some("boolean constraint"));
     }
@@ -770,7 +770,7 @@ mod test {
     fn test_xor() {
         for a_val in [false, true].iter() {
             for b_val in [false, true].iter() {
-                let mut cs = TestConstraintSystem::<Fr>::new();
+                let mut cs = TestConstraintSystem::<Scalar>::new();
                 let a = AllocatedBit::alloc(cs.namespace(|| "a"), Some(*a_val)).unwrap();
                 let b = AllocatedBit::alloc(cs.namespace(|| "b"), Some(*b_val)).unwrap();
                 let c = AllocatedBit::xor(&mut cs, &a, &b).unwrap();
@@ -806,7 +806,7 @@ mod test {
     fn test_and() {
         for a_val in [false, true].iter() {
             for b_val in [false, true].iter() {
-                let mut cs = TestConstraintSystem::<Fr>::new();
+                let mut cs = TestConstraintSystem::<Scalar>::new();
                 let a = AllocatedBit::alloc(cs.namespace(|| "a"), Some(*a_val)).unwrap();
                 let b = AllocatedBit::alloc(cs.namespace(|| "b"), Some(*b_val)).unwrap();
                 let c = AllocatedBit::and(&mut cs, &a, &b).unwrap();
@@ -842,7 +842,7 @@ mod test {
     fn test_and_not() {
         for a_val in [false, true].iter() {
             for b_val in [false, true].iter() {
-                let mut cs = TestConstraintSystem::<Fr>::new();
+                let mut cs = TestConstraintSystem::<Scalar>::new();
                 let a = AllocatedBit::alloc(cs.namespace(|| "a"), Some(*a_val)).unwrap();
                 let b = AllocatedBit::alloc(cs.namespace(|| "b"), Some(*b_val)).unwrap();
                 let c = AllocatedBit::and_not(&mut cs, &a, &b).unwrap();
@@ -878,7 +878,7 @@ mod test {
     fn test_nor() {
         for a_val in [false, true].iter() {
             for b_val in [false, true].iter() {
-                let mut cs = TestConstraintSystem::<Fr>::new();
+                let mut cs = TestConstraintSystem::<Scalar>::new();
                 let a = AllocatedBit::alloc(cs.namespace(|| "a"), Some(*a_val)).unwrap();
                 let b = AllocatedBit::alloc(cs.namespace(|| "b"), Some(*b_val)).unwrap();
                 let c = AllocatedBit::nor(&mut cs, &a, &b).unwrap();
@@ -917,7 +917,7 @@ mod test {
                 for a_neg in [false, true].iter().cloned() {
                     for b_neg in [false, true].iter().cloned() {
                         {
-                            let mut cs = TestConstraintSystem::<Fr>::new();
+                            let mut cs = TestConstraintSystem::<Scalar>::new();
 
                             let mut a = Boolean::from(
                                 AllocatedBit::alloc(cs.namespace(|| "a"), Some(a_bool)).unwrap(),
@@ -938,7 +938,7 @@ mod test {
                             assert_eq!(cs.is_satisfied(), (a_bool ^ a_neg) == (b_bool ^ b_neg));
                         }
                         {
-                            let mut cs = TestConstraintSystem::<Fr>::new();
+                            let mut cs = TestConstraintSystem::<Scalar>::new();
 
                             let mut a = Boolean::Constant(a_bool);
                             let mut b = Boolean::from(
@@ -957,7 +957,7 @@ mod test {
                             assert_eq!(cs.is_satisfied(), (a_bool ^ a_neg) == (b_bool ^ b_neg));
                         }
                         {
-                            let mut cs = TestConstraintSystem::<Fr>::new();
+                            let mut cs = TestConstraintSystem::<Scalar>::new();
 
                             let mut a = Boolean::from(
                                 AllocatedBit::alloc(cs.namespace(|| "a"), Some(a_bool)).unwrap(),
@@ -976,7 +976,7 @@ mod test {
                             assert_eq!(cs.is_satisfied(), (a_bool ^ a_neg) == (b_bool ^ b_neg));
                         }
                         {
-                            let mut cs = TestConstraintSystem::<Fr>::new();
+                            let mut cs = TestConstraintSystem::<Scalar>::new();
 
                             let mut a = Boolean::Constant(a_bool);
                             let mut b = Boolean::Constant(b_bool);
@@ -1005,7 +1005,7 @@ mod test {
 
     #[test]
     fn test_boolean_negation() {
-        let mut cs = TestConstraintSystem::<Fr>::new();
+        let mut cs = TestConstraintSystem::<Scalar>::new();
 
         let mut b = Boolean::from(AllocatedBit::alloc(&mut cs, Some(true)).unwrap());
 
@@ -1097,7 +1097,7 @@ mod test {
 
         for first_operand in variants.iter().cloned() {
             for second_operand in variants.iter().cloned() {
-                let mut cs = TestConstraintSystem::<Fr>::new();
+                let mut cs = TestConstraintSystem::<Scalar>::new();
 
                 let a;
                 let b;
@@ -1306,7 +1306,7 @@ mod test {
 
         for first_operand in variants.iter().cloned() {
             for second_operand in variants.iter().cloned() {
-                let mut cs = TestConstraintSystem::<Fr>::new();
+                let mut cs = TestConstraintSystem::<Scalar>::new();
 
                 let a;
                 let b;
@@ -1527,7 +1527,7 @@ mod test {
 
     #[test]
     fn test_u64_into_boolean_vec_le() {
-        let mut cs = TestConstraintSystem::<Fr>::new();
+        let mut cs = TestConstraintSystem::<Scalar>::new();
 
         let bits = u64_into_boolean_vec_le(&mut cs, Some(17234652694787248421)).unwrap();
 
@@ -1548,9 +1548,9 @@ mod test {
 
     #[test]
     fn test_field_into_allocated_bits_le() {
-        let mut cs = TestConstraintSystem::<Fr>::new();
+        let mut cs = TestConstraintSystem::<Scalar>::new();
 
-        let r = Fr::from_str(
+        let r = Scalar::from_str(
             "9147677615426976802526883532204139322118074541891858454835346926874644257775",
         )
         .unwrap();
@@ -1643,16 +1643,16 @@ mod test {
                     } else {
                         assert_eq!(cs.get("ch"), {
                             if expected {
-                                Fr::one()
+                                Scalar::one()
                             } else {
-                                Fr::zero()
+                                Scalar::zero()
                             }
                         });
                         cs.set("ch", {
                             if expected {
-                                Fr::zero()
+                                Scalar::zero()
                             } else {
-                                Fr::one()
+                                Scalar::one()
                             }
                         });
                         assert_eq!(cs.which_is_unsatisfied().unwrap(), "ch computation");
@@ -1735,16 +1735,16 @@ mod test {
                     } else {
                         assert_eq!(cs.get("maj"), {
                             if expected {
-                                Fr::one()
+                                Scalar::one()
                             } else {
-                                Fr::zero()
+                                Scalar::zero()
                             }
                         });
                         cs.set("maj", {
                             if expected {
-                                Fr::zero()
+                                Scalar::zero()
                             } else {
-                                Fr::one()
+                                Scalar::one()
                             }
                         });
                         assert_eq!(cs.which_is_unsatisfied().unwrap(), "maj computation");
@@ -1757,7 +1757,7 @@ mod test {
     #[test]
     fn test_alloc_conditionally() {
         {
-            let mut cs = TestConstraintSystem::<Fr>::new();
+            let mut cs = TestConstraintSystem::<Scalar>::new();
             let b = AllocatedBit::alloc(&mut cs, Some(false)).unwrap();
 
             let value = None;
@@ -1773,7 +1773,7 @@ mod test {
 
         {
             // since value is true, b must be false, so it should succeed
-            let mut cs = TestConstraintSystem::<Fr>::new();
+            let mut cs = TestConstraintSystem::<Scalar>::new();
 
             let value = Some(true);
             let b = AllocatedBit::alloc(&mut cs, Some(false)).unwrap();
@@ -1790,7 +1790,7 @@ mod test {
 
         {
             // since value is true, b must be false, so it should fail
-            let mut cs = TestConstraintSystem::<Fr>::new();
+            let mut cs = TestConstraintSystem::<Scalar>::new();
 
             let value = Some(true);
             let b = AllocatedBit::alloc(&mut cs, Some(true)).unwrap();
@@ -1805,7 +1805,7 @@ mod test {
 
             let value = Some(false);
             //check with false bit
-            let mut cs = TestConstraintSystem::<Fr>::new();
+            let mut cs = TestConstraintSystem::<Scalar>::new();
             let b1 = AllocatedBit::alloc(&mut cs, Some(false)).unwrap();
             AllocatedBit::alloc_conditionally(cs.namespace(|| "alloc_conditionally"), value, &b1)
                 .unwrap();
@@ -1813,7 +1813,7 @@ mod test {
             assert!(cs.is_satisfied());
 
             //check with true bit
-            let mut cs = TestConstraintSystem::<Fr>::new();
+            let mut cs = TestConstraintSystem::<Scalar>::new();
             let b2 = AllocatedBit::alloc(&mut cs, Some(true)).unwrap();
             AllocatedBit::alloc_conditionally(cs.namespace(|| "alloc_conditionally"), value, &b2)
                 .unwrap();

@@ -74,7 +74,7 @@ pub fn compute_multipacking<Scalar: PrimeField>(bits: &[bool]) -> Vec<Scalar> {
 #[test]
 fn test_multipacking() {
     use crate::ConstraintSystem;
-    use pairing::bls12_381::Fr;
+    use bls12_381::Scalar;
     use rand_core::{RngCore, SeedableRng};
     use rand_xorshift::XorShiftRng;
 
@@ -87,7 +87,7 @@ fn test_multipacking() {
     ]);
 
     for num_bits in 0..1500 {
-        let mut cs = TestConstraintSystem::<Fr>::new();
+        let mut cs = TestConstraintSystem::<Scalar>::new();
 
         let bits: Vec<bool> = (0..num_bits).map(|_| rng.next_u32() % 2 != 0).collect();
 

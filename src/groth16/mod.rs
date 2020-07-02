@@ -479,8 +479,8 @@ mod test_with_bls12_381 {
     use super::*;
     use crate::{Circuit, ConstraintSystem, SynthesisError};
 
+    use bls12_381::{Bls12, Scalar};
     use ff::{Field, PrimeField};
-    use pairing::bls12_381::{Bls12, Fr};
     use rand::thread_rng;
     use std::ops::MulAssign;
 
@@ -537,8 +537,8 @@ mod test_with_bls12_381 {
         let pvk = prepare_verifying_key::<Bls12>(&params.vk);
 
         for _ in 0..100 {
-            let a = Fr::random(rng);
-            let b = Fr::random(rng);
+            let a = Scalar::random(rng);
+            let b = Scalar::random(rng);
             let mut c = a;
             c.mul_assign(&b);
 
