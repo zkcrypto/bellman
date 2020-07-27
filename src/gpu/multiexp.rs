@@ -327,9 +327,17 @@ where
 
         let kernels: Vec<_> = devices
             .iter()
-            .map(|d| SingleMultiexpKernel::<E>::create(*d, priority))
-            .filter(|res| res.is_ok())
-            .map(|res| res.unwrap())
+            .map(|d| (d, SingleMultiexpKernel::<E>::create(*d, priority)))
+            .filter_map(|(device, res)| {
+                if let Err(ref e) = res {
+                    error!(
+                        "Cannot initialize kernel for device '{}'! Error: {}",
+                        device.name().unwrap_or("Unknown".into()),
+                        e
+                    );
+                }
+                res.ok()
+            })
             .collect();
 
         if kernels.is_empty() {
