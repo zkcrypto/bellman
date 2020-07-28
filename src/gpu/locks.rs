@@ -116,6 +116,10 @@ macro_rules! locked_kernel {
             where
                 F: FnMut(&mut $kern<E>) -> GPUResult<R>,
             {
+                if std::env::var("BELLMAN_NO_GPU").is_ok() {
+                    return Err(GPUError::GPUDisabled);
+                }
+
                 self.init();
 
                 loop {

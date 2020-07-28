@@ -1,22 +1,18 @@
 use super::error::{GPUError, GPUResult};
 use super::locks;
 use super::sources;
-use super::structs;
 use super::utils;
-use crate::gpu::{get_devices, get_platform};
 use crate::multicore::Worker;
 use crate::multiexp::{multiexp as cpu_multiexp, FullDensity};
 use crossbeam::thread;
 use ff::{PrimeField, ScalarEngine};
 use futures::Future;
 use groupy::{CurveAffine, CurveProjective};
-use log::debug;
 use log::{error, info};
-use ocl::{Buffer, Device, MemFlags, ProQue};
 use paired::Engine;
+use rust_gpu_tools::*;
+use std::any::TypeId;
 use std::sync::Arc;
-
-// NOTE: Please read `structs.rs` for an explanation for unsafe transmutes of this code!
 
 const MAX_WINDOW_SIZE: usize = 10;
 const LOCAL_WORK_SIZE: usize = 256;
@@ -42,22 +38,13 @@ pub struct SingleMultiexpKernel<E>
 where
     E: Engine,
 {
-    proque: ProQue,
-
-    g1_base_buffer: Buffer<structs::CurveAffineStruct<E::G1Affine>>,
-    g1_bucket_buffer: Buffer<structs::CurveProjectiveStruct<E::G1>>,
-    g1_result_buffer: Buffer<structs::CurveProjectiveStruct<E::G1>>,
-
-    g2_base_buffer: Buffer<structs::CurveAffineStruct<E::G2Affine>>,
-    g2_bucket_buffer: Buffer<structs::CurveProjectiveStruct<E::G2>>,
-    g2_result_buffer: Buffer<structs::CurveProjectiveStruct<E::G2>>,
-
-    exp_buffer: Buffer<structs::PrimeFieldStruct<E::Fr>>,
+    program: opencl::Program,
 
     core_count: usize,
     n: usize,
 
     priority: bool,
+    _phantom: std::marker::PhantomData<E::Fr>,
 }
 
 fn calc_num_groups(core_count: usize, num_windows: usize) -> usize {
@@ -111,87 +98,22 @@ impl<E> SingleMultiexpKernel<E>
 where
     E: Engine,
 {
-    pub fn create(d: Device, priority: bool) -> GPUResult<SingleMultiexpKernel<E>> {
+    pub fn create(d: opencl::Device, priority: bool) -> GPUResult<SingleMultiexpKernel<E>> {
         let src = sources::kernel::<E>();
 
-        let platform = match d.info(ocl::enums::DeviceInfo::Platform)? {
-            ocl::enums::DeviceInfoResult::Platform(p) => ocl::Platform::new(p),
-            _ => ocl::Platform::default(),
-        };
-
         let exp_bits = std::mem::size_of::<E::Fr>() * 8;
-        let core_count = utils::get_core_count(d)?;
-        let mem = utils::get_memory(d)?;
+        let core_count = utils::get_core_count(&d);
+        let mem = d.memory();
         let max_n = calc_chunk_size::<E>(mem, core_count);
         let best_n = calc_best_chunk_size(MAX_WINDOW_SIZE, core_count, exp_bits);
         let n = std::cmp::min(max_n, best_n);
-        let max_bucket_len = 1 << MAX_WINDOW_SIZE;
-
-        let pq = ProQue::builder()
-            .platform(platform)
-            .device(d)
-            .src(src)
-            .dims(1)
-            .build()
-            .map_err(|err| {
-                debug!("{:?}", err);
-                err
-            })?;
-
-        // Each group will have `num_windows` threads and as there are `num_groups` groups, there will
-        // be `num_groups` * `num_windows` threads in total.
-        // Each thread will use `num_groups` * `num_windows` * `bucket_len` buckets.
-
-        let g1basebuff = Buffer::builder()
-            .queue(pq.queue().clone())
-            .flags(MemFlags::new().read_write())
-            .len(n)
-            .build()?;
-        let g1buckbuff = Buffer::builder()
-            .queue(pq.queue().clone())
-            .flags(MemFlags::new().read_write())
-            .len(2 * core_count * max_bucket_len)
-            .build()?;
-        let g1resbuff = Buffer::builder()
-            .queue(pq.queue().clone())
-            .flags(MemFlags::new().read_write())
-            .len(2 * core_count)
-            .build()?;
-
-        let g2basebuff = Buffer::builder()
-            .queue(pq.queue().clone())
-            .flags(MemFlags::new().read_write())
-            .len(n)
-            .build()?;
-        let g2buckbuff = Buffer::builder()
-            .queue(pq.queue().clone())
-            .flags(MemFlags::new().read_write())
-            .len(2 * core_count * max_bucket_len)
-            .build()?;
-        let g2resbuff = Buffer::builder()
-            .queue(pq.queue().clone())
-            .flags(MemFlags::new().read_write())
-            .len(2 * core_count)
-            .build()?;
-
-        let expbuff = Buffer::builder()
-            .queue(pq.queue().clone())
-            .flags(MemFlags::new().read_write())
-            .len(n)
-            .build()?;
 
         Ok(SingleMultiexpKernel {
-            proque: pq,
-            g1_base_buffer: g1basebuff,
-            g1_bucket_buffer: g1buckbuff,
-            g1_result_buffer: g1resbuff,
-            g2_base_buffer: g2basebuff,
-            g2_bucket_buffer: g2buckbuff,
-            g2_result_buffer: g2resbuff,
-            exp_buffer: expbuff,
+            program: opencl::Program::from_opencl(d, &src)?,
             core_count,
             n,
             priority,
+            _phantom: std::marker::PhantomData,
         })
     }
 
@@ -212,78 +134,57 @@ where
         let window_size = calc_window_size(n as usize, exp_bits, self.core_count);
         let num_windows = ((exp_bits as f64) / (window_size as f64)).ceil() as usize;
         let num_groups = calc_num_groups(self.core_count, num_windows);
+        let bucket_len = 1 << window_size;
 
-        let mut res = vec![<G as CurveAffine>::Projective::zero(); num_groups * num_windows];
-        let texps = unsafe {
-            std::mem::transmute::<
-                &[<<G::Engine as ScalarEngine>::Fr as PrimeField>::Repr],
-                &[structs::PrimeFieldStruct<E::Fr>],
-            >(exps)
-        };
-        self.exp_buffer.write(texps).enq()?;
+        // Each group will have `num_windows` threads and as there are `num_groups` groups, there will
+        // be `num_groups` * `num_windows` threads in total.
+        // Each thread will use `num_groups` * `num_windows` * `bucket_len` buckets.
+
+        let mut base_buffer = self.program.create_buffer::<G>(n)?;
+        base_buffer.write_from(bases)?;
+        let mut exp_buffer = self
+            .program
+            .create_buffer::<<<G::Engine as ScalarEngine>::Fr as PrimeField>::Repr>(n)?;
+        exp_buffer.write_from(exps)?;
+
+        let bucket_buffer = self
+            .program
+            .create_buffer::<<G as CurveAffine>::Projective>(2 * self.core_count * bucket_len)?;
+        let result_buffer = self
+            .program
+            .create_buffer::<<G as CurveAffine>::Projective>(2 * self.core_count)?;
 
         // Make global work size divisible by `LOCAL_WORK_SIZE`
-        let mut gws = num_windows * num_groups;
-        gws += (LOCAL_WORK_SIZE - (gws % LOCAL_WORK_SIZE)) % LOCAL_WORK_SIZE;
+        let mut global_work_size = num_windows * num_groups;
+        global_work_size +=
+            (LOCAL_WORK_SIZE - (global_work_size % LOCAL_WORK_SIZE)) % LOCAL_WORK_SIZE;
 
-        let sz = std::mem::size_of::<G>(); // Trick, used for dispatching between G1 and G2!
-        if sz == std::mem::size_of::<E::G1Affine>() {
-            let tbases = unsafe {
-                &*(bases as *const [G]
-                    as *const [structs::CurveAffineStruct<<E as Engine>::G1Affine>])
-            };
-            self.g1_base_buffer.write(tbases).enq()?;
-            let kernel = self
-                .proque
-                .kernel_builder("G1_bellman_multiexp")
-                .global_work_size([gws])
-                .arg(&self.g1_base_buffer)
-                .arg(&self.g1_bucket_buffer)
-                .arg(&self.g1_result_buffer)
-                .arg(&self.exp_buffer)
-                .arg(n as u32)
-                .arg(num_groups as u32)
-                .arg(num_windows as u32)
-                .arg(window_size as u32)
-                .build()?;
-            unsafe {
-                kernel.enq()?;
-            }
-            let tres = unsafe {
-                &mut *(&mut res as *mut Vec<<G as CurveAffine>::Projective>
-                    as *mut Vec<structs::CurveProjectiveStruct<<E as Engine>::G1>>)
-            };
-            self.g1_result_buffer.read(tres).enq()?;
-        } else if sz == std::mem::size_of::<E::G2Affine>() {
-            let tbases = unsafe {
-                &*(bases as *const [G]
-                    as *const [structs::CurveAffineStruct<<E as Engine>::G2Affine>])
-            };
-            self.g2_base_buffer.write(tbases).enq()?;
-            let kernel = self
-                .proque
-                .kernel_builder("G2_bellman_multiexp")
-                .global_work_size([gws])
-                .arg(&self.g2_base_buffer)
-                .arg(&self.g2_bucket_buffer)
-                .arg(&self.g2_result_buffer)
-                .arg(&self.exp_buffer)
-                .arg(n as u32)
-                .arg(num_groups as u32)
-                .arg(num_windows as u32)
-                .arg(window_size as u32)
-                .build()?;
-            unsafe {
-                kernel.enq()?;
-            }
-            let tres = unsafe {
-                &mut *(&mut res as *mut Vec<<G as CurveAffine>::Projective>
-                    as *mut Vec<structs::CurveProjectiveStruct<<E as Engine>::G2>>)
-            };
-            self.g2_result_buffer.read(tres).enq()?;
-        } else {
-            return Err(GPUError::Simple("Only E::G1 and E::G2 are supported!"));
-        }
+        let kernel = self.program.create_kernel(
+            if TypeId::of::<G>() == TypeId::of::<E::G1Affine>() {
+                "G1_bellman_multiexp"
+            } else if TypeId::of::<G>() == TypeId::of::<E::G2Affine>() {
+                "G2_bellman_multiexp"
+            } else {
+                return Err(GPUError::Simple("Only E::G1 and E::G2 are supported!"));
+            },
+            global_work_size,
+            None,
+        );
+
+        call_kernel!(
+            kernel,
+            &base_buffer,
+            &bucket_buffer,
+            &result_buffer,
+            &exp_buffer,
+            n as u32,
+            num_groups as u32,
+            num_windows as u32,
+            window_size as u32
+        )?;
+
+        let mut results = vec![<G as CurveAffine>::Projective::zero(); num_groups * num_windows];
+        result_buffer.read_into(&mut results)?;
 
         // Using the algorithm below, we can calculate the final result by accumulating the results
         // of those `NUM_GROUPS` * `NUM_WINDOWS` threads.
@@ -295,7 +196,7 @@ where
                 acc.double();
             }
             for g in 0..num_groups {
-                acc.add_assign(&res[g * num_windows + i]);
+                acc.add_assign(&results[g * num_windows + i]);
             }
             bits += w; // Process the next window
         }
@@ -320,19 +221,16 @@ where
     pub fn create(priority: bool) -> GPUResult<MultiexpKernel<E>> {
         let lock = locks::GPULock::lock();
 
-        let platform = get_platform(None)?;
-        let devices = &get_devices(&platform).unwrap_or_default();
-
-        info!("Platform selected: {}", platform.name()?);
+        let devices = opencl::Device::all()?;
 
         let kernels: Vec<_> = devices
-            .iter()
-            .map(|d| (d, SingleMultiexpKernel::<E>::create(*d, priority)))
+            .into_iter()
+            .map(|d| (d.clone(), SingleMultiexpKernel::<E>::create(d, priority)))
             .filter_map(|(device, res)| {
                 if let Err(ref e) = res {
                     error!(
                         "Cannot initialize kernel for device '{}'! Error: {}",
-                        device.name().unwrap_or("Unknown".into()),
+                        device.name(),
                         e
                     );
                 }
@@ -352,7 +250,7 @@ where
             info!(
                 "Multiexp: Device {}: {} (Chunk-size: {})",
                 i,
-                k.proque.device().name()?,
+                k.program.device().name(),
                 k.n
             );
         }

@@ -11,7 +11,7 @@ booleans and number abstractions.
 This fork contains GPU parallel acceleration to the FFT and Multiexponentation algorithms in the groth16 prover codebase under a conditional compilation feature `#[cfg(feature = "gpu")]` and `gpu-test` for testing.
 
 ### Requirements
-- NVIDIA or AMD GPU Graphics Driver 
+- NVIDIA or AMD GPU Graphics Driver
 - OpenCL
 
 ( For AMD devices we recommend [ROCm](https://rocm-documentation.readthedocs.io/en/latest/Installation_Guide/Installation-Guide.html) )
@@ -29,30 +29,14 @@ The gpu extension contains some env vars that may be set externally to this libr
     env::set_var("BELLMAN_NO_GPU", "1");
     ```
 
-- `BELLMAN_PLATFORM`
+- `BELLMAN_VERIFIER`
 
-    Can be used to select the default OpenCL platform:
+    Chooses the device in which the batched verifier is going to run. Can be `cpu`, `gpu` or `auto`.
 
     ```rust
-    // Example
-    env::set_var("BELLMAN_PLATFORM", "AMD Accelerated Parallel Processing");
+    Example
+    env::set_var("BELLMAN_VERIFIER", "gpu");
     ```
-
-    Some possible values:
-
-`BELLMAN_VERIFIER`
-
-Chooses the device in which the batched verifier is going to run. Can be `cpu`, `gpu` or `auto`.
-
-```
-Example
-env::set_var("BELLMAN_VERIFIER", "gpu");
-```
-
-  - NVIDIA CUDA
-  - AMD Accelerated Parallel Processing
-
-    If not set, and the code does not select any platform, "NVIDIA CUDA" will be selected.
 
 - `BELLMAN_CUSTOM_GPU`
 
@@ -103,13 +87,6 @@ Depending on the size of the proof being passed to the gpu for work, certain car
 To run the multiexp_consistency test you can use:
 
 ```bash
-RUST_LOG=info cargo test --features gpu -- --exact multiexp::gpu_multiexp_consistency --nocapture
-```
-
-to run on some specific platform you can do
-
-```bash
-export BELLMAN_PLATFORM="AMD Accelerated Parallel Processing" 
 RUST_LOG=info cargo test --features gpu -- --exact multiexp::gpu_multiexp_consistency --nocapture
 ```
 
