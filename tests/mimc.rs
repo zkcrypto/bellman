@@ -210,7 +210,7 @@ fn test_mimc() {
         let start = Instant::now();
         let proof = Proof::read(&proof_vec[..]).unwrap();
         // Check the proof
-        assert!(verify_proof(&pvk, &proof, &[image]).unwrap());
+        assert!(verify_proof(&pvk, &proof, &[image]).is_ok());
         total_verifying += start.elapsed();
     }
     let proving_avg = total_proving / SAMPLES;

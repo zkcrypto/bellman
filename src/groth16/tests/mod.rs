@@ -377,5 +377,5 @@ fn test_xordemo() {
         assert_eq!(expected_c, proof.c);
     }
 
-    assert!(verify_proof(&pvk, &proof, &[Fr::one()]).unwrap());
+    assert!(verify_proof(&pvk, &proof, &[Fr::one()]).is_ok());
 }

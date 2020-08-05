@@ -4,7 +4,7 @@ use std::ops::{AddAssign, Neg};
 
 use super::{PreparedVerifyingKey, Proof, VerifyingKey};
 
-use crate::SynthesisError;
+use crate::VerificationError;
 
 pub fn prepare_verifying_key<E: MultiMillerLoop>(vk: &VerifyingKey<E>) -> PreparedVerifyingKey<E> {
     let gamma = vk.gamma_g2.neg();
@@ -22,9 +22,9 @@ pub fn verify_proof<'a, E: MultiMillerLoop>(
     pvk: &'a PreparedVerifyingKey<E>,
     proof: &Proof<E>,
     public_inputs: &[E::Fr],
-) -> Result<bool, SynthesisError> {
+) -> Result<(), VerificationError> {
     if (public_inputs.len() + 1) != pvk.ic.len() {
-        return Err(SynthesisError::MalformedVerifyingKey);
+        return Err(VerificationError::InvalidVerifyingKey);
     }
 
     let mut acc = pvk.ic[0].to_curve();
@@ -41,11 +41,16 @@ pub fn verify_proof<'a, E: MultiMillerLoop>(
     // A * B + inputs * (-gamma) + C * (-delta) = alpha * beta
     // which allows us to do a single final exponentiation.
 
-    Ok(E::multi_miller_loop(&[
-        (&proof.a, &proof.b.into()),
-        (&acc.to_affine(), &pvk.neg_gamma_g2),
-        (&proof.c, &pvk.neg_delta_g2),
-    ])
-    .final_exponentiation()
-        == pvk.alpha_g1_beta_g2)
+    if pvk.alpha_g1_beta_g2
+        == E::multi_miller_loop(&[
+            (&proof.a, &proof.b.into()),
+            (&acc.to_affine(), &pvk.neg_gamma_g2),
+            (&proof.c, &pvk.neg_delta_g2),
+        ])
+        .final_exponentiation()
+    {
+        Ok(())
+    } else {
+        Err(VerificationError::InvalidProof)
+    }
 }

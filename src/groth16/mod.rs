@@ -560,8 +560,8 @@ mod test_with_bls12_381 {
             let de_proof = Proof::read(&v[..]).unwrap();
             assert!(proof == de_proof);
 
-            assert!(verify_proof(&pvk, &proof, &[c]).unwrap());
-            assert!(!verify_proof(&pvk, &proof, &[a]).unwrap());
+            assert!(verify_proof(&pvk, &proof, &[c]).is_ok());
+            assert!(verify_proof(&pvk, &proof, &[a]).is_err());
         }
     }
 }
