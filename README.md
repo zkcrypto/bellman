@@ -90,6 +90,12 @@ To run the multiexp_consistency test you can use:
 RUST_LOG=info cargo test --features gpu -- --exact multiexp::gpu_multiexp_consistency --nocapture
 ```
 
+### Considerations
+
+Bellperson uses `rust-gpu-tools` as its OpenCL backend, therefore you may see a
+directory named `~/.rust-gpu-tools` in your home folder, which contains the
+compiled binaries of OpenCL kernels used in this repository.
+
 ## License
 
 Licensed under either of
