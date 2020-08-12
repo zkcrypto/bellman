@@ -1,5 +1,4 @@
 use ff_cl_gen as ffgen;
-use log::debug;
 use paired::Engine;
 
 // Instead of having a very large OpenCL program written for a specific curve, with a lot of

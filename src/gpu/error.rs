@@ -1,26 +1,24 @@
+#[cfg(feature = "gpu")]
+use rust_gpu_tools::opencl;
+
 #[derive(thiserror::Error, Debug)]
 pub enum GPUError {
     #[error("GPUError: {0}")]
     Simple(&'static str),
     #[cfg(feature = "gpu")]
-    #[error("Ocl Error: {0}")]
-    Ocl(ocl::Error),
+    #[error("OpenCL Error: {0}")]
+    OpenCL(#[from] opencl::GPUError),
     #[cfg(feature = "gpu")]
     #[error("GPU taken by a high priority process!")]
     GPUTaken,
     #[cfg(feature = "gpu")]
     #[error("No kernel is initialized!")]
     KernelUninitialized,
+    #[error("GPU accelerator is disabled!")]
+    GPUDisabled,
 }
 
 pub type GPUResult<T> = std::result::Result<T, GPUError>;
-
-#[cfg(feature = "gpu")]
-impl From<ocl::Error> for GPUError {
-    fn from(error: ocl::Error) -> Self {
-        GPUError::Ocl(error)
-    }
-}
 
 #[cfg(feature = "gpu")]
 impl From<std::boxed::Box<dyn std::any::Any + std::marker::Send>> for GPUError {
