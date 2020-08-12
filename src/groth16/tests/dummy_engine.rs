@@ -399,7 +399,7 @@ impl PrimeGroup for Fr {}
 impl CofactorGroup for Fr {
     type Subgroup = Fr;
 
-    fn mul_by_cofactor(&self) -> Self::Subgroup {
+    fn clear_cofactor(&self) -> Self::Subgroup {
         *self
     }
 
