@@ -2,7 +2,7 @@ use super::multicore::Worker;
 use bit_vec::{self, BitVec};
 use ff::{Endianness, Field, PrimeField};
 use futures::Future;
-use group::cofactor::{CofactorCurve, CofactorCurveAffine};
+use group::prime::{PrimeCurve, PrimeCurveAffine};
 use std::io;
 use std::iter;
 use std::ops::AddAssign;
@@ -11,33 +11,33 @@ use std::sync::Arc;
 use super::SynthesisError;
 
 /// An object that builds a source of bases.
-pub trait SourceBuilder<G: CofactorCurveAffine>: Send + Sync + 'static + Clone {
+pub trait SourceBuilder<G: PrimeCurveAffine>: Send + Sync + 'static + Clone {
     type Source: Source<G>;
 
     fn new(self) -> Self::Source;
 }
 
 /// A source of bases, like an iterator.
-pub trait Source<G: CofactorCurveAffine> {
+pub trait Source<G: PrimeCurveAffine> {
     fn next(&mut self) -> Result<&G, SynthesisError>;
 
     /// Skips `amt` elements from the source, avoiding deserialization.
     fn skip(&mut self, amt: usize) -> Result<(), SynthesisError>;
 }
 
-pub trait AddAssignFromSource: CofactorCurve {
+pub trait AddAssignFromSource: PrimeCurve {
     /// Parses the element from the source. Fails if the point is at infinity.
-    fn add_assign_from_source<S: Source<<Self as CofactorCurve>::Affine>>(
+    fn add_assign_from_source<S: Source<<Self as PrimeCurve>::Affine>>(
         &mut self,
         source: &mut S,
     ) -> Result<(), SynthesisError> {
-        AddAssign::<&<Self as CofactorCurve>::Affine>::add_assign(self, source.next()?);
+        AddAssign::<&<Self as PrimeCurve>::Affine>::add_assign(self, source.next()?);
         Ok(())
     }
 }
-impl<G> AddAssignFromSource for G where G: CofactorCurve {}
+impl<G> AddAssignFromSource for G where G: PrimeCurve {}
 
-impl<G: CofactorCurveAffine> SourceBuilder<G> for (Arc<Vec<G>>, usize) {
+impl<G: PrimeCurveAffine> SourceBuilder<G> for (Arc<Vec<G>>, usize) {
     type Source = (Arc<Vec<G>>, usize);
 
     fn new(self) -> (Arc<Vec<G>>, usize) {
@@ -45,7 +45,7 @@ impl<G: CofactorCurveAffine> SourceBuilder<G> for (Arc<Vec<G>>, usize) {
     }
 }
 
-impl<G: CofactorCurveAffine> Source<G> for (Arc<Vec<G>>, usize) {
+impl<G: PrimeCurveAffine> Source<G> for (Arc<Vec<G>>, usize) {
     fn next(&mut self) -> Result<&G, SynthesisError> {
         if self.0.len() <= self.1 {
             return Err(io::Error::new(
@@ -162,8 +162,8 @@ fn multiexp_inner<Q, D, G, S>(
 where
     for<'a> &'a Q: QueryDensity,
     D: Send + Sync + 'static + Clone + AsRef<Q>,
-    G: CofactorCurve,
-    S: SourceBuilder<<G as CofactorCurve>::Affine>,
+    G: PrimeCurve,
+    S: SourceBuilder<<G as PrimeCurve>::Affine>,
 {
     // Perform this region of the multiexp
     let this = {
@@ -274,8 +274,8 @@ pub fn multiexp<Q, D, G, S>(
 where
     for<'a> &'a Q: QueryDensity,
     D: Send + Sync + 'static + Clone + AsRef<Q>,
-    G: CofactorCurve,
-    S: SourceBuilder<<G as CofactorCurve>::Affine>,
+    G: PrimeCurve,
+    S: SourceBuilder<<G as PrimeCurve>::Affine>,
 {
     let c = if exponents.len() < 32 {
         3u32
@@ -296,8 +296,8 @@ where
 #[cfg(feature = "pairing")]
 #[test]
 fn test_with_bls12() {
-    fn naive_multiexp<G: CofactorCurve>(
-        bases: Arc<Vec<<G as CofactorCurve>::Affine>>,
+    fn naive_multiexp<G: PrimeCurve>(
+        bases: Arc<Vec<<G as PrimeCurve>::Affine>>,
         exponents: Arc<Vec<G::Scalar>>,
     ) -> G {
         assert_eq!(bases.len(), exponents.len());

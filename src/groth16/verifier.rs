@@ -1,4 +1,4 @@
-use group::{cofactor::CofactorCurveAffine, Curve};
+use group::{prime::PrimeCurveAffine, Curve};
 use pairing::{MillerLoopResult, MultiMillerLoop};
 use std::ops::{AddAssign, Neg};
 

@@ -1,7 +1,6 @@
 use ff::{Field, PrimeField};
 use group::{
-    cofactor::{CofactorCurve, CofactorCurveAffine, CofactorGroup},
-    prime::PrimeGroup,
+    prime::{PrimeCurve, PrimeCurveAffine, PrimeGroup},
     Curve, Group, GroupEncoding, UncompressedEncoding, WnafGroup,
 };
 use pairing::{Engine, MillerLoopResult, MultiMillerLoop, PairingCurveAffine};
@@ -396,18 +395,6 @@ impl Group for Fr {
 
 impl PrimeGroup for Fr {}
 
-impl CofactorGroup for Fr {
-    type Subgroup = Fr;
-
-    fn clear_cofactor(&self) -> Self::Subgroup {
-        *self
-    }
-
-    fn into_subgroup(self) -> CtOption<Self::Subgroup> {
-        CtOption::new(self, Choice::from(1))
-    }
-}
-
 impl Curve for Fr {
     type AffineRepr = Fr;
 
@@ -422,7 +409,7 @@ impl WnafGroup for Fr {
     }
 }
 
-impl CofactorCurve for Fr {
+impl PrimeCurve for Fr {
     type Affine = Fr;
 }
 
@@ -441,7 +428,7 @@ impl AsRef<[u8]> for FakePoint {
     }
 }
 
-impl CofactorCurveAffine for Fr {
+impl PrimeCurveAffine for Fr {
     type Curve = Fr;
     type Scalar = Fr;
 
