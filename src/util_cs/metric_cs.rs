@@ -1,7 +1,8 @@
 use crate::{ConstraintSystem, Index, LinearCombination, SynthesisError, Variable};
+use ff::{Field, PrimeField, ScalarEngine};
 use paired::Engine;
 use std::cmp::Ordering;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 #[derive(Clone, Copy)]
 struct OrderedVariable(Variable);
@@ -53,6 +54,29 @@ pub struct MetricCS<E: Engine> {
     aux: Vec<String>,
 }
 
+fn proc_lc<E: ScalarEngine>(terms: &LinearCombination<E>) -> BTreeMap<OrderedVariable, E::Fr> {
+    let mut map = BTreeMap::new();
+    for (&var, &coeff) in terms.iter() {
+        map.entry(OrderedVariable(var))
+            .or_insert_with(E::Fr::zero)
+            .add_assign(&coeff);
+    }
+
+    // Remove terms that have a zero coefficient to normalize
+    let mut to_remove = vec![];
+    for (var, coeff) in map.iter() {
+        if coeff.is_zero() {
+            to_remove.push(var.clone())
+        }
+    }
+
+    for var in to_remove {
+        map.remove(&var);
+    }
+
+    map
+}
+
 impl<E: Engine> MetricCS<E> {
     pub fn new() -> Self {
         MetricCS::default()
@@ -84,9 +108,74 @@ impl<E: Engine> MetricCS<E> {
     }
 
     pub fn pretty_print(&self) -> String {
-        let res = self.pretty_print_list();
+        let mut s = String::new();
 
-        res.join("\n")
+        for input in &self.inputs {
+            s.push_str(&format!("INPUT {}\n", &input))
+        }
+
+        let negone = {
+            let mut tmp = E::Fr::one();
+            tmp.negate();
+            tmp
+        };
+
+        let powers_of_two = (0..E::Fr::NUM_BITS)
+            .map(|i| E::Fr::from_str("2").unwrap().pow(&[u64::from(i)]))
+            .collect::<Vec<_>>();
+
+        let pp = |s: &mut String, lc: &LinearCombination<E>| {
+            s.push('(');
+            let mut is_first = true;
+            for (var, coeff) in proc_lc::<E>(&lc) {
+                if coeff == negone {
+                    s.push_str(" - ")
+                } else if !is_first {
+                    s.push_str(" + ")
+                }
+                is_first = false;
+
+                if coeff != E::Fr::one() && coeff != negone {
+                    for (i, x) in powers_of_two.iter().enumerate() {
+                        if x == &coeff {
+                            s.push_str(&format!("2^{} . ", i));
+                            break;
+                        }
+                    }
+
+                    s.push_str(&format!("{} . ", coeff))
+                }
+
+                match var.0.get_unchecked() {
+                    Index::Input(i) => {
+                        s.push_str(&format!("`I{}`", &self.inputs[i]));
+                    }
+                    Index::Aux(i) => {
+                        s.push_str(&format!("`A{}`", &self.aux[i]));
+                    }
+                }
+            }
+            if is_first {
+                // Nothing was visited, print 0.
+                s.push('0');
+            }
+            s.push(')');
+        };
+
+        for &(ref a, ref b, ref c, ref name) in &self.constraints {
+            s.push('\n');
+
+            s.push_str(&format!("{}: ", name));
+            pp(&mut s, a);
+            s.push_str(" * ");
+            pp(&mut s, b);
+            s.push_str(" = ");
+            pp(&mut s, c);
+        }
+
+        s.push('\n');
+
+        s
     }
 
     fn set_named_obj(&mut self, path: String, to: NamedObject) {
