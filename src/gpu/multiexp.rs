@@ -99,7 +99,7 @@ where
     E: Engine,
 {
     pub fn create(d: opencl::Device, priority: bool) -> GPUResult<SingleMultiexpKernel<E>> {
-        let src = sources::kernel::<E>();
+        let src = sources::kernel::<E>(d.brand() == opencl::Brand::Nvidia);
 
         let exp_bits = std::mem::size_of::<E::Fr>() * 8;
         let core_count = utils::get_core_count(&d);

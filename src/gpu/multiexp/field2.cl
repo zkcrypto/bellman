@@ -1,5 +1,6 @@
 // Fp2 Extension Field where u^2 + 1 = 0
 
+#define FIELD2_LIMB_BITS FIELD_LIMB_BITS
 #define FIELD2_ZERO ((FIELD2){FIELD_ZERO, FIELD_ZERO})
 #define FIELD2_ONE ((FIELD2){FIELD_ONE, FIELD_ZERO})
 

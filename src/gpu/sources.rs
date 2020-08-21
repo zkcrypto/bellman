@@ -33,14 +33,22 @@ fn multiexp(point: &str, exp: &str) -> String {
 }
 
 // WARNING: This function works only with Short Weierstrass Jacobian curves with Fq2 extension field.
-pub fn kernel<E>() -> String
+pub fn kernel<E>(limb64: bool) -> String
 where
     E: Engine,
 {
     vec![
-        ffgen::field::<E::Fr>("Fr"),
+        if limb64 {
+            ffgen::field::<E::Fr, ffgen::Limb64>("Fr")
+        } else {
+            ffgen::field::<E::Fr, ffgen::Limb32>("Fr")
+        },
         fft("Fr"),
-        ffgen::field::<E::Fq>("Fq"),
+        if limb64 {
+            ffgen::field::<E::Fq, ffgen::Limb64>("Fq")
+        } else {
+            ffgen::field::<E::Fq, ffgen::Limb32>("Fq")
+        },
         ec("Fq", "G1"),
         multiexp("G1", "Fr"),
         field2("Fq2", "Fq"),

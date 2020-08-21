@@ -6,6 +6,9 @@ typedef struct {
   FIELD x;
   FIELD y;
   bool inf;
+  #if FIELD_LIMB_BITS == 32
+    uint _padding;
+  #endif
 } POINT_affine;
 
 typedef struct {
