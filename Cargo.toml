@@ -24,7 +24,7 @@ byteorder = "1"
 subtle = "2.2.1"
 
 [dev-dependencies]
-bls12_381 = { version = "0.1", path = "../bls12_381" }
+bls12_381 = { version = "0.2", path = "../bls12_381" }
 hex-literal = "0.2"
 rand = "0.7"
 rand_xorshift = "0.2"
