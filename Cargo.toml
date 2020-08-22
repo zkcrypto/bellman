@@ -12,7 +12,7 @@ edition = "2018"
 [dependencies]
 bit-vec = "0.6"
 blake2s_simd = "0.5"
-ff = { version = "0.6", path = "../ff" }
+ff = { version = "0.7", path = "../ff" }
 futures = "0.1"
 futures-cpupool = { version = "0.1", optional = true }
 group = { version = "0.6", path = "../group" }
