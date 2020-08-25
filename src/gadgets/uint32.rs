@@ -1,5 +1,7 @@
 //! Circuit representation of a [`u32`], with helpers for the [`sha256`]
 //! gadgets.
+//!
+//! [`sha256`]: crate::gadgets::sha256
 
 use ff::PrimeField;
 
