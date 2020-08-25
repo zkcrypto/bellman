@@ -1,9 +1,9 @@
 use rand_core::RngCore;
-
+use std::ops::{AddAssign, MulAssign};
 use std::sync::Arc;
 
 use ff::{Field, PrimeField};
-use group::{CurveAffine, CurveProjective, Wnaf};
+use group::{prime::PrimeCurveAffine, Curve, Group, Wnaf, WnafGroup};
 use pairing::Engine;
 
 use super::{Parameters, VerifyingKey};
@@ -22,7 +22,9 @@ pub fn generate_random_parameters<E, C, R>(
 ) -> Result<Parameters<E>, SynthesisError>
 where
     E: Engine,
-    C: Circuit<E>,
+    E::G1: WnafGroup,
+    E::G2: WnafGroup,
+    C: Circuit<E::Fr>,
     R: RngCore,
 {
     let g1 = E::G1::random(rng);
@@ -38,24 +40,24 @@ where
 
 /// This is our assembly structure that we'll use to synthesize the
 /// circuit into a QAP.
-struct KeypairAssembly<E: Engine> {
+struct KeypairAssembly<Scalar: PrimeField> {
     num_inputs: usize,
     num_aux: usize,
     num_constraints: usize,
-    at_inputs: Vec<Vec<(E::Fr, usize)>>,
-    bt_inputs: Vec<Vec<(E::Fr, usize)>>,
-    ct_inputs: Vec<Vec<(E::Fr, usize)>>,
-    at_aux: Vec<Vec<(E::Fr, usize)>>,
-    bt_aux: Vec<Vec<(E::Fr, usize)>>,
-    ct_aux: Vec<Vec<(E::Fr, usize)>>,
+    at_inputs: Vec<Vec<(Scalar, usize)>>,
+    bt_inputs: Vec<Vec<(Scalar, usize)>>,
+    ct_inputs: Vec<Vec<(Scalar, usize)>>,
+    at_aux: Vec<Vec<(Scalar, usize)>>,
+    bt_aux: Vec<Vec<(Scalar, usize)>>,
+    ct_aux: Vec<Vec<(Scalar, usize)>>,
 }
 
-impl<E: Engine> ConstraintSystem<E> for KeypairAssembly<E> {
+impl<Scalar: PrimeField> ConstraintSystem<Scalar> for KeypairAssembly<Scalar> {
     type Root = Self;
 
     fn alloc<F, A, AR>(&mut self, _: A, _: F) -> Result<Variable, SynthesisError>
     where
-        F: FnOnce() -> Result<E::Fr, SynthesisError>,
+        F: FnOnce() -> Result<Scalar, SynthesisError>,
         A: FnOnce() -> AR,
         AR: Into<String>,
     {
@@ -74,7 +76,7 @@ impl<E: Engine> ConstraintSystem<E> for KeypairAssembly<E> {
 
     fn alloc_input<F, A, AR>(&mut self, _: A, _: F) -> Result<Variable, SynthesisError>
     where
-        F: FnOnce() -> Result<E::Fr, SynthesisError>,
+        F: FnOnce() -> Result<Scalar, SynthesisError>,
         A: FnOnce() -> AR,
         AR: Into<String>,
     {
@@ -95,14 +97,14 @@ impl<E: Engine> ConstraintSystem<E> for KeypairAssembly<E> {
     where
         A: FnOnce() -> AR,
         AR: Into<String>,
-        LA: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
-        LB: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
-        LC: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
+        LA: FnOnce(LinearCombination<Scalar>) -> LinearCombination<Scalar>,
+        LB: FnOnce(LinearCombination<Scalar>) -> LinearCombination<Scalar>,
+        LC: FnOnce(LinearCombination<Scalar>) -> LinearCombination<Scalar>,
     {
-        fn eval<E: Engine>(
-            l: LinearCombination<E>,
-            inputs: &mut [Vec<(E::Fr, usize)>],
-            aux: &mut [Vec<(E::Fr, usize)>],
+        fn eval<Scalar: PrimeField>(
+            l: LinearCombination<Scalar>,
+            inputs: &mut [Vec<(Scalar, usize)>],
+            aux: &mut [Vec<(Scalar, usize)>],
             this_constraint: usize,
         ) {
             for (index, coeff) in l.0 {
@@ -165,7 +167,9 @@ pub fn generate_parameters<E, C>(
 ) -> Result<Parameters<E>, SynthesisError>
 where
     E: Engine,
-    C: Circuit<E>,
+    E::G1: WnafGroup,
+    E::G2: WnafGroup,
+    C: Circuit<E::Fr>,
 {
     let mut assembly = KeypairAssembly {
         num_inputs: 0,
@@ -192,7 +196,7 @@ where
     }
 
     // Create bases for blind evaluation of polynomials at tau
-    let powers_of_tau = vec![Scalar::<E>(E::Fr::zero()); assembly.num_constraints];
+    let powers_of_tau = vec![Scalar::<E::Fr>(E::Fr::zero()); assembly.num_constraints];
     let mut powers_of_tau = EvaluationDomain::from_coeffs(powers_of_tau)?;
 
     // Compute G1 window table
@@ -215,12 +219,26 @@ where
         assembly.num_inputs + assembly.num_aux
     });
 
-    let gamma_inverse = gamma.inverse().ok_or(SynthesisError::UnexpectedIdentity)?;
-    let delta_inverse = delta.inverse().ok_or(SynthesisError::UnexpectedIdentity)?;
+    let gamma_inverse = {
+        let inverse = gamma.invert();
+        if bool::from(inverse.is_some()) {
+            Ok(inverse.unwrap())
+        } else {
+            Err(SynthesisError::UnexpectedIdentity)
+        }
+    }?;
+    let delta_inverse = {
+        let inverse = delta.invert();
+        if bool::from(inverse.is_some()) {
+            Ok(inverse.unwrap())
+        } else {
+            Err(SynthesisError::UnexpectedIdentity)
+        }
+    }?;
 
     let worker = Worker::new();
 
-    let mut h = vec![E::G1::zero(); powers_of_tau.as_ref().len() - 1];
+    let mut h = vec![E::G1Affine::identity(); powers_of_tau.as_ref().len() - 1];
     {
         // Compute powers of tau
         {
@@ -228,7 +246,7 @@ where
             worker.scope(powers_of_tau.len(), |scope, chunk| {
                 for (i, powers_of_tau) in powers_of_tau.chunks_mut(chunk).enumerate() {
                     scope.spawn(move |_scope| {
-                        let mut current_tau_power = tau.pow(&[(i * chunk) as u64]);
+                        let mut current_tau_power = tau.pow_vartime(&[(i * chunk) as u64]);
 
                         for p in powers_of_tau {
                             p.0 = current_tau_power;
@@ -253,17 +271,20 @@ where
 
                 scope.spawn(move |_scope| {
                     // Set values of the H query to g1^{(tau^i * t(tau)) / delta}
-                    for (h, p) in h.iter_mut().zip(p.iter()) {
-                        // Compute final exponent
-                        let mut exp = p.0;
-                        exp.mul_assign(&coeff);
+                    let h_proj: Vec<_> = p[..h.len()]
+                        .iter()
+                        .map(|p| {
+                            // Compute final exponent
+                            let mut exp = p.0;
+                            exp.mul_assign(&coeff);
 
-                        // Exponentiate
-                        *h = g1_wnaf.scalar(exp.into_repr());
-                    }
+                            // Exponentiate
+                            g1_wnaf.scalar(&exp)
+                        })
+                        .collect();
 
                     // Batch normalize
-                    E::G1::batch_normalization(h);
+                    E::G1::batch_normalize(&h_proj, h);
                 });
             }
         });
@@ -273,11 +294,11 @@ where
     powers_of_tau.ifft(&worker);
     let powers_of_tau = powers_of_tau.into_coeffs();
 
-    let mut a = vec![E::G1::zero(); assembly.num_inputs + assembly.num_aux];
-    let mut b_g1 = vec![E::G1::zero(); assembly.num_inputs + assembly.num_aux];
-    let mut b_g2 = vec![E::G2::zero(); assembly.num_inputs + assembly.num_aux];
-    let mut ic = vec![E::G1::zero(); assembly.num_inputs];
-    let mut l = vec![E::G1::zero(); assembly.num_aux];
+    let mut a = vec![E::G1Affine::identity(); assembly.num_inputs + assembly.num_aux];
+    let mut b_g1 = vec![E::G1Affine::identity(); assembly.num_inputs + assembly.num_aux];
+    let mut b_g2 = vec![E::G2Affine::identity(); assembly.num_inputs + assembly.num_aux];
+    let mut ic = vec![E::G1Affine::identity(); assembly.num_inputs];
+    let mut l = vec![E::G1Affine::identity(); assembly.num_aux];
 
     fn eval<E: Engine>(
         // wNAF window tables
@@ -285,7 +306,7 @@ where
         g2_wnaf: &Wnaf<usize, &[E::G2], &mut Vec<i64>>,
 
         // Lagrange coefficients for tau
-        powers_of_tau: &[Scalar<E>],
+        powers_of_tau: &[Scalar<E::Fr>],
 
         // QAP polynomials
         at: &[Vec<(E::Fr, usize)>],
@@ -293,10 +314,10 @@ where
         ct: &[Vec<(E::Fr, usize)>],
 
         // Resulting evaluated QAP polynomials
-        a: &mut [E::G1],
-        b_g1: &mut [E::G1],
-        b_g2: &mut [E::G2],
-        ext: &mut [E::G1],
+        a: &mut [E::G1Affine],
+        b_g1: &mut [E::G1Affine],
+        b_g2: &mut [E::G2Affine],
+        ext: &mut [E::G1Affine],
 
         // Inverse coefficient for ext elements
         inv: &E::Fr,
@@ -331,20 +352,25 @@ where
                 let mut g2_wnaf = g2_wnaf.shared();
 
                 scope.spawn(move |_scope| {
-                    for ((((((a, b_g1), b_g2), ext), at), bt), ct) in a
+                    let mut a_proj = vec![E::G1::identity(); a.len()];
+                    let mut b_g1_proj = vec![E::G1::identity(); b_g1.len()];
+                    let mut b_g2_proj = vec![E::G2::identity(); b_g2.len()];
+                    let mut ext_proj = vec![E::G1::identity(); ext.len()];
+
+                    for ((((((a, b_g1), b_g2), ext), at), bt), ct) in a_proj
                         .iter_mut()
-                        .zip(b_g1.iter_mut())
-                        .zip(b_g2.iter_mut())
-                        .zip(ext.iter_mut())
+                        .zip(b_g1_proj.iter_mut())
+                        .zip(b_g2_proj.iter_mut())
+                        .zip(ext_proj.iter_mut())
                         .zip(at.iter())
                         .zip(bt.iter())
                         .zip(ct.iter())
                     {
-                        fn eval_at_tau<E: Engine>(
-                            powers_of_tau: &[Scalar<E>],
-                            p: &[(E::Fr, usize)],
-                        ) -> E::Fr {
-                            let mut acc = E::Fr::zero();
+                        fn eval_at_tau<S: PrimeField>(
+                            powers_of_tau: &[Scalar<S>],
+                            p: &[(S, usize)],
+                        ) -> S {
+                            let mut acc = S::zero();
 
                             for &(ref coeff, index) in p {
                                 let mut n = powers_of_tau[index].0;
@@ -362,14 +388,14 @@ where
 
                         // Compute A query (in G1)
                         if !at.is_zero() {
-                            *a = g1_wnaf.scalar(at.into_repr());
+                            *a = g1_wnaf.scalar(&at);
                         }
 
                         // Compute B query (in G1/G2)
                         if !bt.is_zero() {
-                            let bt_repr = bt.into_repr();
-                            *b_g1 = g1_wnaf.scalar(bt_repr);
-                            *b_g2 = g2_wnaf.scalar(bt_repr);
+                            ();
+                            *b_g1 = g1_wnaf.scalar(&bt);
+                            *b_g2 = g2_wnaf.scalar(&bt);
                         }
 
                         at.mul_assign(&beta);
@@ -380,21 +406,21 @@ where
                         e.add_assign(&ct);
                         e.mul_assign(inv);
 
-                        *ext = g1_wnaf.scalar(e.into_repr());
+                        *ext = g1_wnaf.scalar(&e);
                     }
 
                     // Batch normalize
-                    E::G1::batch_normalization(a);
-                    E::G1::batch_normalization(b_g1);
-                    E::G2::batch_normalization(b_g2);
-                    E::G1::batch_normalization(ext);
+                    E::G1::batch_normalize(&a_proj, a);
+                    E::G1::batch_normalize(&b_g1_proj, b_g1);
+                    E::G2::batch_normalize(&b_g2_proj, b_g2);
+                    E::G1::batch_normalize(&ext_proj, ext);
                 });
             }
         });
     }
 
     // Evaluate for inputs.
-    eval(
+    eval::<E>(
         &g1_wnaf,
         &g2_wnaf,
         &powers_of_tau,
@@ -412,7 +438,7 @@ where
     );
 
     // Evaluate for auxiliary variables.
-    eval(
+    eval::<E>(
         &g1_wnaf,
         &g2_wnaf,
         &powers_of_tau,
@@ -432,46 +458,43 @@ where
     // Don't allow any elements be unconstrained, so that
     // the L query is always fully dense.
     for e in l.iter() {
-        if e.is_zero() {
+        if e.is_identity().into() {
             return Err(SynthesisError::UnconstrainedVariable);
         }
     }
 
-    let g1 = g1.into_affine();
-    let g2 = g2.into_affine();
+    let g1 = g1.to_affine();
+    let g2 = g2.to_affine();
 
     let vk = VerifyingKey::<E> {
-        alpha_g1: g1.mul(alpha).into_affine(),
-        beta_g1: g1.mul(beta).into_affine(),
-        beta_g2: g2.mul(beta).into_affine(),
-        gamma_g2: g2.mul(gamma).into_affine(),
-        delta_g1: g1.mul(delta).into_affine(),
-        delta_g2: g2.mul(delta).into_affine(),
-        ic: ic.into_iter().map(|e| e.into_affine()).collect(),
+        alpha_g1: (g1 * &alpha).to_affine(),
+        beta_g1: (g1 * &beta).to_affine(),
+        beta_g2: (g2 * &beta).to_affine(),
+        gamma_g2: (g2 * &gamma).to_affine(),
+        delta_g1: (g1 * &delta).to_affine(),
+        delta_g2: (g2 * &delta).to_affine(),
+        ic,
     };
 
     Ok(Parameters {
         vk,
-        h: Arc::new(h.into_iter().map(|e| e.into_affine()).collect()),
-        l: Arc::new(l.into_iter().map(|e| e.into_affine()).collect()),
+        h: Arc::new(h),
+        l: Arc::new(l),
 
         // Filter points at infinity away from A/B queries
         a: Arc::new(
             a.into_iter()
-                .filter(|e| !e.is_zero())
-                .map(|e| e.into_affine())
+                .filter(|e| bool::from(!e.is_identity()))
                 .collect(),
         ),
         b_g1: Arc::new(
             b_g1.into_iter()
-                .filter(|e| !e.is_zero())
-                .map(|e| e.into_affine())
+                .filter(|e| bool::from(!e.is_identity()))
                 .collect(),
         ),
         b_g2: Arc::new(
             b_g2.into_iter()
-                .filter(|e| !e.is_zero())
-                .map(|e| e.into_affine())
+                .filter(|e| bool::from(!e.is_identity()))
                 .collect(),
         ),
     })

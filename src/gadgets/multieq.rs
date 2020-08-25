@@ -1,16 +1,16 @@
-use ff::{Field, PrimeField, ScalarEngine};
+use ff::PrimeField;
 
 use crate::{ConstraintSystem, LinearCombination, SynthesisError, Variable};
 
-pub struct MultiEq<E: ScalarEngine, CS: ConstraintSystem<E>> {
+pub struct MultiEq<Scalar: PrimeField, CS: ConstraintSystem<Scalar>> {
     cs: CS,
     ops: usize,
     bits_used: usize,
-    lhs: LinearCombination<E>,
-    rhs: LinearCombination<E>,
+    lhs: LinearCombination<Scalar>,
+    rhs: LinearCombination<Scalar>,
 }
 
-impl<E: ScalarEngine, CS: ConstraintSystem<E>> MultiEq<E, CS> {
+impl<Scalar: PrimeField, CS: ConstraintSystem<Scalar>> MultiEq<Scalar, CS> {
     pub fn new(cs: CS) -> Self {
         MultiEq {
             cs,
@@ -40,24 +40,26 @@ impl<E: ScalarEngine, CS: ConstraintSystem<E>> MultiEq<E, CS> {
     pub fn enforce_equal(
         &mut self,
         num_bits: usize,
-        lhs: &LinearCombination<E>,
-        rhs: &LinearCombination<E>,
+        lhs: &LinearCombination<Scalar>,
+        rhs: &LinearCombination<Scalar>,
     ) {
         // Check if we will exceed the capacity
-        if (E::Fr::CAPACITY as usize) <= (self.bits_used + num_bits) {
+        if (Scalar::CAPACITY as usize) <= (self.bits_used + num_bits) {
             self.accumulate();
         }
 
-        assert!((E::Fr::CAPACITY as usize) > (self.bits_used + num_bits));
+        assert!((Scalar::CAPACITY as usize) > (self.bits_used + num_bits));
 
-        let coeff = E::Fr::from_str("2").unwrap().pow(&[self.bits_used as u64]);
+        let coeff = Scalar::from_str("2")
+            .unwrap()
+            .pow_vartime(&[self.bits_used as u64]);
         self.lhs = self.lhs.clone() + (coeff, lhs);
         self.rhs = self.rhs.clone() + (coeff, rhs);
         self.bits_used += num_bits;
     }
 }
 
-impl<E: ScalarEngine, CS: ConstraintSystem<E>> Drop for MultiEq<E, CS> {
+impl<Scalar: PrimeField, CS: ConstraintSystem<Scalar>> Drop for MultiEq<Scalar, CS> {
     fn drop(&mut self) {
         if self.bits_used > 0 {
             self.accumulate();
@@ -65,7 +67,9 @@ impl<E: ScalarEngine, CS: ConstraintSystem<E>> Drop for MultiEq<E, CS> {
     }
 }
 
-impl<E: ScalarEngine, CS: ConstraintSystem<E>> ConstraintSystem<E> for MultiEq<E, CS> {
+impl<Scalar: PrimeField, CS: ConstraintSystem<Scalar>> ConstraintSystem<Scalar>
+    for MultiEq<Scalar, CS>
+{
     type Root = Self;
 
     fn one() -> Variable {
@@ -74,7 +78,7 @@ impl<E: ScalarEngine, CS: ConstraintSystem<E>> ConstraintSystem<E> for MultiEq<E
 
     fn alloc<F, A, AR>(&mut self, annotation: A, f: F) -> Result<Variable, SynthesisError>
     where
-        F: FnOnce() -> Result<E::Fr, SynthesisError>,
+        F: FnOnce() -> Result<Scalar, SynthesisError>,
         A: FnOnce() -> AR,
         AR: Into<String>,
     {
@@ -83,7 +87,7 @@ impl<E: ScalarEngine, CS: ConstraintSystem<E>> ConstraintSystem<E> for MultiEq<E
 
     fn alloc_input<F, A, AR>(&mut self, annotation: A, f: F) -> Result<Variable, SynthesisError>
     where
-        F: FnOnce() -> Result<E::Fr, SynthesisError>,
+        F: FnOnce() -> Result<Scalar, SynthesisError>,
         A: FnOnce() -> AR,
         AR: Into<String>,
     {
@@ -94,9 +98,9 @@ impl<E: ScalarEngine, CS: ConstraintSystem<E>> ConstraintSystem<E> for MultiEq<E
     where
         A: FnOnce() -> AR,
         AR: Into<String>,
-        LA: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
-        LB: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
-        LC: FnOnce(LinearCombination<E>) -> LinearCombination<E>,
+        LA: FnOnce(LinearCombination<Scalar>) -> LinearCombination<Scalar>,
+        LB: FnOnce(LinearCombination<Scalar>) -> LinearCombination<Scalar>,
+        LC: FnOnce(LinearCombination<Scalar>) -> LinearCombination<Scalar>,
     {
         self.cs.enforce(annotation, a, b, c)
     }

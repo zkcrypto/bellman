@@ -1,38 +1,36 @@
-use ff::PrimeField;
-use group::{CurveAffine, CurveProjective};
-use pairing::{Engine, PairingCurveAffine};
+use group::{prime::PrimeCurveAffine, Curve};
+use pairing::{MillerLoopResult, MultiMillerLoop};
+use std::ops::{AddAssign, Neg};
 
 use super::{PreparedVerifyingKey, Proof, VerifyingKey};
 
-use crate::SynthesisError;
+use crate::VerificationError;
 
-pub fn prepare_verifying_key<E: Engine>(vk: &VerifyingKey<E>) -> PreparedVerifyingKey<E> {
-    let mut gamma = vk.gamma_g2;
-    gamma.negate();
-    let mut delta = vk.delta_g2;
-    delta.negate();
+pub fn prepare_verifying_key<E: MultiMillerLoop>(vk: &VerifyingKey<E>) -> PreparedVerifyingKey<E> {
+    let gamma = vk.gamma_g2.neg();
+    let delta = vk.delta_g2.neg();
 
     PreparedVerifyingKey {
-        alpha_g1_beta_g2: E::pairing(vk.alpha_g1, vk.beta_g2),
-        neg_gamma_g2: gamma.prepare(),
-        neg_delta_g2: delta.prepare(),
+        alpha_g1_beta_g2: E::pairing(&vk.alpha_g1, &vk.beta_g2),
+        neg_gamma_g2: gamma.into(),
+        neg_delta_g2: delta.into(),
         ic: vk.ic.clone(),
     }
 }
 
-pub fn verify_proof<'a, E: Engine>(
+pub fn verify_proof<'a, E: MultiMillerLoop>(
     pvk: &'a PreparedVerifyingKey<E>,
     proof: &Proof<E>,
     public_inputs: &[E::Fr],
-) -> Result<bool, SynthesisError> {
+) -> Result<(), VerificationError> {
     if (public_inputs.len() + 1) != pvk.ic.len() {
-        return Err(SynthesisError::MalformedVerifyingKey);
+        return Err(VerificationError::InvalidVerifyingKey);
     }
 
-    let mut acc = pvk.ic[0].into_projective();
+    let mut acc = pvk.ic[0].to_curve();
 
     for (i, b) in public_inputs.iter().zip(pvk.ic.iter().skip(1)) {
-        acc.add_assign(&b.mul(i.into_repr()));
+        AddAssign::<&E::G1>::add_assign(&mut acc, &(*b * i));
     }
 
     // The original verification equation is:
@@ -43,14 +41,16 @@ pub fn verify_proof<'a, E: Engine>(
     // A * B + inputs * (-gamma) + C * (-delta) = alpha * beta
     // which allows us to do a single final exponentiation.
 
-    Ok(E::final_exponentiation(&E::miller_loop(
-        [
-            (&proof.a.prepare(), &proof.b.prepare()),
-            (&acc.into_affine().prepare(), &pvk.neg_gamma_g2),
-            (&proof.c.prepare(), &pvk.neg_delta_g2),
-        ]
-        .iter(),
-    ))
-    .unwrap()
-        == pvk.alpha_g1_beta_g2)
+    if pvk.alpha_g1_beta_g2
+        == E::multi_miller_loop(&[
+            (&proof.a, &proof.b.into()),
+            (&acc.to_affine(), &pvk.neg_gamma_g2),
+            (&proof.c, &pvk.neg_delta_g2),
+        ])
+        .final_exponentiation()
+    {
+        Ok(())
+    } else {
+        Err(VerificationError::InvalidProof)
+    }
 }

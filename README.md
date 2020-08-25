@@ -4,13 +4,16 @@
 and primitive structures, as well as basic gadget implementations such as
 booleans and number abstractions.
 
+`bellman` uses the `ff` and `group` crates to build circuits generically over a
+scalar field type, which is used as the "word" of a circuit. Arithmetic
+operations modulo the scalar field's prime are efficient, while other operations
+(such as boolean logic) are implemented using these words.
+
 ## Roadmap
 
-`bellman` is being refactored into a generic proving library. Currently it is
-pairing-specific, and different types of proving systems need to be implemented
-as sub-modules. After the refactor, `bellman` will be generic using the `ff` and
-`group` crates, while specific proving systems will be separate crates that pull
-in the dependencies they require.
+Currently `bellman` bundles an implementation of the Groth16 proving system.
+This will be moved into a separate crate in the future, and `bellman` will
+contain any utilities that make implementing proving systems easier.
 
 ## License
 
