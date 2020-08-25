@@ -137,19 +137,6 @@
 // Catch documentation errors caused by code changes.
 #![deny(intra_doc_link_resolution_failure)]
 
-#[cfg(feature = "multicore")]
-extern crate crossbeam;
-
-#[cfg(feature = "multicore")]
-extern crate num_cpus;
-
-#[cfg(test)]
-#[macro_use]
-extern crate hex_literal;
-
-#[cfg(test)]
-extern crate rand;
-
 pub mod domain;
 pub mod gadgets;
 #[cfg(feature = "groth16")]
