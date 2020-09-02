@@ -229,14 +229,26 @@ where
         let a_len = a.len() - 1;
         a.truncate(a_len);
         // TODO: parallelize if it's even helpful
-        let a = Arc::new(a.into_iter().map(|s| s.0).collect::<Vec<_>>());
+        let a = Arc::new(a.into_iter().map(|s| s.0.to_le_bits()).collect::<Vec<_>>());
 
         multiexp(&worker, params.get_h(a.len())?, FullDensity, a)
     };
 
     // TODO: parallelize if it's even helpful
-    let input_assignment = Arc::new(prover.input_assignment);
-    let aux_assignment = Arc::new(prover.aux_assignment);
+    let input_assignment = Arc::new(
+        prover
+            .input_assignment
+            .into_iter()
+            .map(|s| s.to_le_bits())
+            .collect::<Vec<_>>(),
+    );
+    let aux_assignment = Arc::new(
+        prover
+            .aux_assignment
+            .into_iter()
+            .map(|s| s.to_le_bits())
+            .collect::<Vec<_>>(),
+    );
 
     let l = multiexp(
         &worker,
