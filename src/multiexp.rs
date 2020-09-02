@@ -1,6 +1,6 @@
 use super::multicore::Worker;
 use bit_vec::{self, BitVec};
-use ff::{Endianness, Field, PrimeField};
+use ff::{Field, PrimeField};
 use futures::Future;
 use group::prime::{PrimeCurve, PrimeCurveAffine};
 use std::io;
@@ -195,16 +195,13 @@ where
                             bases.skip(1)?;
                         }
                     } else {
-                        let mut exp = exp.to_repr();
-                        <G::Scalar as PrimeField>::ReprEndianness::toggle_little_endian(&mut exp);
+                        let exp = exp.to_le_bits();
 
                         let exp = exp
-                            .as_ref()
                             .into_iter()
-                            .map(|b| (0..8).map(move |i| (b >> i) & 1u8))
-                            .flatten()
                             .skip(skip as usize)
                             .take(c as usize)
+                            .cloned()
                             .enumerate()
                             .fold(0u64, |acc, (i, b)| acc + ((b as u64) << i));
 
@@ -318,15 +315,15 @@ fn test_with_bls12() {
 
     const SAMPLES: usize = 1 << 14;
 
-    let rng = &mut rand::thread_rng();
+    let mut rng = rand::thread_rng();
     let v = Arc::new(
         (0..SAMPLES)
-            .map(|_| Scalar::random(rng))
+            .map(|_| Scalar::random(&mut rng))
             .collect::<Vec<_>>(),
     );
     let g = Arc::new(
         (0..SAMPLES)
-            .map(|_| <Bls12 as Engine>::G1::random(rng).to_affine())
+            .map(|_| <Bls12 as Engine>::G1::random(&mut rng).to_affine())
             .collect::<Vec<_>>(),
     );
 

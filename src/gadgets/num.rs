@@ -1,6 +1,6 @@
 //! Gadgets representing numbers in the scalar field of the underlying curve.
 
-use ff::{BitIterator, PrimeField};
+use ff::PrimeField;
 
 use crate::{ConstraintSystem, LinearCombination, SynthesisError, Variable};
 
@@ -102,8 +102,11 @@ impl<Scalar: PrimeField> AllocatedNum<Scalar> {
 
         // We want to ensure that the bit representation of a is
         // less than or equal to r - 1.
-        let mut a = self.value.map(|e| BitIterator::<u8, _>::new(e.to_repr()));
-        let b = (-Scalar::one()).to_repr();
+        let a = self.value.map(|e| e.to_le_bits());
+        let b = (-Scalar::one()).to_le_bits();
+
+        // Get the bits of a in big-endian order
+        let mut a = a.as_ref().map(|e| e.into_iter().rev());
 
         let mut result = vec![];
 
@@ -113,7 +116,7 @@ impl<Scalar: PrimeField> AllocatedNum<Scalar> {
 
         let mut found_one = false;
         let mut i = 0;
-        for b in BitIterator::<u8, _>::new(b) {
+        for b in b.into_iter().rev().cloned() {
             let a_bit = a.as_mut().map(|e| e.next().unwrap());
 
             // Skip over unset bits at the beginning
@@ -127,7 +130,8 @@ impl<Scalar: PrimeField> AllocatedNum<Scalar> {
             if b {
                 // This is part of a run of ones. Let's just
                 // allocate the boolean with the expected value.
-                let a_bit = AllocatedBit::alloc(cs.namespace(|| format!("bit {}", i)), a_bit)?;
+                let a_bit =
+                    AllocatedBit::alloc(cs.namespace(|| format!("bit {}", i)), a_bit.cloned())?;
                 // ... and add it to the current run of ones.
                 current_run.push(a_bit.clone());
                 result.push(a_bit);
@@ -153,7 +157,7 @@ impl<Scalar: PrimeField> AllocatedNum<Scalar> {
 
                 let a_bit = AllocatedBit::alloc_conditionally(
                     cs.namespace(|| format!("bit {}", i)),
-                    a_bit,
+                    a_bit.cloned(),
                     &last_run.as_ref().expect("char always starts with a one"),
                 )?;
                 result.push(a_bit);
@@ -411,7 +415,7 @@ impl<Scalar: PrimeField> Num<Scalar> {
 mod test {
     use crate::ConstraintSystem;
     use bls12_381::Scalar;
-    use ff::{BitIterator, Field, PrimeField};
+    use ff::{Field, PrimeField};
     use rand_core::SeedableRng;
     use rand_xorshift::XorShiftRng;
     use std::ops::{Neg, SubAssign};
@@ -560,8 +564,12 @@ mod test {
 
             assert!(cs.is_satisfied());
 
-            for (b, a) in BitIterator::<u8, _>::new(r.to_repr())
+            for (b, a) in r
+                .to_le_bits()
+                .into_iter()
+                .rev()
                 .skip(1)
+                .cloned()
                 .zip(bits.iter().rev())
             {
                 if let &Boolean::Is(ref a) = a {

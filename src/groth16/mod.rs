@@ -515,11 +515,13 @@ mod test_with_bls12_381 {
             }
         }
 
-        let rng = &mut thread_rng();
+        let mut rng = thread_rng();
 
-        let params =
-            generate_random_parameters::<Bls12, _, _>(MySillyCircuit { a: None, b: None }, rng)
-                .unwrap();
+        let params = generate_random_parameters::<Bls12, _, _>(
+            MySillyCircuit { a: None, b: None },
+            &mut rng,
+        )
+        .unwrap();
 
         {
             let mut v = vec![];
@@ -537,8 +539,8 @@ mod test_with_bls12_381 {
         let pvk = prepare_verifying_key::<Bls12>(&params.vk);
 
         for _ in 0..100 {
-            let a = Scalar::random(rng);
-            let b = Scalar::random(rng);
+            let a = Scalar::random(&mut rng);
+            let b = Scalar::random(&mut rng);
             let mut c = a;
             c.mul_assign(&b);
 
@@ -548,7 +550,7 @@ mod test_with_bls12_381 {
                     b: Some(b),
                 },
                 &params,
-                rng,
+                &mut rng,
             )
             .unwrap();
 

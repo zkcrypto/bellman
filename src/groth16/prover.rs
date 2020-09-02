@@ -162,15 +162,15 @@ impl<S: PrimeField> ConstraintSystem<S> for ProvingAssignment<S> {
 pub fn create_random_proof<E, C, R, P: ParameterSource<E>>(
     circuit: C,
     params: P,
-    rng: &mut R,
+    mut rng: &mut R,
 ) -> Result<Proof<E>, SynthesisError>
 where
     E: Engine,
     C: Circuit<E::Fr>,
     R: RngCore,
 {
-    let r = E::Fr::random(rng);
-    let s = E::Fr::random(rng);
+    let r = E::Fr::random(&mut rng);
+    let s = E::Fr::random(&mut rng);
 
     create_proof::<E, C, P>(circuit, params, r, s)
 }

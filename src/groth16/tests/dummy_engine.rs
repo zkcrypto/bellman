@@ -1,3 +1,4 @@
+use bitvec::{array::BitArray, order::Lsb0};
 use ff::{Field, PrimeField};
 use group::{
     prime::{PrimeCurve, PrimeCurveAffine, PrimeGroup},
@@ -182,7 +183,7 @@ impl Shr<u32> for Fr {
 }
 
 impl Field for Fr {
-    fn random<R: RngCore + ?Sized>(rng: &mut R) -> Self {
+    fn random(mut rng: impl RngCore) -> Self {
         Fr(Wrapping(rng.next_u32()) % MODULUS_R)
     }
 
@@ -288,7 +289,7 @@ impl Default for FrRepr {
 
 impl PrimeField for Fr {
     type Repr = FrRepr;
-    type ReprEndianness = byteorder::LittleEndian;
+    type ReprBits = u64;
 
     const NUM_BITS: u32 = 16;
     const CAPACITY: u32 = 15;
@@ -307,12 +308,16 @@ impl PrimeField for Fr {
         FrRepr::from(*self)
     }
 
+    fn to_le_bits(&self) -> BitArray<Lsb0, Self::ReprBits> {
+        BitArray::new((self.0).0 as u64)
+    }
+
     fn is_odd(&self) -> bool {
         (self.0).0 % 2 != 0
     }
 
-    fn char() -> FrRepr {
-        Fr(MODULUS_R).into()
+    fn char_le_bits() -> BitArray<Lsb0, Self::ReprBits> {
+        BitArray::new(MODULUS_R.0 as u64)
     }
 
     fn multiplicative_generator() -> Fr {
@@ -372,7 +377,7 @@ impl MillerLoopResult for Fr {
 impl Group for Fr {
     type Scalar = Fr;
 
-    fn random<R: RngCore + ?Sized>(rng: &mut R) -> Self {
+    fn random(rng: impl RngCore) -> Self {
         <Fr as Field>::random(rng)
     }
 

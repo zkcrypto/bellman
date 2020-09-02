@@ -367,7 +367,7 @@ fn test_xordemo() {
             .iter()
             .enumerate()
         {
-            let coeff = Fr::from_str(&format!("{}", coeff)).unwrap();
+            let coeff = Fr::from_str(&format!("{:?}", coeff)).unwrap();
 
             let mut tmp = params.h[i];
             tmp.mul_assign(&coeff);

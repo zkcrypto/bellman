@@ -1,6 +1,6 @@
 //! Helpers for testing circuit implementations.
 
-use ff::{Endianness, PrimeField};
+use ff::PrimeField;
 
 use crate::{ConstraintSystem, Index, LinearCombination, SynthesisError, Variable};
 
@@ -105,8 +105,9 @@ fn hash_lc<Scalar: PrimeField>(terms: &[(Variable, Scalar)], h: &mut Blake2sStat
             }
         }
 
-        let mut coeff_repr = coeff.to_repr();
-        <Scalar as PrimeField>::ReprEndianness::toggle_little_endian(&mut coeff_repr);
+        // TODO: Change this to hash over the standard scalar endianness, not an assumed
+        // little-endian representation that we flip to big-endian.
+        let coeff_repr = coeff.to_repr();
         let coeff_be: Vec<_> = coeff_repr.as_ref().iter().cloned().rev().collect();
         buf[9..].copy_from_slice(&coeff_be[..]);
 
@@ -179,7 +180,7 @@ impl<Scalar: PrimeField> TestConstraintSystem<Scalar> {
                         }
                     }
 
-                    write!(s, "{} . ", coeff).unwrap();
+                    write!(s, "{:?} . ", coeff).unwrap();
                 }
 
                 match var.0.get_unchecked() {
