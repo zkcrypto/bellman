@@ -1,6 +1,5 @@
 use super::multicore::Worker;
-use bit_vec::{self, BitVec};
-use bitvec::{array::BitArray, order::Lsb0};
+use bitvec::{array::BitArray, order::Lsb0, vec::BitVec};
 use ff::PrimeField;
 use futures::Future;
 use group::prime::{PrimeCurve, PrimeCurveAffine};
@@ -112,14 +111,13 @@ impl<'a> QueryDensity for &'a FullDensity {
 
 pub struct DensityTracker {
     bv: BitVec,
-    total_density: usize,
 }
 
 impl<'a> QueryDensity for &'a DensityTracker {
-    type Iter = bit_vec::Iter<'a>;
+    type Iter = std::iter::Cloned<bitvec::slice::Iter<'a, Lsb0, usize>>;
 
     fn iter(self) -> Self::Iter {
-        self.bv.iter()
+        self.bv.iter().cloned()
     }
 
     fn get_query_size(self) -> Option<usize> {
@@ -129,10 +127,7 @@ impl<'a> QueryDensity for &'a DensityTracker {
 
 impl DensityTracker {
     pub fn new() -> DensityTracker {
-        DensityTracker {
-            bv: BitVec::new(),
-            total_density: 0,
-        }
+        DensityTracker { bv: BitVec::new() }
     }
 
     pub fn add_element(&mut self) {
@@ -142,12 +137,11 @@ impl DensityTracker {
     pub fn inc(&mut self, idx: usize) {
         if !self.bv.get(idx).unwrap() {
             self.bv.set(idx, true);
-            self.total_density += 1;
         }
     }
 
     pub fn get_total_density(&self) -> usize {
-        self.total_density
+        self.bv.count_ones()
     }
 }
 
