@@ -1,6 +1,6 @@
 use super::multicore::Worker;
-use bit_vec::{self, BitVec};
-use ff::{Endianness, Field, PrimeField};
+use bitvec::{array::BitArray, order::Lsb0, vec::BitVec};
+use ff::PrimeField;
 use futures::Future;
 use group::prime::{PrimeCurve, PrimeCurveAffine};
 use std::io;
@@ -111,14 +111,13 @@ impl<'a> QueryDensity for &'a FullDensity {
 
 pub struct DensityTracker {
     bv: BitVec,
-    total_density: usize,
 }
 
 impl<'a> QueryDensity for &'a DensityTracker {
-    type Iter = bit_vec::Iter<'a>;
+    type Iter = std::iter::Cloned<bitvec::slice::Iter<'a, Lsb0, usize>>;
 
     fn iter(self) -> Self::Iter {
-        self.bv.iter()
+        self.bv.iter().cloned()
     }
 
     fn get_query_size(self) -> Option<usize> {
@@ -128,10 +127,7 @@ impl<'a> QueryDensity for &'a DensityTracker {
 
 impl DensityTracker {
     pub fn new() -> DensityTracker {
-        DensityTracker {
-            bv: BitVec::new(),
-            total_density: 0,
-        }
+        DensityTracker { bv: BitVec::new() }
     }
 
     pub fn add_element(&mut self) {
@@ -141,12 +137,11 @@ impl DensityTracker {
     pub fn inc(&mut self, idx: usize) {
         if !self.bv.get(idx).unwrap() {
             self.bv.set(idx, true);
-            self.total_density += 1;
         }
     }
 
     pub fn get_total_density(&self) -> usize {
-        self.total_density
+        self.bv.count_ones()
     }
 }
 
@@ -154,7 +149,7 @@ fn multiexp_inner<Q, D, G, S>(
     pool: &Worker,
     bases: S,
     density_map: D,
-    exponents: Arc<Vec<G::Scalar>>,
+    exponents: Arc<Vec<BitArray<Lsb0, <G::Scalar as PrimeField>::ReprBits>>>,
     mut skip: u32,
     c: u32,
     handle_trivial: bool,
@@ -181,30 +176,29 @@ where
             // Create space for the buckets
             let mut buckets = vec![G::identity(); (1 << c) - 1];
 
-            let one = G::Scalar::one();
-
             // Sort the bases into buckets
-            for (&exp, density) in exponents.iter().zip(density_map.as_ref().iter()) {
+            for (exp, density) in exponents.iter().zip(density_map.as_ref().iter()) {
                 if density {
-                    if exp.is_zero() {
+                    let (exp_is_zero, exp_is_one) = {
+                        let (first, rest) = exp.split_first().unwrap();
+                        let rest_unset = rest.not_any();
+                        (!*first && rest_unset, *first && rest_unset)
+                    };
+
+                    if exp_is_zero {
                         bases.skip(1)?;
-                    } else if exp == one {
+                    } else if exp_is_one {
                         if handle_trivial {
                             acc.add_assign_from_source(&mut bases)?;
                         } else {
                             bases.skip(1)?;
                         }
                     } else {
-                        let mut exp = exp.to_repr();
-                        <G::Scalar as PrimeField>::ReprEndianness::toggle_little_endian(&mut exp);
-
                         let exp = exp
-                            .as_ref()
                             .into_iter()
-                            .map(|b| (0..8).map(move |i| (b >> i) & 1u8))
-                            .flatten()
                             .skip(skip as usize)
                             .take(c as usize)
+                            .cloned()
                             .enumerate()
                             .fold(0u64, |acc, (i, b)| acc + ((b as u64) << i));
 
@@ -269,7 +263,7 @@ pub fn multiexp<Q, D, G, S>(
     pool: &Worker,
     bases: S,
     density_map: D,
-    exponents: Arc<Vec<G::Scalar>>,
+    exponents: Arc<Vec<BitArray<Lsb0, <G::Scalar as PrimeField>::ReprBits>>>,
 ) -> Box<dyn Future<Item = G, Error = SynthesisError>>
 where
     for<'a> &'a Q: QueryDensity,
@@ -312,21 +306,23 @@ fn test_with_bls12() {
     }
 
     use bls12_381::{Bls12, Scalar};
+    use ff::Field;
     use group::{Curve, Group};
     use pairing::Engine;
     use rand;
 
     const SAMPLES: usize = 1 << 14;
 
-    let rng = &mut rand::thread_rng();
+    let mut rng = rand::thread_rng();
     let v = Arc::new(
         (0..SAMPLES)
-            .map(|_| Scalar::random(rng))
+            .map(|_| Scalar::random(&mut rng))
             .collect::<Vec<_>>(),
     );
+    let v_bits = Arc::new(v.iter().map(|e| e.to_le_bits()).collect::<Vec<_>>());
     let g = Arc::new(
         (0..SAMPLES)
-            .map(|_| <Bls12 as Engine>::G1::random(rng).to_affine())
+            .map(|_| <Bls12 as Engine>::G1::random(&mut rng).to_affine())
             .collect::<Vec<_>>(),
     );
 
@@ -334,7 +330,7 @@ fn test_with_bls12() {
 
     let pool = Worker::new();
 
-    let fast = multiexp(&pool, (g, 0), FullDensity, v).wait().unwrap();
+    let fast = multiexp(&pool, (g, 0), FullDensity, v_bits).wait().unwrap();
 
     assert_eq!(naive, fast);
 }

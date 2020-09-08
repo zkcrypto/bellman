@@ -162,15 +162,15 @@ impl<S: PrimeField> ConstraintSystem<S> for ProvingAssignment<S> {
 pub fn create_random_proof<E, C, R, P: ParameterSource<E>>(
     circuit: C,
     params: P,
-    rng: &mut R,
+    mut rng: &mut R,
 ) -> Result<Proof<E>, SynthesisError>
 where
     E: Engine,
     C: Circuit<E::Fr>,
     R: RngCore,
 {
-    let r = E::Fr::random(rng);
-    let s = E::Fr::random(rng);
+    let r = E::Fr::random(&mut rng);
+    let s = E::Fr::random(&mut rng);
 
     create_proof::<E, C, P>(circuit, params, r, s)
 }
@@ -229,14 +229,26 @@ where
         let a_len = a.len() - 1;
         a.truncate(a_len);
         // TODO: parallelize if it's even helpful
-        let a = Arc::new(a.into_iter().map(|s| s.0).collect::<Vec<_>>());
+        let a = Arc::new(a.into_iter().map(|s| s.0.to_le_bits()).collect::<Vec<_>>());
 
         multiexp(&worker, params.get_h(a.len())?, FullDensity, a)
     };
 
     // TODO: parallelize if it's even helpful
-    let input_assignment = Arc::new(prover.input_assignment);
-    let aux_assignment = Arc::new(prover.aux_assignment);
+    let input_assignment = Arc::new(
+        prover
+            .input_assignment
+            .into_iter()
+            .map(|s| s.to_le_bits())
+            .collect::<Vec<_>>(),
+    );
+    let aux_assignment = Arc::new(
+        prover
+            .aux_assignment
+            .into_iter()
+            .map(|s| s.to_le_bits())
+            .collect::<Vec<_>>(),
+    );
 
     let l = multiexp(
         &worker,

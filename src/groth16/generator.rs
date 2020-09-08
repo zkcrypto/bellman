@@ -18,7 +18,7 @@ use crate::multicore::Worker;
 /// a circuit.
 pub fn generate_random_parameters<E, C, R>(
     circuit: C,
-    rng: &mut R,
+    mut rng: &mut R,
 ) -> Result<Parameters<E>, SynthesisError>
 where
     E: Engine,
@@ -27,13 +27,13 @@ where
     C: Circuit<E::Fr>,
     R: RngCore,
 {
-    let g1 = E::G1::random(rng);
-    let g2 = E::G2::random(rng);
-    let alpha = E::Fr::random(rng);
-    let beta = E::Fr::random(rng);
-    let gamma = E::Fr::random(rng);
-    let delta = E::Fr::random(rng);
-    let tau = E::Fr::random(rng);
+    let g1 = E::G1::random(&mut rng);
+    let g2 = E::G2::random(&mut rng);
+    let alpha = E::Fr::random(&mut rng);
+    let beta = E::Fr::random(&mut rng);
+    let gamma = E::Fr::random(&mut rng);
+    let delta = E::Fr::random(&mut rng);
+    let tau = E::Fr::random(&mut rng);
 
     generate_parameters::<E, C>(circuit, g1, g2, alpha, beta, gamma, delta, tau)
 }

@@ -1,6 +1,6 @@
 //! Gadgets for allocating bits in the circuit and performing boolean logic.
 
-use ff::{BitIterator, PrimeField};
+use ff::PrimeField;
 
 use crate::{ConstraintSystem, LinearCombination, SynthesisError, Variable};
 
@@ -321,12 +321,13 @@ pub fn field_into_allocated_bits_le<
     // Deconstruct in big-endian bit order
     let values = match value {
         Some(ref value) => {
-            let mut field_char = BitIterator::<u8, _>::new(F::char());
+            let field_char = F::char_le_bits();
+            let mut field_char = field_char.into_iter().rev();
 
             let mut tmp = Vec::with_capacity(F::NUM_BITS as usize);
 
             let mut found_one = false;
-            for b in BitIterator::<u8, _>::new(value.to_repr()) {
+            for b in value.to_le_bits().into_iter().rev().cloned() {
                 // Skip leading bits
                 found_one |= field_char.next().unwrap();
                 if !found_one {

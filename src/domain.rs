@@ -378,13 +378,17 @@ fn polynomial_arith() {
     use bls12_381::Scalar as Fr;
     use rand_core::RngCore;
 
-    fn test_mul<S: PrimeField, R: RngCore>(rng: &mut R) {
+    fn test_mul<S: PrimeField, R: RngCore>(mut rng: &mut R) {
         let worker = Worker::new();
 
         for coeffs_a in 0..70 {
             for coeffs_b in 0..70 {
-                let mut a: Vec<_> = (0..coeffs_a).map(|_| Scalar::<S>(S::random(rng))).collect();
-                let mut b: Vec<_> = (0..coeffs_b).map(|_| Scalar::<S>(S::random(rng))).collect();
+                let mut a: Vec<_> = (0..coeffs_a)
+                    .map(|_| Scalar::<S>(S::random(&mut rng)))
+                    .collect();
+                let mut b: Vec<_> = (0..coeffs_b)
+                    .map(|_| Scalar::<S>(S::random(&mut rng)))
+                    .collect();
 
                 // naive evaluation
                 let mut naive = vec![Scalar(S::zero()); coeffs_a + coeffs_b];
@@ -425,7 +429,7 @@ fn fft_composition() {
     use bls12_381::Scalar as Fr;
     use rand_core::RngCore;
 
-    fn test_comp<S: PrimeField, R: RngCore>(rng: &mut R) {
+    fn test_comp<S: PrimeField, R: RngCore>(mut rng: &mut R) {
         let worker = Worker::new();
 
         for coeffs in 0..10 {
@@ -433,7 +437,7 @@ fn fft_composition() {
 
             let mut v = vec![];
             for _ in 0..coeffs {
-                v.push(Scalar::<S>(S::random(rng)));
+                v.push(Scalar::<S>(S::random(&mut rng)));
             }
 
             let mut domain = EvaluationDomain::from_coeffs(v.clone()).unwrap();
@@ -464,7 +468,7 @@ fn parallel_fft_consistency() {
     use rand_core::RngCore;
     use std::cmp::min;
 
-    fn test_consistency<S: PrimeField, R: RngCore>(rng: &mut R) {
+    fn test_consistency<S: PrimeField, R: RngCore>(mut rng: &mut R) {
         let worker = Worker::new();
 
         for _ in 0..5 {
@@ -472,7 +476,7 @@ fn parallel_fft_consistency() {
                 let d = 1 << log_d;
 
                 let v1 = (0..d)
-                    .map(|_| Scalar::<S>(S::random(rng)))
+                    .map(|_| Scalar::<S>(S::random(&mut rng)))
                     .collect::<Vec<_>>();
                 let mut v1 = EvaluationDomain::from_coeffs(v1).unwrap();
                 let mut v2 = EvaluationDomain::from_coeffs(v1.coeffs.clone()).unwrap();
