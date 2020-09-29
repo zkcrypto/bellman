@@ -20,7 +20,6 @@ futures = "0.1"
 futures-cpupool = { version = "0.1", optional = true }
 group = "0.10"
 num_cpus = { version = "1", optional = true }
-crossbeam = { version = "0.7", optional = true }
 pairing = { version = "0.20", optional = true }
 rand_core = "0.6"
 byteorder = "1"
@@ -39,7 +38,7 @@ sha2 = "0.9"
 
 [features]
 groth16 = ["pairing"]
-multicore = ["futures-cpupool", "crossbeam", "lazy_static", "num_cpus", "rayon"]
+multicore = ["futures-cpupool", "lazy_static", "num_cpus", "rayon"]
 default = ["groth16", "multicore"]
 
 [[test]]
