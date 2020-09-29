@@ -4,7 +4,6 @@ use super::sources;
 use super::utils;
 use crate::multicore::Worker;
 use crate::multiexp::{multiexp as cpu_multiexp, FullDensity};
-use crossbeam::thread;
 use ff::{PrimeField, ScalarEngine};
 use futures::Future;
 use groupy::{CurveAffine, CurveProjective};
@@ -285,27 +284,29 @@ where
 
         let chunk_size = ((n as f64) / (num_devices as f64)).ceil() as usize;
 
-        match thread::scope(|s| -> Result<<G as CurveAffine>::Projective, GPUError> {
+        crate::multicore::THREAD_POOL.install(|| {
+            use rayon::prelude::*;
+
             let mut acc = <G as CurveAffine>::Projective::zero();
-            let mut threads = Vec::new();
-            if n > 0 {
-                for ((bases, exps), kern) in bases
-                    .chunks(chunk_size)
-                    .zip(exps.chunks(chunk_size))
-                    .zip(self.kernels.iter_mut())
-                {
-                    threads.push(s.spawn(
-                        move |_| -> Result<<G as CurveAffine>::Projective, GPUError> {
-                            let mut acc = <G as CurveAffine>::Projective::zero();
-                            for (bases, exps) in bases.chunks(kern.n).zip(exps.chunks(kern.n)) {
-                                let result = kern.multiexp(bases, exps, bases.len())?;
-                                acc.add_assign(&result);
-                            }
-                            Ok(acc)
-                        },
-                    ));
-                }
-            }
+
+            let results = if n > 0 {
+                bases
+                    .par_chunks(chunk_size)
+                    .zip(exps.par_chunks(chunk_size))
+                    .zip(self.kernels.par_iter_mut())
+                    .map(|((bases, exps), kern)| -> Result<<G as CurveAffine>::Projective, GPUError> {
+                        let mut acc = <G as CurveAffine>::Projective::zero();
+                        for (bases, exps) in bases.chunks(kern.n).zip(exps.chunks(kern.n)) {
+                            let result = kern.multiexp(bases, exps, bases.len())?;
+                            acc.add_assign(&result);
+                        }
+
+                        Ok(acc)
+                    })
+                    .collect::<Vec<_>>()
+            } else {
+                Vec::new()
+            };
 
             let cpu_acc = cpu_multiexp(
                 &pool,
@@ -315,20 +316,12 @@ where
                 &mut None,
             );
 
-            let mut results = vec![];
-            for t in threads {
-                results.push(t.join());
-            }
             for r in results {
-                acc.add_assign(&r??);
+                acc.add_assign(&r?);
             }
 
             acc.add_assign(&cpu_acc.wait().unwrap());
-
             Ok(acc)
-        }) {
-            Ok(res) => res,
-            Err(e) => Err(GPUError::from(e)),
-        }
+        })
     }
 }
