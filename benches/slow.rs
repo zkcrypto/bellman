@@ -5,7 +5,6 @@ use bellman::{
 use bls12_381::{Bls12, Scalar};
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use ff::{Field, PrimeFieldBits};
-use futures::Future;
 use group::{Curve, Group};
 use pairing::Engine;
 use rand_core::SeedableRng;

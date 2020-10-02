@@ -1,12 +1,17 @@
-use super::multicore::Worker;
+use super::multicore::{Waiter, Worker};
 use bitvec::vec::BitVec;
 use ff::{FieldBits, PrimeField, PrimeFieldBits};
-use futures::Future;
 use group::prime::{PrimeCurve, PrimeCurveAffine};
 use std::io;
 use std::iter;
 use std::ops::AddAssign;
 use std::sync::Arc;
+
+#[cfg(feature = "multicore")]
+use rayon::prelude::*;
+
+#[cfg(not(feature = "multicore"))]
+use crate::multicore::FakeParallelIterator;
 
 use super::SynthesisError;
 
@@ -146,14 +151,11 @@ impl DensityTracker {
 }
 
 fn multiexp_inner<Q, D, G, S>(
-    pool: &Worker,
     bases: S,
     density_map: D,
     exponents: Arc<Vec<FieldBits<<G::Scalar as PrimeFieldBits>::ReprBits>>>,
-    mut skip: u32,
     c: u32,
-    handle_trivial: bool,
-) -> Box<dyn Future<Item = G, Error = SynthesisError>>
+) -> Result<G, SynthesisError>
 where
     for<'a> &'a Q: QueryDensity,
     D: Send + Sync + 'static + Clone + AsRef<Q>,
@@ -162,100 +164,83 @@ where
     S: SourceBuilder<<G as PrimeCurve>::Affine>,
 {
     // Perform this region of the multiexp
-    let this = {
-        let bases = bases.clone();
-        let exponents = exponents.clone();
-        let density_map = density_map.clone();
+    let this = move |bases: S,
+                     density_map: D,
+                     exponents: Arc<Vec<FieldBits<<G::Scalar as PrimeFieldBits>::ReprBits>>>,
+                     skip: u32|
+          -> Result<_, SynthesisError> {
+        // Accumulate the result
+        let mut acc = G::identity();
 
-        pool.compute(move || {
-            // Accumulate the result
-            let mut acc = G::identity();
+        // Build a source for the bases
+        let mut bases = bases.new();
 
-            // Build a source for the bases
-            let mut bases = bases.new();
+        // Create space for the buckets
+        let mut buckets = vec![G::identity(); (1 << c) - 1];
 
-            // Create space for the buckets
-            let mut buckets = vec![G::identity(); (1 << c) - 1];
+        // only the first round uses this
+        let handle_trivial = skip == 0;
 
-            // Sort the bases into buckets
-            for (exp, density) in exponents.iter().zip(density_map.as_ref().iter()) {
-                if density {
-                    let (exp_is_zero, exp_is_one) = {
-                        let (first, rest) = exp.split_first().unwrap();
-                        let rest_unset = rest.not_any();
-                        (!*first && rest_unset, *first && rest_unset)
-                    };
+        // Sort the bases into buckets
+        for (exp, density) in exponents.iter().zip(density_map.as_ref().iter()) {
+            if density {
+                let (exp_is_zero, exp_is_one) = {
+                    let (first, rest) = exp.split_first().unwrap();
+                    let rest_unset = rest.not_any();
+                    (!*first && rest_unset, *first && rest_unset)
+                };
 
-                    if exp_is_zero {
-                        bases.skip(1)?;
-                    } else if exp_is_one {
-                        if handle_trivial {
-                            acc.add_assign_from_source(&mut bases)?;
-                        } else {
-                            bases.skip(1)?;
-                        }
+                if exp_is_zero {
+                    bases.skip(1)?;
+                } else if exp_is_one {
+                    if handle_trivial {
+                        acc.add_assign_from_source(&mut bases)?;
                     } else {
-                        let exp = exp
-                            .into_iter()
-                            .by_val()
-                            .skip(skip as usize)
-                            .take(c as usize)
-                            .enumerate()
-                            .fold(0u64, |acc, (i, b)| acc + ((b as u64) << i));
+                        bases.skip(1)?;
+                    }
+                } else {
+                    let exp = exp
+                        .into_iter()
+                        .by_val()
+                        .skip(skip as usize)
+                        .take(c as usize)
+                        .enumerate()
+                        .fold(0u64, |acc, (i, b)| acc + ((b as u64) << i));
 
-                        if exp != 0 {
-                            (&mut buckets[(exp - 1) as usize])
-                                .add_assign_from_source(&mut bases)?;
-                        } else {
-                            bases.skip(1)?;
-                        }
+                    if exp != 0 {
+                        (&mut buckets[(exp - 1) as usize]).add_assign_from_source(&mut bases)?;
+                    } else {
+                        bases.skip(1)?;
                     }
                 }
             }
+        }
 
-            // Summation by parts
-            // e.g. 3a + 2b + 1c = a +
-            //                    (a) + b +
-            //                    ((a) + b) + c
-            let mut running_sum = G::identity();
-            for exp in buckets.into_iter().rev() {
-                running_sum.add_assign(&exp);
-                acc.add_assign(&running_sum);
-            }
+        // Summation by parts
+        // e.g. 3a + 2b + 1c = a +
+        //                    (a) + b +
+        //                    ((a) + b) + c
+        let mut running_sum = G::identity();
+        for exp in buckets.into_iter().rev() {
+            running_sum.add_assign(&exp);
+            acc.add_assign(&running_sum);
+        }
 
-            Ok(acc)
-        })
+        Ok(acc)
     };
 
-    skip += c;
+    let parts = (0..G::Scalar::NUM_BITS)
+        .into_par_iter()
+        .step_by(c as usize)
+        .map(|skip| this(bases.clone(), density_map.clone(), exponents.clone(), skip))
+        .collect::<Vec<Result<_, _>>>();
 
-    if skip >= G::Scalar::NUM_BITS {
-        // There isn't another region.
-        Box::new(this)
-    } else {
-        // There's another region more significant. Calculate and join it with
-        // this region recursively.
-        Box::new(
-            this.join(multiexp_inner(
-                pool,
-                bases,
-                density_map,
-                exponents,
-                skip,
-                c,
-                false,
-            ))
-            .map(move |(this, mut higher): (_, G)| {
-                for _ in 0..c {
-                    higher = higher.double();
-                }
-
-                higher.add_assign(&this);
-
-                higher
-            }),
-        )
-    }
+    parts
+        .into_iter()
+        .rev()
+        .try_fold(G::identity(), |acc, part| {
+            part.map(|part| (0..c).fold(acc, |acc, _| acc.double()) + part)
+        })
 }
 
 /// Perform multi-exponentiation. The caller is responsible for ensuring the
@@ -265,7 +250,7 @@ pub fn multiexp<Q, D, G, S>(
     bases: S,
     density_map: D,
     exponents: Arc<Vec<FieldBits<<G::Scalar as PrimeFieldBits>::ReprBits>>>,
-) -> Box<dyn Future<Item = G, Error = SynthesisError>>
+) -> Waiter<Result<G, SynthesisError>>
 where
     for<'a> &'a Q: QueryDensity,
     D: Send + Sync + 'static + Clone + AsRef<Q>,
@@ -286,7 +271,7 @@ where
         assert!(query_size == exponents.len());
     }
 
-    multiexp_inner(pool, bases, density_map, exponents, 0, c, true)
+    pool.compute(move || multiexp_inner(bases, density_map, exponents, c))
 }
 
 #[cfg(feature = "pairing")]
@@ -328,11 +313,15 @@ fn test_with_bls12() {
             .collect::<Vec<_>>(),
     );
 
+    let now = std::time::Instant::now();
     let naive: <Bls12 as Engine>::G1 = naive_multiexp(g.clone(), v.clone());
+    println!("Naive: {}", now.elapsed().as_millis());
 
+    let now = std::time::Instant::now();
     let pool = Worker::new();
 
     let fast = multiexp(&pool, (g, 0), FullDensity, v_bits).wait().unwrap();
+    println!("Fast: {}", now.elapsed().as_millis());
 
     assert_eq!(naive, fast);
 }

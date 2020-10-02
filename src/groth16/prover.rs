@@ -2,8 +2,6 @@ use rand_core::RngCore;
 use std::ops::{AddAssign, MulAssign};
 use std::sync::Arc;
 
-use futures::Future;
-
 use ff::{Field, PrimeField, PrimeFieldBits};
 use group::{prime::PrimeCurveAffine, Curve};
 use pairing::Engine;
