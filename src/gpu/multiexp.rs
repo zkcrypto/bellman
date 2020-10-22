@@ -140,11 +140,11 @@ where
         // Each thread will use `num_groups` * `num_windows` * `bucket_len` buckets.
 
         let mut base_buffer = self.program.create_buffer::<G>(n)?;
-        base_buffer.write_from(bases)?;
+        base_buffer.write_from(0, bases)?;
         let mut exp_buffer = self
             .program
             .create_buffer::<<<G::Engine as ScalarEngine>::Fr as PrimeField>::Repr>(n)?;
-        exp_buffer.write_from(exps)?;
+        exp_buffer.write_from(0, exps)?;
 
         let bucket_buffer = self
             .program
@@ -183,7 +183,7 @@ where
         )?;
 
         let mut results = vec![<G as CurveAffine>::Projective::zero(); num_groups * num_windows];
-        result_buffer.read_into(&mut results)?;
+        result_buffer.read_into(0, &mut results)?;
 
         // Using the algorithm below, we can calculate the final result by accumulating the results
         // of those `NUM_GROUPS` * `NUM_WINDOWS` threads.

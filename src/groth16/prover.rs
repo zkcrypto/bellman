@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::Instant;
 
 use ff::{Field, PrimeField};
 use futures::Future;
@@ -304,6 +305,10 @@ where
         })
         .collect::<Result<Vec<_>, _>>()?;
 
+    // Start fft/multiexp prover timer
+    let start = Instant::now();
+    println!("starting proof timer");
+
     let worker = Worker::new();
     let input_len = provers[0].input_assignment.len();
     let vk = params.get_vk(input_len)?;
@@ -561,6 +566,9 @@ where
             },
         )
         .collect::<Result<Vec<_>, SynthesisError>>()?;
+
+    let proof_time = start.elapsed();
+    println!("prover time: {:?}", proof_time);
 
     Ok(proofs)
 }
