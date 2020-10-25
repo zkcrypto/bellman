@@ -142,7 +142,7 @@ pub mod gadgets;
 #[cfg(feature = "groth16")]
 pub mod groth16;
 pub mod multicore;
-mod multiexp;
+pub mod multiexp;
 
 use ff::PrimeField;
 
