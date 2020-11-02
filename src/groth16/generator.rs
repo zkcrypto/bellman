@@ -398,8 +398,8 @@ where
                             *b_g2 = g2_wnaf.scalar(&bt);
                         }
 
-                        at.mul_assign(&beta);
-                        bt.mul_assign(&alpha);
+                        at *= beta;
+                        bt *= alpha;
 
                         let mut e = at;
                         e.add_assign(&bt);
