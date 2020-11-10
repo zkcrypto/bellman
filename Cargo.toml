@@ -6,7 +6,7 @@ homepage = "https://github.com/ebfull/bellman"
 license = "MIT/Apache-2.0"
 name = "bellman"
 repository = "https://github.com/ebfull/bellman"
-version = "0.8.0"
+version = "0.8.1"
 edition = "2018"
 
 [dependencies]
