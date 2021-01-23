@@ -342,7 +342,7 @@ impl Engine for DummyEngine {
     type Gt = Fr;
 
     fn pairing(p: &Self::G1Affine, q: &Self::G2Affine) -> Self::Gt {
-        Self::multi_miller_loop(&[(p, &(*q).into())]).final_exponentiation()
+        Self::multi_miller_loop(&[(p, &(*q))]).final_exponentiation()
     }
 }
 
