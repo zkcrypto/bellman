@@ -200,7 +200,7 @@ impl<Scalar: PrimeField> TestConstraintSystem<Scalar> {
         };
 
         for &(ref a, ref b, ref c, ref name) in &self.constraints {
-            write!(&mut s, "\n").unwrap();
+            writeln!(&mut s).unwrap();
 
             write!(&mut s, "{}: ", name).unwrap();
             pp(&mut s, a);
@@ -210,7 +210,7 @@ impl<Scalar: PrimeField> TestConstraintSystem<Scalar> {
             pp(&mut s, c);
         }
 
-        write!(&mut s, "\n").unwrap();
+        writeln!(&mut s).unwrap();
 
         s
     }
