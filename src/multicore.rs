@@ -10,7 +10,6 @@ mod implementation {
     use crossbeam::{self, thread::Scope};
     use futures::{Future, IntoFuture, Poll};
     use futures_cpupool::{CpuFuture, CpuPool};
-    use num_cpus;
 
     #[derive(Clone)]
     pub struct Worker {
