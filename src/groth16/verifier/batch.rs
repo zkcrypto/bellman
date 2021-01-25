@@ -59,8 +59,6 @@ where
     /// verifier, add all the (Spend, inputs)'s and (Output, inputs)'s from a
     /// block, and invoke this method on each, with the appropriate
     /// [`PreparedVerifyingKey`].
-    ///
-    ///
     #[allow(non_snake_case)]
     pub fn verify<R: RngCore + CryptoRng>(
         self,
