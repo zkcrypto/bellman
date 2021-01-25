@@ -369,10 +369,7 @@ pub enum Boolean {
 
 impl Boolean {
     pub fn is_constant(&self) -> bool {
-        match *self {
-            Boolean::Constant(_) => true,
-            _ => false,
-        }
+        matches!(*self, Boolean::Constant(_))
     }
 
     pub fn enforce_equal<Scalar, CS>(mut cs: CS, a: &Self, b: &Self) -> Result<(), SynthesisError>

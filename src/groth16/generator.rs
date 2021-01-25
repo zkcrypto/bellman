@@ -393,7 +393,6 @@ where
 
                         // Compute B query (in G1/G2)
                         if !bt.is_zero() {
-                            ();
                             *b_g1 = g1_wnaf.scalar(&bt);
                             *b_g2 = g2_wnaf.scalar(&bt);
                         }
@@ -467,12 +466,12 @@ where
     let g2 = g2.to_affine();
 
     let vk = VerifyingKey::<E> {
-        alpha_g1: (g1 * &alpha).to_affine(),
-        beta_g1: (g1 * &beta).to_affine(),
-        beta_g2: (g2 * &beta).to_affine(),
-        gamma_g2: (g2 * &gamma).to_affine(),
-        delta_g1: (g1 * &delta).to_affine(),
-        delta_g2: (g2 * &delta).to_affine(),
+        alpha_g1: (g1 * alpha).to_affine(),
+        beta_g1: (g1 * beta).to_affine(),
+        beta_g2: (g2 * beta).to_affine(),
+        gamma_g2: (g2 * gamma).to_affine(),
+        delta_g1: (g1 * delta).to_affine(),
+        delta_g2: (g2 * delta).to_affine(),
         ic,
     };
 

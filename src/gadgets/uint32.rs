@@ -361,11 +361,12 @@ impl UInt32 {
         // The value of the actual result is modulo 2^32
         let modular_value = result_value.map(|v| v as u32);
 
-        if all_constants && modular_value.is_some() {
+        if all_constants {
             // We can just return a constant, rather than
             // unpacking the result into allocated bits.
-
-            return Ok(UInt32::constant(modular_value.unwrap()));
+            if let Some(modular) = modular_value {
+                return Ok(UInt32::constant(modular));
+            }
         }
 
         // Storage area for the resulting bits
