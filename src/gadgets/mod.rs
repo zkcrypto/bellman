@@ -1,5 +1,6 @@
 //! Self-contained sub-circuit implementations for various primitives.
 
+#[cfg(test)]
 pub mod test;
 
 pub mod blake2s;

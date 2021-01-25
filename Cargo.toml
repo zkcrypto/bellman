@@ -2,10 +2,10 @@
 authors = ["Sean Bowe <ewillbefull@gmail.com>"]
 description = "zk-SNARK library"
 readme = "README.md"
-homepage = "https://github.com/ebfull/bellman"
+homepage = "https://github.com/zkcrypto/bellman"
 license = "MIT/Apache-2.0"
 name = "bellman"
-repository = "https://github.com/ebfull/bellman"
+repository = "https://github.com/zkcrypto/bellman"
 version = "0.8.1"
 edition = "2018"
 
