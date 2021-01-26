@@ -7,4 +7,5 @@ and this project adheres to Rust's notion of
 
 ## [Unreleased]
 ### Changed
-- Bumped dependencies to `ff 0.9`, `group 0.9`, `pairing 0.19`, `rand_core 0.6`.
+- Bumped dependencies to `bitvec 0.20`, `ff 0.9`, `group 0.9`, `pairing 0.19`,
+  `rand_core 0.6`.

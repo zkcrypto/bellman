@@ -10,7 +10,7 @@ version = "0.8.1"
 edition = "2018"
 
 [dependencies]
-bitvec = "0.18"
+bitvec = "0.20"
 blake2s_simd = "0.5"
 ff = "0.9"
 futures = "0.1"
