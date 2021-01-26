@@ -1,5 +1,4 @@
-use bitvec::{array::BitArray, order::Lsb0};
-use ff::{Field, PrimeField};
+use ff::{Field, FieldBits, PrimeField};
 use group::{
     prime::{PrimeCurve, PrimeCurveAffine, PrimeGroup},
     Curve, Group, GroupEncoding, UncompressedEncoding, WnafGroup,
@@ -308,16 +307,16 @@ impl PrimeField for Fr {
         FrRepr::from(*self)
     }
 
-    fn to_le_bits(&self) -> BitArray<Lsb0, Self::ReprBits> {
-        BitArray::new((self.0).0 as u64)
+    fn to_le_bits(&self) -> FieldBits<Self::ReprBits> {
+        FieldBits::new((self.0).0 as u64)
     }
 
     fn is_odd(&self) -> bool {
         (self.0).0 % 2 != 0
     }
 
-    fn char_le_bits() -> BitArray<Lsb0, Self::ReprBits> {
-        BitArray::new(MODULUS_R.0 as u64)
+    fn char_le_bits() -> FieldBits<Self::ReprBits> {
+        FieldBits::new(MODULUS_R.0 as u64)
     }
 
     fn multiplicative_generator() -> Fr {

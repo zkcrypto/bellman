@@ -106,7 +106,7 @@ impl<Scalar: PrimeField> AllocatedNum<Scalar> {
         let b = (-Scalar::one()).to_le_bits();
 
         // Get the bits of a in big-endian order
-        let mut a = a.as_ref().map(|e| e.into_iter().rev());
+        let mut a = a.as_ref().map(|e| e.iter().by_val().rev());
 
         let mut result = vec![];
 
@@ -116,7 +116,7 @@ impl<Scalar: PrimeField> AllocatedNum<Scalar> {
 
         let mut found_one = false;
         let mut i = 0;
-        for b in b.into_iter().rev().cloned() {
+        for b in b.iter().by_val().rev() {
             let a_bit = a.as_mut().map(|e| e.next().unwrap());
 
             // Skip over unset bits at the beginning
@@ -131,7 +131,7 @@ impl<Scalar: PrimeField> AllocatedNum<Scalar> {
                 // This is part of a run of ones. Let's just
                 // allocate the boolean with the expected value.
                 let a_bit =
-                    AllocatedBit::alloc(cs.namespace(|| format!("bit {}", i)), a_bit.cloned())?;
+                    AllocatedBit::alloc(cs.namespace(|| format!("bit {}", i)), a_bit.clone())?;
                 // ... and add it to the current run of ones.
                 current_run.push(a_bit.clone());
                 result.push(a_bit);
@@ -157,7 +157,7 @@ impl<Scalar: PrimeField> AllocatedNum<Scalar> {
 
                 let a_bit = AllocatedBit::alloc_conditionally(
                     cs.namespace(|| format!("bit {}", i)),
-                    a_bit.cloned(),
+                    a_bit.clone(),
                     &last_run.as_ref().expect("char always starts with a one"),
                 )?;
                 result.push(a_bit);
@@ -566,10 +566,10 @@ mod test {
 
             for (b, a) in r
                 .to_le_bits()
-                .into_iter()
+                .iter()
+                .by_val()
                 .rev()
                 .skip(1)
-                .cloned()
                 .zip(bits.iter().rev())
             {
                 if let &Boolean::Is(ref a) = a {
