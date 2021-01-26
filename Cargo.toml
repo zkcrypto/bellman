@@ -12,22 +12,22 @@ edition = "2018"
 [dependencies]
 bitvec = "0.18"
 blake2s_simd = "0.5"
-ff = "0.8"
+ff = "0.9"
 futures = "0.1"
 futures-cpupool = { version = "0.1", optional = true }
-group = "0.8"
+group = "0.9"
 num_cpus = { version = "1", optional = true }
 crossbeam = { version = "0.7", optional = true }
-pairing = { version = "0.18", optional = true }
-rand_core = "0.5"
+pairing = { version = "0.19", optional = true }
+rand_core = "0.6"
 byteorder = "1"
 subtle = "2.2.1"
 
 [dev-dependencies]
-bls12_381 = "0.3"
+bls12_381 = "0.4"
 hex-literal = "0.2"
-rand = "0.7"
-rand_xorshift = "0.2"
+rand = "0.8"
+rand_xorshift = "0.3"
 sha2 = "0.9"
 
 [features]
