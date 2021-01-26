@@ -25,7 +25,7 @@ subtle = "2.2.1"
 
 [dev-dependencies]
 bls12_381 = "0.4"
-hex-literal = "0.2"
+hex-literal = "0.3"
 rand = "0.8"
 rand_xorshift = "0.3"
 sha2 = "0.9"
