@@ -9,3 +9,4 @@ and this project adheres to Rust's notion of
 ### Changed
 - Bumped dependencies to `bitvec 0.20`, `ff 0.9`, `group 0.9`, `pairing 0.19`,
   `rand_core 0.6`.
+- MSRV is now 1.47.0.
