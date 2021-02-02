@@ -77,13 +77,13 @@ where
                 return Err(VerificationError::InvalidVerifyingKey);
             }
 
-            ml_terms.push(((proof.a * z).into(), (-proof.b).into()));
+            ml_terms.push(((proof.a * &z).into(), (-proof.b).into()));
 
-            acc_Gammas[0] += &z; // a_0 is implicitly set to 1 (??)
+            acc_Gammas[0] += &z; // a_0 is implicitly set to 1
             for (a_i, acc_Gamma_i) in Iterator::zip(inputs.iter(), acc_Gammas.iter_mut().skip(1)) {
                 *acc_Gamma_i += &(z * a_i);
             }
-            acc_Delta += proof.c * z;
+            acc_Delta += proof.c * &z;
             acc_Y += &z;
         }
 
@@ -98,16 +98,22 @@ where
 
         ml_terms.push((E::G1Affine::from(Psi), E::G2Prepared::from(vk.gamma_g2)));
 
-        // Y = PreparedVerifyingKey.alpha_g1_beta_g2
+        // Covers the [acc_Y]⋅e(alpha_g1, beta_g2) component
         //
-        // Y^acc_Y in multiplicative notation is [acc_Y]Y (scalar mul) in
-        // additive notation, which is the code convention here.
-        let Y = E::pairing(&vk.alpha_g1, &vk.beta_g2) * acc_Y;
+        // The multiplication by acc_Y is expensive -- it involves
+        // exponentiating by acc_Y because the result of the pairing is an
+        // element of a multiplicative subgroup of a large extension
+        // field. Instead, in practice it's probably just fine to
+        // add ([acc_Y]⋅alpha_g1, beta_g2) to our Miller loop terms because
+        // [acc_Y]⋅e(alpha_g1, beta_g2) = e([acc_Y]⋅alpha_g1, beta_g2)
+        ml_terms.push((
+            E::G1Affine::from(vk.alpha_g1 * &acc_Y),
+            E::G2Prepared::from(vk.beta_g2),
+        ));
 
-        let mut terms = vec![];
-        ml_terms.iter().for_each(|(a, b)| terms.push((a, b)));
+        let ml_terms = ml_terms.iter().map(|(a, b)| (a, b)).collect::<Vec<_>>();
 
-        if E::multi_miller_loop(terms.as_slice()).final_exponentiation() + Y == E::Gt::identity() {
+        if E::multi_miller_loop(&ml_terms[..]).final_exponentiation() == E::Gt::identity() {
             Ok(())
         } else {
             Err(VerificationError::InvalidProof)
