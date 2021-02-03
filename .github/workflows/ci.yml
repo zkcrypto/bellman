@@ -3,25 +3,6 @@ name: CI checks
 on: [push, pull_request]
 
 jobs:
-  lint:
-    name: Lint
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: 1.47.0
-          override: true
-
-      # Ensure all code has been formatted with rustfmt
-      - run: rustup component add rustfmt
-      - name: Check formatting
-        uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: -- --check --color always
-
   test:
     name: Test on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
@@ -50,8 +31,65 @@ jobs:
           command: test
           args: --verbose --release
 
+  bitrot:
+    name: Bitrot check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: 1.47.0
+          override: true
+      # Build benchmarks to prevent bitrot
+      - name: Build benchmarks
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --benches --all-features
+
+  clippy:
+    name: Clippy (1.47.0)
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: 1.47.0
+          components: clippy
+          override: true
+      - name: Run clippy
+        uses: actions-rs/clippy-check@v1
+        with:
+          name: Clippy (1.47.0)
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: --all-features --all-targets -- -D warnings
+
+  clippy-nightly:
+    name: Clippy (nightly)
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          components: clippy
+          override: true
+      - name: Run Clippy (nightly)
+        uses: actions-rs/clippy-check@v1
+        continue-on-error: true
+        with:
+          name: Clippy (nightly)
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: --all-features --all-targets -- -W clippy::all
+
   doc-links:
-    name: Nightly lint
+    name: Intra-doc links
     runs-on: ubuntu-latest
 
     steps:
@@ -72,3 +110,19 @@ jobs:
         with:
           command: doc
           args: --document-private-items
+
+  fmt:
+    name: Rustfmt
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: 1.47.0
+          override: true
+      - run: rustup component add rustfmt
+      - uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: -- --check
