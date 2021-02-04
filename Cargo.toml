@@ -35,10 +35,17 @@ groth16 = ["pairing"]
 multicore = ["futures-cpupool", "crossbeam", "num_cpus"]
 default = ["groth16", "multicore"]
 
+[dev-dependencies.criterion]
+version = "0.3"
+
 [[test]]
 name = "mimc"
 path = "tests/mimc.rs"
 required-features = ["groth16"]
+
+[[bench]]
+name = "slow"
+harness = false
 
 [badges]
 maintenance = { status = "actively-developed" }
