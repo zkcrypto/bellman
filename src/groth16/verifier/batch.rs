@@ -52,8 +52,7 @@ where
         self.items.push(item.into())
     }
 
-    /// Verify a batch of (proof, inputs) items with a particular
-    /// [`PreparedVerifyingKey`].
+    /// Verify a batch of `(proof, inputs)` items with a particular [`VerifyingKey`].
     ///
     /// In practice, you would create a Spend batch verifier and an Output batch
     /// verifier, add all the (Spend, inputs)'s and (Output, inputs)'s from a
