@@ -322,12 +322,12 @@ pub fn field_into_allocated_bits_le<
     let values = match value {
         Some(ref value) => {
             let field_char = F::char_le_bits();
-            let mut field_char = field_char.iter().by_ref().rev();
+            let mut field_char = field_char.iter().cloned().rev();
 
             let mut tmp = Vec::with_capacity(F::NUM_BITS as usize);
 
             let mut found_one = false;
-            for b in value.to_le_bits().iter().by_val().rev() {
+            for b in value.to_le_bits().iter().cloned().rev() {
                 // Skip leading bits
                 found_one |= field_char.next().unwrap();
                 if !found_one {

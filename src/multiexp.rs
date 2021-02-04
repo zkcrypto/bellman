@@ -1,5 +1,5 @@
 use super::multicore::Worker;
-use bitvec::vec::BitVec;
+use bitvec::{order::Lsb0, vec::BitVec};
 use ff::{FieldBits, PrimeField};
 use futures::Future;
 use group::prime::{PrimeCurve, PrimeCurveAffine};
@@ -112,12 +112,11 @@ impl<'a> QueryDensity for &'a FullDensity {
 pub struct DensityTracker {
     bv: BitVec,
 }
-
 impl<'a> QueryDensity for &'a DensityTracker {
-    type Iter = Box<dyn 'a + Iterator<Item = bool>>;
+    type Iter = std::iter::Cloned<bitvec::slice::Iter<'a, Lsb0, usize>>;
 
     fn iter(self) -> Self::Iter {
-        Box::new(self.bv.iter().by_val())
+        self.bv.iter().cloned()
     }
 
     fn get_query_size(self) -> Option<usize> {
@@ -196,7 +195,7 @@ where
                     } else {
                         let exp = exp
                             .into_iter()
-                            .by_val()
+                            .cloned()
                             .skip(skip as usize)
                             .take(c as usize)
                             .enumerate()
