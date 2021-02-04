@@ -58,10 +58,7 @@ fn bench_batch_verify(c: &mut Criterion) {
                 // Create a groth16 proof with our parameters.
                 let proof = create_random_proof(c, &params, &mut rng).unwrap();
 
-                (
-                    // batch::Item {
-                    proof, image,
-                ) //}
+                (proof, image)
             })
         }
         .take(n)
