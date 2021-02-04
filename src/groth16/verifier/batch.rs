@@ -101,10 +101,11 @@ where
         //
         // The multiplication by acc_Y is expensive -- it involves
         // exponentiating by acc_Y because the result of the pairing is an
-        // element of a multiplicative subgroup of a large extension
-        // field. Instead, in practice it's probably just fine to
-        // add ([acc_Y]⋅alpha_g1, beta_g2) to our Miller loop terms because
-        // [acc_Y]⋅e(alpha_g1, beta_g2) = e([acc_Y]⋅alpha_g1, beta_g2)
+        // element of a multiplicative subgroup of a large extension field.
+        // Instead, we add
+        //     ([acc_Y]⋅alpha_g1, beta_g2)
+        // to our Miller loop terms because
+        //     [acc_Y]⋅e(alpha_g1, beta_g2) = e([acc_Y]⋅alpha_g1, beta_g2)
         ml_terms.push((
             E::G1Affine::from(vk.alpha_g1 * &acc_Y),
             E::G2Prepared::from(vk.beta_g2),
