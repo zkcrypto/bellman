@@ -45,5 +45,9 @@ required-features = ["groth16"]
 name = "batch"
 harness = false
 
+[[bench]]
+name = "slow"
+harness = false
+
 [badges]
 maintenance = { status = "actively-developed" }
