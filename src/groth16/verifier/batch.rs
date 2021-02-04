@@ -1,3 +1,20 @@
+//! Performs batch Groth16 proof verification.
+//!
+//! Batch verification asks whether *all* proofs in some set are valid,
+//! rather than asking whether *each* of them is valid. This allows sharing
+//! computations among all proof verifications, performing less work overall
+//! at the cost of higher latency (the entire batch must complete), complexity of
+//! caller code (which must assemble a batch of proofs across work-items),
+//! and loss of the ability to easily pinpoint failing proofs.
+//!
+//! This batch verification implementation is non-adaptive, in the sense that it
+//! assumes that all the proofs in the batch are verifiable by the same
+//! `VerifyingKey`. The reason is that if you have different proof statements,
+//! you need to specify which statement you are proving, which means that you
+//! need to refer to or lookup a particular `VerifyingKey`. In practice, with
+//! large enough batches, it's manageable and not much worse performance-wise to
+//! keep batches of each statement type, vs one large adaptive batch.
+
 use std::ops::AddAssign;
 
 use ff::Field;
@@ -10,6 +27,11 @@ use crate::{
     VerificationError,
 };
 
+/// A batch verification item.
+///
+/// This struct exists to allow batch processing to be decoupled from the
+/// lifetime of the message. This is useful when using the batch verification
+/// API in an async context.
 #[derive(Clone, Debug)]
 pub struct Item<E: MultiMillerLoop> {
     proof: Proof<E>,
@@ -28,6 +50,20 @@ impl<E: MultiMillerLoop> From<(Proof<E>, Vec<E::Fr>)> for Item<E> {
     }
 }
 
+impl<E: MultiMillerLoop> Item<E> {
+    /// Perform non-batched verification of this `Item`.
+    ///
+    /// This is useful (in combination with `Item::clone`) for implementing
+    /// fallback logic when batch verification fails.
+    pub fn verify_single(self, pvk: &PreparedVerifyingKey<E>) -> Result<(), VerificationError> {
+        super::verify_proof(pvk, &self.proof, &self.inputs)
+    }
+}
+
+/// A batch verification context.
+///
+/// In practice, you would create a batch verifier for each proof statement
+/// requiring the same `VerifyingKey`.
 #[derive(Debug)]
 pub struct Verifier<E: MultiMillerLoop> {
     items: Vec<Item<E>>,
@@ -44,20 +80,18 @@ impl<E: MultiMillerLoop> Verifier<E>
 where
     E::G1: AddAssign<E::G1>,
 {
+    /// Construct a new batch verifier.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Queue a (proof, inputs) tuple for verification.
     pub fn queue<I: Into<Item<E>>>(&mut self, item: I) {
         self.items.push(item.into())
     }
 
-    /// Verify a batch of `(proof, inputs)` items with a particular [`VerifyingKey`].
-    ///
-    /// In practice, you would create a Spend batch verifier and an Output batch
-    /// verifier, add all the (Spend, inputs)'s and (Output, inputs)'s from a
-    /// block, and invoke this method on each, with the appropriate
-    /// [`PreparedVerifyingKey`].
+    /// Perform batch verification with a particular `VerifyingKey`, returning
+    /// `Ok(())` if all proofs were verified and `VerificationError` otherwise.
     #[allow(non_snake_case)]
     pub fn verify<R: RngCore + CryptoRng>(
         self,
@@ -118,11 +152,5 @@ where
         } else {
             Err(VerificationError::InvalidProof)
         }
-    }
-}
-
-impl<E: MultiMillerLoop> Item<E> {
-    pub fn verify_single(self, pvk: &PreparedVerifyingKey<E>) -> Result<(), VerificationError> {
-        super::verify_proof(pvk, &self.proof, &self.inputs)
     }
 }
