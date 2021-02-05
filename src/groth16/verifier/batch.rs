@@ -112,7 +112,17 @@ where
         let mut acc_Y = E::Fr::zero();
 
         for Item { proof, inputs } in self.items.into_iter() {
-            let z = E::Fr::random(&mut rng);
+            // The spec is explicit that z != 0.  Field::random is defined to
+            // return a uniformly-random field element (which may be 0), so we
+            // loop until it's not, avoiding needing an assert or throwing an
+            // error through no fault of the batch items. This will likely never
+            // actually loop, but handles the edge case.
+            let z = loop {
+                let z = E::Fr::random(&mut rng);
+                if !z.is_zero() {
+                    break z;
+                }
+            };
 
             ml_terms.push(((proof.a * &z).into(), (-proof.b).into()));
 
