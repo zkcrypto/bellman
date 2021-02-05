@@ -98,6 +98,14 @@ where
         mut rng: R,
         vk: &VerifyingKey<E>,
     ) -> Result<(), VerificationError> {
+        if self
+            .items
+            .iter()
+            .any(|Item { inputs, .. }| inputs.len() + 1 != vk.ic.len())
+        {
+            return Err(VerificationError::InvalidVerifyingKey);
+        }
+
         let mut ml_terms = Vec::<(E::G1Affine, E::G2Prepared)>::new();
         let mut acc_Gammas = vec![E::Fr::zero(); vk.ic.len()];
         let mut acc_Delta = E::G1::identity();
@@ -105,10 +113,6 @@ where
 
         for Item { proof, inputs } in self.items.into_iter() {
             let z = E::Fr::random(&mut rng);
-
-            if inputs.len() + 1 != vk.ic.len() {
-                return Err(VerificationError::InvalidVerifyingKey);
-            }
 
             ml_terms.push(((proof.a * &z).into(), (-proof.b).into()));
 
