@@ -6,6 +6,8 @@ use super::{PreparedVerifyingKey, Proof, VerifyingKey};
 
 use crate::VerificationError;
 
+pub mod batch;
+
 pub fn prepare_verifying_key<E: MultiMillerLoop>(vk: &VerifyingKey<E>) -> PreparedVerifyingKey<E> {
     let gamma = vk.gamma_g2.neg();
     let delta = vk.delta_g2.neg();

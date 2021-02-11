@@ -25,6 +25,7 @@ subtle = "2.2.1"
 
 [dev-dependencies]
 bls12_381 = "0.4"
+criterion = "0.3"
 hex-literal = "0.3"
 rand = "0.8"
 rand_xorshift = "0.3"
@@ -39,6 +40,10 @@ default = ["groth16", "multicore"]
 name = "mimc"
 path = "tests/mimc.rs"
 required-features = ["groth16"]
+
+[[bench]]
+name = "batch"
+harness = false
 
 [badges]
 maintenance = { status = "actively-developed" }
