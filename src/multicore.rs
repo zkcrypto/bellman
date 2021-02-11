@@ -11,6 +11,7 @@ mod implementation {
 
     use crossbeam_channel::{bounded, Receiver};
     use lazy_static::lazy_static;
+    use log::error;
     use num_cpus;
 
     lazy_static! {
@@ -77,6 +78,11 @@ mod implementation {
     impl<T> Waiter<T> {
         /// Wait for the result.
         pub fn wait(&self) -> T {
+            if THREAD_POOL.current_thread_index().is_some() {
+                // Calling `wait()` from within the worker thread pool can lead to dead logs
+                error!("The wait call should never be done inside the worker thread pool");
+                debug_assert!(false);
+            }
             self.receiver.recv().unwrap()
         }
 
