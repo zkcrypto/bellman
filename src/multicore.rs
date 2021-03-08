@@ -87,12 +87,6 @@ mod implementation {
                 });
             } else {
                 THREAD_POOL.spawn(move || {
-                    trace!(
-                        "[{}] pool is using spawn [current threads {}, threads requested {}]",
-                        thread_index,
-                        THREAD_POOL.current_num_threads(),
-                        WORKER_SPAWN_COUNTER.load(Ordering::SeqCst),
-                    );
                     let res = f();
                     sender.send(res).unwrap();
                     WORKER_SPAWN_COUNTER.fetch_sub(1, Ordering::SeqCst);
