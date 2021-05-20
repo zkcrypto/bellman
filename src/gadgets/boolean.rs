@@ -1,6 +1,6 @@
 //! Gadgets for allocating bits in the circuit and performing boolean logic.
 
-use ff::PrimeField;
+use ff::{PrimeField, PrimeFieldBits};
 
 use crate::{ConstraintSystem, LinearCombination, SynthesisError, Variable};
 
@@ -300,7 +300,7 @@ pub fn u64_into_boolean_vec_le<Scalar: PrimeField, CS: ConstraintSystem<Scalar>>
 pub fn field_into_boolean_vec_le<
     Scalar: PrimeField,
     CS: ConstraintSystem<Scalar>,
-    F: PrimeField,
+    F: PrimeFieldBits,
 >(
     cs: CS,
     value: Option<F>,
@@ -313,7 +313,7 @@ pub fn field_into_boolean_vec_le<
 pub fn field_into_allocated_bits_le<
     Scalar: PrimeField,
     CS: ConstraintSystem<Scalar>,
-    F: PrimeField,
+    F: PrimeFieldBits,
 >(
     mut cs: CS,
     value: Option<F>,

@@ -10,7 +10,7 @@ version = "0.9.0"
 edition = "2018"
 
 [dependencies]
-bitvec = "0.20"
+bitvec = "0.22"
 blake2s_simd = "0.5"
 ff = "0.9"
 futures = "0.1"
@@ -24,7 +24,7 @@ byteorder = "1"
 subtle = "2.2.1"
 
 [dev-dependencies]
-bls12_381 = "0.4"
+bls12_381 = { version = "0.4", features = ["bits"] }
 criterion = "0.3"
 hex-literal = "0.3"
 rand = "0.8"
@@ -51,3 +51,9 @@ harness = false
 
 [badges]
 maintenance = { status = "actively-developed" }
+
+[patch.crates-io]
+bls12_381 = { git = "https://github.com/nuttycom/bls12_381.git", branch = "bitvec-0.22" }
+ff = { git = "https://github.com/zkcrypto/ff.git", branch = "main" }
+group = { git = "https://github.com/zkcrypto/group.git", branch = "main" }
+pairing = { git = "https://github.com/zkcrypto/pairing.git", branch = "main" }

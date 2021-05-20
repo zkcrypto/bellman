@@ -1,6 +1,6 @@
 use super::multicore::Worker;
 use bitvec::vec::BitVec;
-use ff::{FieldBits, PrimeField};
+use ff::{FieldBits, PrimeField, PrimeFieldBits};
 use futures::Future;
 use group::prime::{PrimeCurve, PrimeCurveAffine};
 use std::io;
@@ -149,7 +149,7 @@ fn multiexp_inner<Q, D, G, S>(
     pool: &Worker,
     bases: S,
     density_map: D,
-    exponents: Arc<Vec<FieldBits<<G::Scalar as PrimeField>::ReprBits>>>,
+    exponents: Arc<Vec<FieldBits<<G::Scalar as PrimeFieldBits>::ReprBits>>>,
     mut skip: u32,
     c: u32,
     handle_trivial: bool,
@@ -158,6 +158,7 @@ where
     for<'a> &'a Q: QueryDensity,
     D: Send + Sync + 'static + Clone + AsRef<Q>,
     G: PrimeCurve,
+    G::Scalar: PrimeFieldBits,
     S: SourceBuilder<<G as PrimeCurve>::Affine>,
 {
     // Perform this region of the multiexp
@@ -263,12 +264,13 @@ pub fn multiexp<Q, D, G, S>(
     pool: &Worker,
     bases: S,
     density_map: D,
-    exponents: Arc<Vec<FieldBits<<G::Scalar as PrimeField>::ReprBits>>>,
+    exponents: Arc<Vec<FieldBits<<G::Scalar as PrimeFieldBits>::ReprBits>>>,
 ) -> Box<dyn Future<Item = G, Error = SynthesisError>>
 where
     for<'a> &'a Q: QueryDensity,
     D: Send + Sync + 'static + Clone + AsRef<Q>,
     G: PrimeCurve,
+    G::Scalar: PrimeFieldBits,
     S: SourceBuilder<<G as PrimeCurve>::Affine>,
 {
     let c = if exponents.len() < 32 {
