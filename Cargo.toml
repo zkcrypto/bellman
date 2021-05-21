@@ -53,7 +53,7 @@ harness = false
 maintenance = { status = "actively-developed" }
 
 [patch.crates-io]
-bls12_381 = { git = "https://github.com/nuttycom/bls12_381.git", branch = "bitvec-0.22" }
+bls12_381 = { git = "https://github.com/zkcrypto/bls12_381.git", branch = "main" }
 ff = { git = "https://github.com/zkcrypto/ff.git", branch = "main" }
 group = { git = "https://github.com/zkcrypto/group.git", branch = "main" }
 pairing = { git = "https://github.com/zkcrypto/pairing.git", branch = "main" }
