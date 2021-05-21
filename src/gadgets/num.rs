@@ -1,6 +1,6 @@
 //! Gadgets representing numbers in the scalar field of the underlying curve.
 
-use ff::PrimeField;
+use ff::{PrimeField, PrimeFieldBits};
 
 use crate::{ConstraintSystem, LinearCombination, SynthesisError, Variable};
 
@@ -69,6 +69,7 @@ impl<Scalar: PrimeField> AllocatedNum<Scalar> {
     /// congruency is not allowed.)
     pub fn to_bits_le_strict<CS>(&self, mut cs: CS) -> Result<Vec<Boolean>, SynthesisError>
     where
+        Scalar: PrimeFieldBits,
         CS: ConstraintSystem<Scalar>,
     {
         pub fn kary_and<Scalar, CS>(
@@ -195,6 +196,7 @@ impl<Scalar: PrimeField> AllocatedNum<Scalar> {
     /// "in the field."
     pub fn to_bits_le<CS>(&self, mut cs: CS) -> Result<Vec<Boolean>, SynthesisError>
     where
+        Scalar: PrimeFieldBits,
         CS: ConstraintSystem<Scalar>,
     {
         let bits = boolean::field_into_allocated_bits_le(&mut cs, self.value)?;
@@ -415,7 +417,7 @@ impl<Scalar: PrimeField> Num<Scalar> {
 mod test {
     use crate::ConstraintSystem;
     use bls12_381::Scalar;
-    use ff::{Field, PrimeField};
+    use ff::{Field, PrimeField, PrimeFieldBits};
     use rand_core::SeedableRng;
     use rand_xorshift::XorShiftRng;
     use std::ops::{Neg, SubAssign};

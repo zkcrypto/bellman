@@ -1,4 +1,4 @@
-use ff::{Field, FieldBits, PrimeField};
+use ff::{Field, FieldBits, PrimeField, PrimeFieldBits};
 use group::{
     prime::{PrimeCurve, PrimeCurveAffine, PrimeGroup},
     Curve, Group, GroupEncoding, UncompressedEncoding, WnafGroup,
@@ -288,7 +288,6 @@ impl Default for FrRepr {
 
 impl PrimeField for Fr {
     type Repr = FrRepr;
-    type ReprBits = u64;
 
     const NUM_BITS: u32 = 16;
     const CAPACITY: u32 = 15;
@@ -307,16 +306,8 @@ impl PrimeField for Fr {
         FrRepr::from(*self)
     }
 
-    fn to_le_bits(&self) -> FieldBits<Self::ReprBits> {
-        FieldBits::new((self.0).0 as u64)
-    }
-
     fn is_odd(&self) -> bool {
         (self.0).0 % 2 != 0
-    }
-
-    fn char_le_bits() -> FieldBits<Self::ReprBits> {
-        FieldBits::new(MODULUS_R.0 as u64)
     }
 
     fn multiplicative_generator() -> Fr {
@@ -325,6 +316,18 @@ impl PrimeField for Fr {
 
     fn root_of_unity() -> Fr {
         Fr(Wrapping(57751))
+    }
+}
+
+impl PrimeFieldBits for Fr {
+    type ReprBits = u64;
+
+    fn to_le_bits(&self) -> FieldBits<Self::ReprBits> {
+        FieldBits::new((self.0).0 as u64)
+    }
+
+    fn char_le_bits() -> FieldBits<Self::ReprBits> {
+        FieldBits::new(MODULUS_R.0 as u64)
     }
 }
 
