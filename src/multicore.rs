@@ -18,15 +18,10 @@ mod implementation {
     static WORKER_SPAWN_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
     lazy_static! {
-        static ref NUM_CPUS: usize = if let Ok(num) = env::var("BELLMAN_NUM_CPUS") {
-            if let Ok(num) = num.parse() {
-                num
-            } else {
-                num_cpus::get()
-            }
-        } else {
-            num_cpus::get()
-        };
+        static ref NUM_CPUS: usize = env::var("BELLMAN_NUM_CPUS")
+            .map_err(|_| ())
+            .and_then(|num| num.parse().map_err(|_| ()))
+            .unwrap_or_else(|_| num_cpus::get());
         // See Worker::compute below for a description of this.
         static ref WORKER_SPAWN_MAX_COUNT: usize = *NUM_CPUS * 4;
         pub static ref THREAD_POOL: rayon::ThreadPool = rayon::ThreadPoolBuilder::new()
