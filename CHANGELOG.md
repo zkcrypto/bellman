@@ -6,6 +6,22 @@ and this project adheres to Rust's notion of
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+- `BELLMAN_NUM_CPUS` environment variable, which can be used to control the
+  number of logical CPUs that `bellman` will use when the (default) `multicore`
+  feature flag is enabled.
+- `bellman::multicore::Waiter`
+
+### Changed
+- `bellman::multicore` has migrated from `crossbeam` to `rayon`:
+  - `bellman::multicore::Worker::compute` now returns
+    `bellman::multicore::Waiter`.
+  - `bellman::multiexp::multiexp` now returns
+    `bellman::multicore::Waiter<Result<G, SynthesisError>>` instead of
+    `Box<dyn Future<Item = G, Error = SynthesisError>>`.
+
+### Removed
+- `bellman::multicore::WorkerFuture` (replaced by `Waiter`).
 
 ## [0.10.0] - 2021-06-04
 ### Added
