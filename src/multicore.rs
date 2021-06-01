@@ -45,12 +45,7 @@ mod implementation {
             R: Send + 'static,
         {
             let (sender, receiver) = bounded(1);
-
-            let thread_index = if THREAD_POOL.current_thread_index().is_some() {
-                THREAD_POOL.current_thread_index().unwrap()
-            } else {
-                0
-            };
+            let thread_index = THREAD_POOL.current_thread_index().unwrap_or(0);
 
             // We keep track here of how many times spawn has been called.
             // It can be called without limit, each time, putting a
