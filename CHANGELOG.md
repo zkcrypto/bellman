@@ -9,7 +9,8 @@ and this project adheres to Rust's notion of
 ### Added
 - `BELLMAN_NUM_CPUS` environment variable, which can be used to control the
   number of logical CPUs that `bellman` will use when the (default) `multicore`
-  feature flag is enabled.
+  feature flag is enabled. The default (which has not changed) is to use the
+  `num_cpus` crate to determine the number of logical CPUs.
 - `bellman::multicore::Waiter`
 
 ### Changed

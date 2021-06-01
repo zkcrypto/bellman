@@ -114,7 +114,7 @@ mod implementation {
             self.receiver.recv().unwrap()
         }
 
-        /// One off sending.
+        /// One-off sending.
         pub fn done(val: T) -> Self {
             let (sender, receiver) = bounded(1);
             sender.send(val).unwrap();
@@ -185,10 +185,10 @@ mod implementation {
     impl<T> Waiter<T> {
         /// Wait for the result.
         pub fn wait(&mut self) -> T {
-            self.val.take().unwrap()
+            self.val.take().expect("unmet data dependency")
         }
 
-        /// One off sending.
+        /// One-off sending.
         pub fn done(val: T) -> Self {
             Waiter { val: Some(val) }
         }
