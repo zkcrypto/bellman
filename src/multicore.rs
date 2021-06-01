@@ -111,9 +111,10 @@ mod implementation {
         /// Wait for the result.
         pub fn wait(&self) -> T {
             if THREAD_POOL.current_thread_index().is_some() {
-                // Calling `wait()` from within the worker thread pool can lead to dead logs
-                error!("The wait call should never be done inside the worker thread pool");
-                debug_assert!(false);
+                let msg = "wait() cannot be called from within the worker thread pool since that would lead to deadlocks";
+                // panic! doesn't necessarily kill the process, so we log as well.
+                error!("{}", msg);
+                panic!("{}", msg);
             }
             self.receiver.recv().unwrap()
         }
