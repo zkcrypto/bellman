@@ -6,6 +6,8 @@ and this project adheres to Rust's notion of
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [0.10.0] - 2021-06-04
 ### Added
 - `bellman::groth16::batch::Verifier`, for performing batched Groth16 proof
   verification.
