@@ -7,10 +7,11 @@ and this project adheres to Rust's notion of
 
 ## [Unreleased]
 ### Added
-- `BELLMAN_NUM_CPUS` environment variable, which can be used to control the
-  number of logical CPUs that `bellman` will use when the (default) `multicore`
-  feature flag is enabled. The default (which has not changed) is to use the
-  `num_cpus` crate to determine the number of logical CPUs.
+- `bellman` now uses `rayon` for multithreading when the (default) `multicore`
+  feature flag is enabled. This means that, when this flag is enabled, the
+  `RAYON_NUM_THREADS` environment variable controls the number of threads that
+  `bellman` will use. The default, which has not changed, is to use the same
+  number of threads as logical CPUs.
 - `bellman::multicore::Waiter`
 
 ### Changed
