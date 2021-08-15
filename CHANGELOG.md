@@ -21,6 +21,7 @@ and this project adheres to Rust's notion of
   - `bellman::multiexp::multiexp` now returns
     `bellman::multicore::Waiter<Result<G, SynthesisError>>` instead of
     `Box<dyn Future<Item = G, Error = SynthesisError>>`.
+  - `bellman::multicore::log_num_cpus` is renamed to `log_num_threads`.
 
 ### Removed
 - `bellman::multicore::WorkerFuture` (replaced by `Waiter`).
