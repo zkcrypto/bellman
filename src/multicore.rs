@@ -16,10 +16,6 @@ mod implementation {
     lazy_static! {
         // See Worker::compute below for a description of this.
         static ref WORKER_SPAWN_MAX_COUNT: usize = current_num_threads() * 4;
-        static ref OVERFLOW_THREAD_POOL: rayon::ThreadPool = rayon::ThreadPoolBuilder::new()
-            .num_threads(current_num_threads())
-            .build()
-            .unwrap();
     }
 
     #[derive(Clone, Default)]
@@ -58,12 +54,10 @@ mod implementation {
             // minimize the chances of memory exhaustion.
             if previous_count > *WORKER_SPAWN_MAX_COUNT {
                 let thread_index = rayon::current_thread_index().unwrap_or(0);
-                OVERFLOW_THREAD_POOL.install(move || {
-                    trace!("[{}, {}] switching to install to help clear backlog [threads: current {}, overflow {}, requested {}]",
+                rayon::scope(move |_| {
+                    trace!("[{}] switching to scope to help clear backlog [threads: current {}, requested {}]",
                         thread_index,
-                        OVERFLOW_THREAD_POOL.current_thread_index().unwrap_or(0),
                         current_num_threads(),
-                        OVERFLOW_THREAD_POOL.current_num_threads(),
                         WORKER_SPAWN_COUNTER.load(Ordering::SeqCst));
                     let res = f();
                     sender.send(res).unwrap();
@@ -103,7 +97,7 @@ mod implementation {
     impl<T> Waiter<T> {
         /// Wait for the result.
         pub fn wait(&self) -> T {
-            // This will be Some if this thread is in either the global or overflow thread pool.
+            // This will be Some if this thread is in the global thread pool.
             if rayon::current_thread_index().is_some() {
                 let msg = "wait() cannot be called from within a thread pool since that would lead to deadlocks";
                 // panic! doesn't necessarily kill the process, so we log as well.
