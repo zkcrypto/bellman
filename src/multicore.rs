@@ -151,7 +151,7 @@ mod implementation {
             Worker
         }
 
-        pub fn log_num_cpus(&self) -> u32 {
+        pub fn log_num_threads(&self) -> u32 {
             0
         }
 
