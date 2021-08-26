@@ -4,30 +4,21 @@
 
 #[cfg(feature = "multicore")]
 mod implementation {
-    use std::env;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     use crossbeam_channel::{bounded, Receiver};
     use lazy_static::lazy_static;
     use log::{error, trace};
-    use num_cpus;
+    use rayon::current_num_threads;
 
     static WORKER_SPAWN_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
     lazy_static! {
-        static ref NUM_CPUS: usize = env::var("BELLMAN_NUM_CPUS")
-            .map_err(|_| ())
-            .and_then(|num| num.parse().map_err(|_| ()))
-            .unwrap_or_else(|_| num_cpus::get());
         // See Worker::compute below for a description of this.
-        static ref WORKER_SPAWN_MAX_COUNT: usize = *NUM_CPUS * 4;
-        pub static ref THREAD_POOL: rayon::ThreadPool = rayon::ThreadPoolBuilder::new()
-            .num_threads(*NUM_CPUS)
-            .build()
-            .unwrap();
+        static ref WORKER_SPAWN_MAX_COUNT: usize = current_num_threads() * 4;
     }
 
-    #[derive(Clone)]
+    #[derive(Clone, Default)]
     pub struct Worker {}
 
     impl Worker {
@@ -35,8 +26,8 @@ mod implementation {
             Worker {}
         }
 
-        pub fn log_num_cpus(&self) -> u32 {
-            log2_floor(*NUM_CPUS)
+        pub fn log_num_threads(&self) -> u32 {
+            log2_floor(current_num_threads())
         }
 
         pub fn compute<F, R>(&self, f: F) -> Waiter<R>
@@ -45,7 +36,6 @@ mod implementation {
             R: Send + 'static,
         {
             let (sender, receiver) = bounded(1);
-            let thread_index = THREAD_POOL.current_thread_index().unwrap_or(0);
 
             // We keep track here of how many times spawn has been called.
             // It can be called without limit, each time, putting a
@@ -63,17 +53,18 @@ mod implementation {
             // install call to help clear the growing work queue and
             // minimize the chances of memory exhaustion.
             if previous_count > *WORKER_SPAWN_MAX_COUNT {
-                THREAD_POOL.install(move || {
-                    trace!("[{}] switching to install to help clear backlog[current threads {}, threads requested {}]",
-                           thread_index,
-                           THREAD_POOL.current_num_threads(),
-                           WORKER_SPAWN_COUNTER.load(Ordering::SeqCst));
+                let thread_index = rayon::current_thread_index().unwrap_or(0);
+                rayon::scope(move |_| {
+                    trace!("[{}] switching to scope to help clear backlog [threads: current {}, requested {}]",
+                        thread_index,
+                        current_num_threads(),
+                        WORKER_SPAWN_COUNTER.load(Ordering::SeqCst));
                     let res = f();
                     sender.send(res).unwrap();
                     WORKER_SPAWN_COUNTER.fetch_sub(1, Ordering::SeqCst);
                 });
             } else {
-                THREAD_POOL.spawn(move || {
+                rayon::spawn(move || {
                     let res = f();
                     sender.send(res).unwrap();
                     WORKER_SPAWN_COUNTER.fetch_sub(1, Ordering::SeqCst);
@@ -88,13 +79,14 @@ mod implementation {
             F: FnOnce(&rayon::Scope<'a>, usize) -> R + Send,
             R: Send,
         {
-            let chunk_size = if elements < *NUM_CPUS {
+            let num_threads = current_num_threads();
+            let chunk_size = if elements < num_threads {
                 1
             } else {
-                elements / *NUM_CPUS
+                elements / num_threads
             };
 
-            THREAD_POOL.scope(|scope| f(scope, chunk_size))
+            rayon::scope(|scope| f(scope, chunk_size))
         }
     }
 
@@ -105,8 +97,9 @@ mod implementation {
     impl<T> Waiter<T> {
         /// Wait for the result.
         pub fn wait(&self) -> T {
-            if THREAD_POOL.current_thread_index().is_some() {
-                let msg = "wait() cannot be called from within the worker thread pool since that would lead to deadlocks";
+            // This will be Some if this thread is in the global thread pool.
+            if rayon::current_thread_index().is_some() {
+                let msg = "wait() cannot be called from within a thread pool since that would lead to deadlocks";
                 // panic! doesn't necessarily kill the process, so we log as well.
                 error!("{}", msg);
                 panic!("{}", msg);
@@ -158,7 +151,7 @@ mod implementation {
             Worker
         }
 
-        pub fn log_num_cpus(&self) -> u32 {
+        pub fn log_num_threads(&self) -> u32 {
             0
         }
 

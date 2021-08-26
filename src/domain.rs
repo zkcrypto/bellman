@@ -259,7 +259,7 @@ impl<S: PrimeField> Group<S> for Scalar<S> {
 }
 
 fn best_fft<S: PrimeField, T: Group<S>>(a: &mut [T], worker: &Worker, omega: &S, log_n: u32) {
-    let log_cpus = worker.log_num_cpus();
+    let log_cpus = worker.log_num_threads();
 
     if log_n <= log_cpus {
         serial_fft(a, omega, log_n);
