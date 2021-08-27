@@ -49,9 +49,10 @@ mod implementation {
             // If the number of spawns requested has exceeded the number
             // of cores available for processing by some factor (the
             // default being 4), instead of requesting that we spawn a new
-            // thread, we instead execute the closure in the context of an
-            // install call to help clear the growing work queue and
-            // minimize the chances of memory exhaustion.
+            // thread, we instead execute the closure in the context of a
+            // scope call (which blocks the current thread) to help clear
+            // the growing work queue and minimize the chances of memory
+            // exhaustion.
             if previous_count > *WORKER_SPAWN_MAX_COUNT {
                 let thread_index = rayon::current_thread_index().unwrap_or(0);
                 rayon::scope(move |_| {
