@@ -79,6 +79,7 @@ const SIGMA: [[usize; 16]; 10] = [
        END FUNCTION.
 */
 
+#[allow(clippy::many_single_char_names)]
 fn mixing_g<Scalar: PrimeField, CS: ConstraintSystem<Scalar>, M>(
     mut cs: M,
     v: &mut [UInt32],
@@ -164,6 +165,7 @@ where
        END FUNCTION.
 */
 
+#[allow(clippy::many_single_char_names)]
 fn blake2s_compression<Scalar: PrimeField, CS: ConstraintSystem<Scalar>>(
     mut cs: CS,
     h: &mut [UInt32],

@@ -174,6 +174,7 @@ where
     create_proof::<E, C, P>(circuit, params, r, s)
 }
 
+#[allow(clippy::many_single_char_names)]
 pub fn create_proof<E, C, P: ParameterSource<E>>(
     circuit: C,
     mut params: P,

@@ -77,6 +77,7 @@ fn get_sha256_iv() -> Vec<UInt32> {
     IV.iter().map(|&v| UInt32::constant(v)).collect()
 }
 
+#[allow(clippy::many_single_char_names)]
 fn sha256_compression_function<Scalar, CS>(
     cs: CS,
     input: &[Boolean],
