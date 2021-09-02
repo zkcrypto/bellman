@@ -155,6 +155,7 @@ impl<Scalar: PrimeField> ConstraintSystem<Scalar> for KeypairAssembly<Scalar> {
 }
 
 /// Create parameters for a circuit, given some toxic waste.
+#[allow(clippy::too_many_arguments)]
 pub fn generate_parameters<E, C>(
     circuit: C,
     g1: E::G1,
@@ -300,6 +301,7 @@ where
     let mut ic = vec![E::G1Affine::identity(); assembly.num_inputs];
     let mut l = vec![E::G1Affine::identity(); assembly.num_aux];
 
+    #[allow(clippy::too_many_arguments)]
     fn eval<E: Engine>(
         // wNAF window tables
         g1_wnaf: &Wnaf<usize, &[E::G1], &mut Vec<i64>>,
