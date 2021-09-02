@@ -6,6 +6,25 @@ and this project adheres to Rust's notion of
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+- `bellman` now uses `rayon` for multithreading when the (default) `multicore`
+  feature flag is enabled. This means that, when this flag is enabled, the
+  `RAYON_NUM_THREADS` environment variable controls the number of threads that
+  `bellman` will use. The default, which has not changed, is to use the same
+  number of threads as logical CPUs.
+- `bellman::multicore::Waiter`
+
+### Changed
+- `bellman::multicore` has migrated from `crossbeam` to `rayon`:
+  - `bellman::multicore::Worker::compute` now returns
+    `bellman::multicore::Waiter`.
+  - `bellman::multiexp::multiexp` now returns
+    `bellman::multicore::Waiter<Result<G, SynthesisError>>` instead of
+    `Box<dyn Future<Item = G, Error = SynthesisError>>`.
+  - `bellman::multicore::log_num_cpus` is renamed to `log_num_threads`.
+
+### Removed
+- `bellman::multicore::WorkerFuture` (replaced by `Waiter`).
 
 ## [0.10.0] - 2021-06-04
 ### Added

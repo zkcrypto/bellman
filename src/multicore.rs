@@ -1,81 +1,119 @@
 //! An interface for dealing with the kinds of parallel computations involved in
-//! `bellman`. It's currently just a thin wrapper around [`CpuPool`] and
-//! [`crossbeam`] but may be extended in the future to allow for various
-//! parallelism strategies.
-//!
-//! [`CpuPool`]: futures_cpupool::CpuPool
+//! `bellman`. It's currently just a thin wrapper around [`rayon`] but may be
+//! extended in the future to allow for various parallelism strategies.
 
 #[cfg(feature = "multicore")]
 mod implementation {
-    use crossbeam::{self, thread::Scope};
-    use futures::{Future, IntoFuture, Poll};
-    use futures_cpupool::{CpuFuture, CpuPool};
-    use num_cpus;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
-    #[derive(Clone)]
-    pub struct Worker {
-        cpus: usize,
-        pool: CpuPool,
+    use crossbeam_channel::{bounded, Receiver};
+    use lazy_static::lazy_static;
+    use log::{error, trace};
+    use rayon::current_num_threads;
+
+    static WORKER_SPAWN_COUNTER: AtomicUsize = AtomicUsize::new(0);
+
+    lazy_static! {
+        // See Worker::compute below for a description of this.
+        static ref WORKER_SPAWN_MAX_COUNT: usize = current_num_threads() * 4;
     }
 
+    #[derive(Clone, Default)]
+    pub struct Worker {}
+
     impl Worker {
-        // We don't expose this outside the library so that
-        // all `Worker` instances have the same number of
-        // CPUs configured.
-        pub(crate) fn new_with_cpus(cpus: usize) -> Worker {
-            Worker {
-                cpus,
-                pool: CpuPool::new(cpus),
-            }
-        }
-
         pub fn new() -> Worker {
-            Self::new_with_cpus(num_cpus::get())
+            Worker {}
         }
 
-        pub fn log_num_cpus(&self) -> u32 {
-            log2_floor(self.cpus)
+        pub fn log_num_threads(&self) -> u32 {
+            log2_floor(current_num_threads())
         }
 
-        pub fn compute<F, R>(&self, f: F) -> WorkerFuture<R::Item, R::Error>
+        pub fn compute<F, R>(&self, f: F) -> Waiter<R>
         where
             F: FnOnce() -> R + Send + 'static,
-            R: IntoFuture + 'static,
-            R::Future: Send + 'static,
-            R::Item: Send + 'static,
-            R::Error: Send + 'static,
+            R: Send + 'static,
         {
-            WorkerFuture {
-                future: self.pool.spawn_fn(f),
+            let (sender, receiver) = bounded(1);
+
+            // We keep track here of how many times spawn has been called.
+            // It can be called without limit, each time, putting a
+            // request for a new thread to execute a method on the
+            // ThreadPool.  However, if we allow it to be called without
+            // limits, we run the risk of memory exhaustion due to limited
+            // stack space consumed by all of the pending closures to be
+            // executed.
+            let previous_count = WORKER_SPAWN_COUNTER.fetch_add(1, Ordering::SeqCst);
+
+            // If the number of spawns requested has exceeded the number
+            // of cores available for processing by some factor (the
+            // default being 4), instead of requesting that we spawn a new
+            // thread, we instead execute the closure in the context of a
+            // scope call (which blocks the current thread) to help clear
+            // the growing work queue and minimize the chances of memory
+            // exhaustion.
+            if previous_count > *WORKER_SPAWN_MAX_COUNT {
+                let thread_index = rayon::current_thread_index().unwrap_or(0);
+                rayon::scope(move |_| {
+                    trace!("[{}] switching to scope to help clear backlog [threads: current {}, requested {}]",
+                        thread_index,
+                        current_num_threads(),
+                        WORKER_SPAWN_COUNTER.load(Ordering::SeqCst));
+                    let res = f();
+                    sender.send(res).unwrap();
+                    WORKER_SPAWN_COUNTER.fetch_sub(1, Ordering::SeqCst);
+                });
+            } else {
+                rayon::spawn(move || {
+                    let res = f();
+                    sender.send(res).unwrap();
+                    WORKER_SPAWN_COUNTER.fetch_sub(1, Ordering::SeqCst);
+                });
             }
+
+            Waiter { receiver }
         }
 
         pub fn scope<'a, F, R>(&self, elements: usize, f: F) -> R
         where
-            F: FnOnce(&Scope<'a>, usize) -> R,
+            F: FnOnce(&rayon::Scope<'a>, usize) -> R + Send,
+            R: Send,
         {
-            let chunk_size = if elements < self.cpus {
+            let num_threads = current_num_threads();
+            let chunk_size = if elements < num_threads {
                 1
             } else {
-                elements / self.cpus
+                elements / num_threads
             };
 
-            // TODO: Handle case where threads fail
-            crossbeam::scope(|scope| f(scope, chunk_size))
-                .expect("Threads aren't allowed to fail yet")
+            rayon::scope(|scope| f(scope, chunk_size))
         }
     }
 
-    pub struct WorkerFuture<T, E> {
-        future: CpuFuture<T, E>,
+    pub struct Waiter<T> {
+        receiver: Receiver<T>,
     }
 
-    impl<T: Send + 'static, E: Send + 'static> Future for WorkerFuture<T, E> {
-        type Item = T;
-        type Error = E;
+    impl<T> Waiter<T> {
+        /// Wait for the result.
+        pub fn wait(&self) -> T {
+            // This will be Some if this thread is in the global thread pool.
+            if rayon::current_thread_index().is_some() {
+                let msg = "wait() cannot be called from within a thread pool since that would lead to deadlocks";
+                // panic! doesn't necessarily kill the process, so we log as well.
+                error!("{}", msg);
+                panic!("{}", msg);
+            }
+            self.receiver.recv().unwrap()
+        }
 
-        fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-            self.future.poll()
+        /// One-off sending.
+        pub fn done(val: T) -> Self {
+            let (sender, receiver) = bounded(1);
+            sender.send(val).unwrap();
+
+            Waiter { receiver }
         }
     }
 
@@ -106,8 +144,6 @@ mod implementation {
 
 #[cfg(not(feature = "multicore"))]
 mod implementation {
-    use futures::{future, Future, IntoFuture, Poll};
-
     #[derive(Clone)]
     pub struct Worker;
 
@@ -116,19 +152,16 @@ mod implementation {
             Worker
         }
 
-        pub fn log_num_cpus(&self) -> u32 {
+        pub fn log_num_threads(&self) -> u32 {
             0
         }
 
-        pub fn compute<F, R>(&self, f: F) -> R::Future
+        pub fn compute<F, R>(&self, f: F) -> Waiter<R>
         where
             F: FnOnce() -> R + Send + 'static,
-            R: IntoFuture + 'static,
-            R::Future: Send + 'static,
-            R::Item: Send + 'static,
-            R::Error: Send + 'static,
+            R: Send + 'static,
         {
-            f().into_future()
+            Waiter::done(f())
         }
 
         pub fn scope<F, R>(&self, elements: usize, f: F) -> R
@@ -139,16 +172,19 @@ mod implementation {
         }
     }
 
-    pub struct WorkerFuture<T, E> {
-        future: future::FutureResult<T, E>,
+    pub struct Waiter<T> {
+        val: Option<T>,
     }
 
-    impl<T: Send + 'static, E: Send + 'static> Future for WorkerFuture<T, E> {
-        type Item = T;
-        type Error = E;
+    impl<T> Waiter<T> {
+        /// Wait for the result.
+        pub fn wait(&mut self) -> T {
+            self.val.take().expect("unmet data dependency")
+        }
 
-        fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-            self.future.poll()
+        /// One-off sending.
+        pub fn done(val: T) -> Self {
+            Waiter { val: Some(val) }
         }
     }
 
@@ -157,6 +193,21 @@ mod implementation {
     impl DummyScope {
         pub fn spawn<F: FnOnce(&DummyScope)>(&self, f: F) {
             f(self);
+        }
+    }
+
+    /// A fake rayon ParallelIterator that is just a serial iterator.
+    pub(crate) trait FakeParallelIterator {
+        type Iter: Iterator<Item = Self::Item>;
+        type Item: Send;
+        fn into_par_iter(self) -> Self::Iter;
+    }
+
+    impl FakeParallelIterator for core::ops::Range<u32> {
+        type Iter = Self;
+        type Item = u32;
+        fn into_par_iter(self) -> Self::Iter {
+            self
         }
     }
 }
