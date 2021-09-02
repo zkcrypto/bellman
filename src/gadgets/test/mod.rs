@@ -135,6 +135,12 @@ fn eval_lc<Scalar: PrimeField>(
     acc
 }
 
+impl<Scalar: PrimeField> Default for TestConstraintSystem<Scalar> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<Scalar: PrimeField> TestConstraintSystem<Scalar> {
     pub fn new() -> TestConstraintSystem<Scalar> {
         let mut map = HashMap::new();

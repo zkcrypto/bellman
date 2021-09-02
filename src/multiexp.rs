@@ -130,6 +130,12 @@ impl<'a> QueryDensity for &'a DensityTracker {
     }
 }
 
+impl Default for DensityTracker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DensityTracker {
     pub fn new() -> DensityTracker {
         DensityTracker { bv: BitVec::new() }

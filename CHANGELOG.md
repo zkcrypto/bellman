@@ -13,6 +13,8 @@ and this project adheres to Rust's notion of
   `bellman` will use. The default, which has not changed, is to use the same
   number of threads as logical CPUs.
 - `bellman::multicore::Waiter`
+- `Default` bound for `bellman::multiexp::DensityTracker`.
+- `Default` bound for `bellman::gadgets::test::TestConstraintSystem`.
 
 ### Changed
 - `bellman::multicore` has migrated from `crossbeam` to `rayon`:
