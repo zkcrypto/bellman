@@ -124,13 +124,13 @@ where
                 }
             };
 
-            ml_terms.push(((proof.a * &z).into(), (-proof.b).into()));
+            ml_terms.push(((proof.a * z).into(), (-proof.b).into()));
 
             acc_Gammas[0] += &z; // a_0 is implicitly set to 1
             for (a_i, acc_Gamma_i) in Iterator::zip(inputs.iter(), acc_Gammas.iter_mut().skip(1)) {
                 *acc_Gamma_i += &(z * a_i);
             }
-            acc_Delta += proof.c * &z;
+            acc_Delta += proof.c * z;
             acc_Y += &z;
         }
 
@@ -155,7 +155,7 @@ where
         // to our Miller loop terms because
         //     [acc_Y]⋅e(alpha_g1, beta_g2) = e([acc_Y]⋅alpha_g1, beta_g2)
         ml_terms.push((
-            E::G1Affine::from(vk.alpha_g1 * &acc_Y),
+            E::G1Affine::from(vk.alpha_g1 * acc_Y),
             E::G2Prepared::from(vk.beta_g2),
         ));
 

@@ -181,7 +181,7 @@ impl<S: PrimeField, G: Group<S>> EvaluationDomain<S, G> {
             {
                 scope.spawn(move |_scope| {
                     for (a, b) in a.iter_mut().zip(b.iter()) {
-                        a.group_sub_assign(&b);
+                        a.group_sub_assign(b);
                     }
                 });
             }
