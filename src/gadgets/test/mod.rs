@@ -20,16 +20,18 @@ enum NamedObject {
     Namespace,
 }
 
+type NamedConstraint<Scalar> = (
+    LinearCombination<Scalar>,
+    LinearCombination<Scalar>,
+    LinearCombination<Scalar>,
+    String,
+);
+
 /// Constraint system for testing purposes.
 pub struct TestConstraintSystem<Scalar: PrimeField> {
     named_objects: HashMap<String, NamedObject>,
     current_namespace: Vec<String>,
-    constraints: Vec<(
-        LinearCombination<Scalar>,
-        LinearCombination<Scalar>,
-        LinearCombination<Scalar>,
-        String,
-    )>,
+    constraints: Vec<NamedConstraint<Scalar>>,
     inputs: Vec<(Scalar, String)>,
     aux: Vec<(Scalar, String)>,
 }
@@ -206,7 +208,7 @@ impl<Scalar: PrimeField> TestConstraintSystem<Scalar> {
         };
 
         for &(ref a, ref b, ref c, ref name) in &self.constraints {
-            write!(&mut s, "\n").unwrap();
+            writeln!(&mut s).unwrap();
 
             write!(&mut s, "{}: ", name).unwrap();
             pp(&mut s, a);
@@ -216,7 +218,7 @@ impl<Scalar: PrimeField> TestConstraintSystem<Scalar> {
             pp(&mut s, c);
         }
 
-        write!(&mut s, "\n").unwrap();
+        writeln!(&mut s).unwrap();
 
         s
     }

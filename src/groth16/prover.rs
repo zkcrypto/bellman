@@ -43,12 +43,10 @@ fn eval<S: PrimeField>(
             }
         }
 
-        if coeff == S::one() {
-            acc.add_assign(&tmp);
-        } else {
-            tmp.mul_assign(&coeff);
-            acc.add_assign(&tmp);
+        if coeff != S::one() {
+            tmp *= coeff;
         }
+        acc += tmp;
     }
 
     acc

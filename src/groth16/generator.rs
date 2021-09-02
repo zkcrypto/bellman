@@ -395,7 +395,6 @@ where
 
                         // Compute B query (in G1/G2)
                         if !bt.is_zero() {
-                            ();
                             *b_g1 = g1_wnaf.scalar(&bt);
                             *b_g2 = g2_wnaf.scalar(&bt);
                         }

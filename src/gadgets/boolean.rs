@@ -369,10 +369,7 @@ pub enum Boolean {
 
 impl Boolean {
     pub fn is_constant(&self) -> bool {
-        match *self {
-            Boolean::Constant(_) => true,
-            _ => false,
-        }
+        matches!(*self, Boolean::Constant(_))
     }
 
     pub fn enforce_equal<Scalar, CS>(mut cs: CS, a: &Self, b: &Self) -> Result<(), SynthesisError>
@@ -1536,7 +1533,7 @@ mod test {
 
         assert_eq!(bits.len(), 64);
 
-        assert_eq!(bits[63 - 0].get_value().unwrap(), true);
+        assert_eq!(bits[63].get_value().unwrap(), true);
         assert_eq!(bits[63 - 1].get_value().unwrap(), true);
         assert_eq!(bits[63 - 2].get_value().unwrap(), true);
         assert_eq!(bits[63 - 3].get_value().unwrap(), false);
@@ -1562,7 +1559,7 @@ mod test {
 
         assert_eq!(bits.len(), 255);
 
-        assert_eq!(bits[254 - 0].value.unwrap(), false);
+        assert_eq!(bits[254].value.unwrap(), false);
         assert_eq!(bits[254 - 1].value.unwrap(), false);
         assert_eq!(bits[254 - 2].value.unwrap(), true);
         assert_eq!(bits[254 - 3].value.unwrap(), false);
@@ -1785,7 +1782,7 @@ mod test {
             )
             .unwrap();
 
-            assert_eq!(allocated_value.get_value().unwrap(), true);
+            assert!(allocated_value.get_value().unwrap());
             assert!(cs.is_satisfied());
         }
 

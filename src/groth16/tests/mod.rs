@@ -10,13 +10,13 @@ use crate::{Circuit, ConstraintSystem, SynthesisError};
 
 use super::{create_proof, generate_parameters, prepare_verifying_key, verify_proof};
 
-struct XORDemo<Scalar: PrimeField> {
+struct XorDemo<Scalar: PrimeField> {
     a: Option<bool>,
     b: Option<bool>,
     _marker: PhantomData<Scalar>,
 }
 
-impl<Scalar: PrimeField> Circuit<Scalar> for XORDemo<Scalar> {
+impl<Scalar: PrimeField> Circuit<Scalar> for XorDemo<Scalar> {
     fn synthesize<CS: ConstraintSystem<Scalar>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let a_var = cs.alloc(
             || "a",
@@ -99,7 +99,7 @@ fn test_xordemo() {
     let tau = Fr::from_str("3673").unwrap();
 
     let params = {
-        let c = XORDemo {
+        let c = XorDemo {
             a: None,
             b: None,
             _marker: PhantomData,
@@ -283,7 +283,7 @@ fn test_xordemo() {
     let s = Fr::from_str("17146").unwrap();
 
     let proof = {
-        let c = XORDemo {
+        let c = XorDemo {
             a: Some(true),
             b: Some(false),
             _marker: PhantomData,

@@ -304,16 +304,16 @@ mod test {
 
         synth(window_size, &constants, &mut assignment);
 
-        for b in 0..(1 << window_size) {
+        for (b, constant) in constants.iter().enumerate() {
             let mut acc = Scalar::zero();
 
-            for j in 0..(1 << window_size) {
+            for (j, value) in assignment.iter().enumerate() {
                 if j & b == j {
-                    acc.add_assign(&assignment[j]);
+                    acc.add_assign(value);
                 }
             }
 
-            assert_eq!(acc, constants[b]);
+            assert_eq!(&acc, constant);
         }
     }
 }

@@ -287,14 +287,13 @@ mod test {
         let mut input_bits: Vec<_> = (0..512).map(|_| Boolean::Constant(false)).collect();
         input_bits[0] = Boolean::Constant(true);
         let out = sha256_compression_function(&mut cs, &input_bits, &iv).unwrap();
-        let out_bits: Vec<_> = out.into_iter().flat_map(|e| e.into_bits_be()).collect();
+        let mut out = out.into_iter().flat_map(|e| e.into_bits_be());
 
         assert!(cs.is_satisfied());
         assert_eq!(cs.num_constraints(), 0);
 
         let expected = hex!("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
 
-        let mut out = out_bits.into_iter();
         for b in expected.iter() {
             for i in (0..8).rev() {
                 let c = out.next().unwrap().get_value().unwrap();

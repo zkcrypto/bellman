@@ -302,7 +302,6 @@ fn test_with_bls12() {
     use ff::Field;
     use group::{Curve, Group};
     use pairing::Engine;
-    use rand;
 
     const SAMPLES: usize = 1 << 14;
 

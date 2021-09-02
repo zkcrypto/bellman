@@ -361,11 +361,11 @@ impl UInt32 {
         // The value of the actual result is modulo 2^32
         let modular_value = result_value.map(|v| v as u32);
 
-        if all_constants && modular_value.is_some() {
+        if let (true, Some(result)) = (all_constants, modular_value) {
             // We can just return a constant, rather than
             // unpacking the result into allocated bits.
 
-            return Ok(UInt32::constant(modular_value.unwrap()));
+            return Ok(UInt32::constant(result));
         }
 
         // Storage area for the resulting bits
@@ -523,7 +523,7 @@ mod test {
                         assert!(b.get_value().unwrap() == (expected & 1 == 1));
                     }
                     Boolean::Not(ref b) => {
-                        assert!(!b.get_value().unwrap() == (expected & 1 == 1));
+                        assert!(b.get_value().unwrap() != (expected & 1 == 1));
                     }
                     Boolean::Constant(b) => {
                         assert!(b == (expected & 1 == 1));
@@ -617,7 +617,7 @@ mod test {
                         assert!(b.get_value().unwrap() == (expected & 1 == 1));
                     }
                     Boolean::Not(ref b) => {
-                        assert!(!b.get_value().unwrap() == (expected & 1 == 1));
+                        assert!(b.get_value().unwrap() != (expected & 1 == 1));
                     }
                     Boolean::Constant(_) => unreachable!(),
                 }
@@ -724,7 +724,7 @@ mod test {
                         assert!(b.get_value().unwrap() == (expected & 1 == 1));
                     }
                     Boolean::Not(ref b) => {
-                        assert!(!b.get_value().unwrap() == (expected & 1 == 1));
+                        assert!(b.get_value().unwrap() != (expected & 1 == 1));
                     }
                     Boolean::Constant(b) => {
                         assert!(*b == (expected & 1 == 1));
@@ -768,7 +768,7 @@ mod test {
                         assert!(b.get_value().unwrap() == (expected & 1 == 1));
                     }
                     Boolean::Not(ref b) => {
-                        assert!(!b.get_value().unwrap() == (expected & 1 == 1));
+                        assert!(b.get_value().unwrap() != (expected & 1 == 1));
                     }
                     Boolean::Constant(b) => {
                         assert!(*b == (expected & 1 == 1));

@@ -322,21 +322,17 @@ pub fn blake2s<Scalar: PrimeField, CS: ConstraintSystem<Scalar>>(
     assert_eq!(personalization.len(), 8);
     assert!(input.len() % 8 == 0);
 
-    let mut h = Vec::with_capacity(8);
-    h.push(UInt32::constant(0x6A09E667 ^ 0x01010000 ^ 32));
-    h.push(UInt32::constant(0xBB67AE85));
-    h.push(UInt32::constant(0x3C6EF372));
-    h.push(UInt32::constant(0xA54FF53A));
-    h.push(UInt32::constant(0x510E527F));
-    h.push(UInt32::constant(0x9B05688C));
-
-    // Personalization is stored here
-    h.push(UInt32::constant(
-        0x1F83D9AB ^ LittleEndian::read_u32(&personalization[0..4]),
-    ));
-    h.push(UInt32::constant(
-        0x5BE0CD19 ^ LittleEndian::read_u32(&personalization[4..8]),
-    ));
+    let mut h = vec![
+        UInt32::constant(0x6A09E667 ^ 0x01010000 ^ 32),
+        UInt32::constant(0xBB67AE85),
+        UInt32::constant(0x3C6EF372),
+        UInt32::constant(0xA54FF53A),
+        UInt32::constant(0x510E527F),
+        UInt32::constant(0x9B05688C),
+        // Personalization is stored here
+        UInt32::constant(0x1F83D9AB ^ LittleEndian::read_u32(&personalization[0..4])),
+        UInt32::constant(0x5BE0CD19 ^ LittleEndian::read_u32(&personalization[4..8])),
+    ];
 
     let mut blocks: Vec<Vec<UInt32>> = vec![];
 
@@ -614,7 +610,7 @@ mod test {
             hex!("a1309e334376c8f36a736a4ab0e691ef931ee3ebdb9ea96187127136fea622a1"),
             hex!("82fefff60f265cea255252f7c194a7f93965dffee0609ef74eb67f0d76cd41c6"),
         ];
-        for i in 0..2 {
+        for expected in &expecteds {
             let mut h = Blake2sParams::new()
                 .hash_length(32)
                 .personal(b"12345678")
@@ -666,7 +662,7 @@ mod test {
                 }
             }
 
-            assert_eq!(expecteds[i], hash_result.as_bytes());
+            assert_eq!(expected, hash_result.as_bytes());
         }
     }
 }
