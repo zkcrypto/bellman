@@ -17,6 +17,7 @@ and this project adheres to Rust's notion of
 - `Default` bound for `bellman::gadgets::test::TestConstraintSystem`.
 
 ### Changed
+- Bumped dependencies to `ff 0.11`, `group 0.11`, `pairing 0.21`.
 - `bellman::multicore` has migrated from `crossbeam` to `rayon`:
   - `bellman::multicore::Worker::compute` now returns
     `bellman::multicore::Waiter`.

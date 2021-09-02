@@ -626,7 +626,7 @@ mod test {
             }
 
             // Flip a bit and see if the addition constraint still works
-            if cs.get("addition/result bit 0/boolean").is_zero() {
+            if cs.get("addition/result bit 0/boolean").is_zero_vartime() {
                 cs.set("addition/result bit 0/boolean", Field::one());
             } else {
                 cs.set("addition/result bit 0/boolean", Field::zero());

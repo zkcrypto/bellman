@@ -759,7 +759,7 @@ mod test {
         assert!(cs.is_satisfied());
         cs.set("boolean", Scalar::zero());
         assert!(cs.is_satisfied());
-        cs.set("boolean", Scalar::from_str("2").unwrap());
+        cs.set("boolean", Scalar::from(2));
         assert!(!cs.is_satisfied());
         assert!(cs.which_is_unsatisfied() == Some("boolean constraint"));
     }
@@ -1548,7 +1548,7 @@ mod test {
     fn test_field_into_allocated_bits_le() {
         let mut cs = TestConstraintSystem::<Scalar>::new();
 
-        let r = Scalar::from_str(
+        let r = Scalar::from_str_vartime(
             "9147677615426976802526883532204139322118074541891858454835346926874644257775",
         )
         .unwrap();

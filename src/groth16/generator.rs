@@ -389,12 +389,12 @@ where
                         let ct = eval_at_tau(powers_of_tau, ct);
 
                         // Compute A query (in G1)
-                        if !at.is_zero() {
+                        if !at.is_zero_vartime() {
                             *a = g1_wnaf.scalar(&at);
                         }
 
                         // Compute B query (in G1/G2)
-                        if !bt.is_zero() {
+                        if !bt.is_zero_vartime() {
                             *b_g1 = g1_wnaf.scalar(&bt);
                             *b_g2 = g2_wnaf.scalar(&bt);
                         }

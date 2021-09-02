@@ -76,7 +76,7 @@ fn proc_lc<Scalar: PrimeField>(terms: &[(Variable, Scalar)]) -> BTreeMap<Ordered
     // Remove terms that have a zero coefficient to normalize
     let mut to_remove = vec![];
     for (var, coeff) in map.iter() {
-        if coeff.is_zero() {
+        if coeff.is_zero_vartime() {
             to_remove.push(*var);
         }
     }
@@ -166,7 +166,7 @@ impl<Scalar: PrimeField> TestConstraintSystem<Scalar> {
         let negone = Scalar::one().neg();
 
         let powers_of_two = (0..Scalar::NUM_BITS)
-            .map(|i| Scalar::from_str("2").unwrap().pow_vartime(&[u64::from(i)]))
+            .map(|i| Scalar::from(2).pow_vartime(&[u64::from(i)]))
             .collect::<Vec<_>>();
 
         let pp = |s: &mut String, lc: &LinearCombination<Scalar>| {
@@ -428,28 +428,25 @@ impl<Scalar: PrimeField> ConstraintSystem<Scalar> for TestConstraintSystem<Scala
 #[test]
 fn test_cs() {
     use bls12_381::Scalar;
-    use ff::PrimeField;
 
     let mut cs = TestConstraintSystem::new();
     assert!(cs.is_satisfied());
     assert_eq!(cs.num_constraints(), 0);
     let a = cs
         .namespace(|| "a")
-        .alloc(|| "var", || Ok(Scalar::from_str("10").unwrap()))
+        .alloc(|| "var", || Ok(Scalar::from(10)))
         .unwrap();
     let b = cs
         .namespace(|| "b")
-        .alloc(|| "var", || Ok(Scalar::from_str("4").unwrap()))
+        .alloc(|| "var", || Ok(Scalar::from(4)))
         .unwrap();
-    let c = cs
-        .alloc(|| "product", || Ok(Scalar::from_str("40").unwrap()))
-        .unwrap();
+    let c = cs.alloc(|| "product", || Ok(Scalar::from(40))).unwrap();
 
     cs.enforce(|| "mult", |lc| lc + a, |lc| lc + b, |lc| lc + c);
     assert!(cs.is_satisfied());
     assert_eq!(cs.num_constraints(), 1);
 
-    cs.set("a/var", Scalar::from_str("4").unwrap());
+    cs.set("a/var", Scalar::from(4));
 
     let one = TestConstraintSystem::<Scalar>::one();
     cs.enforce(|| "eq", |lc| lc + a, |lc| lc + one, |lc| lc + b);
@@ -457,9 +454,9 @@ fn test_cs() {
     assert!(!cs.is_satisfied());
     assert!(cs.which_is_unsatisfied() == Some("mult"));
 
-    assert!(cs.get("product") == Scalar::from_str("40").unwrap());
+    assert!(cs.get("product") == Scalar::from(40));
 
-    cs.set("product", Scalar::from_str("16").unwrap());
+    cs.set("product", Scalar::from(16));
     assert!(cs.is_satisfied());
 
     {

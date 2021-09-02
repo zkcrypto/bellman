@@ -50,9 +50,7 @@ impl<Scalar: PrimeField, CS: ConstraintSystem<Scalar>> MultiEq<Scalar, CS> {
 
         assert!((Scalar::CAPACITY as usize) > (self.bits_used + num_bits));
 
-        let coeff = Scalar::from_str("2")
-            .unwrap()
-            .pow_vartime(&[self.bits_used as u64]);
+        let coeff = Scalar::from(2).pow_vartime(&[self.bits_used as u64]);
         self.lhs = self.lhs.clone() + (coeff, lhs);
         self.rhs = self.rhs.clone() + (coeff, rhs);
         self.bits_used += num_bits;

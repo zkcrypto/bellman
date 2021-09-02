@@ -290,7 +290,7 @@ impl<Scalar: PrimeField> AllocatedNum<Scalar> {
             || {
                 let tmp = *self.value.get()?;
 
-                if tmp.is_zero() {
+                if tmp.is_zero_vartime() {
                     Err(SynthesisError::DivisionByZero)
                 } else {
                     Ok(tmp.invert().unwrap())
@@ -439,13 +439,13 @@ mod test {
     fn test_num_squaring() {
         let mut cs = TestConstraintSystem::new();
 
-        let n = AllocatedNum::alloc(&mut cs, || Ok(Scalar::from_str("3").unwrap())).unwrap();
+        let n = AllocatedNum::alloc(&mut cs, || Ok(Scalar::from(3))).unwrap();
         let n2 = n.square(&mut cs).unwrap();
 
         assert!(cs.is_satisfied());
-        assert!(cs.get("squared num") == Scalar::from_str("9").unwrap());
-        assert!(n2.value.unwrap() == Scalar::from_str("9").unwrap());
-        cs.set("squared num", Scalar::from_str("10").unwrap());
+        assert!(cs.get("squared num") == Scalar::from(9));
+        assert!(n2.value.unwrap() == Scalar::from(9));
+        cs.set("squared num", Scalar::from(10));
         assert!(!cs.is_satisfied());
     }
 
@@ -453,16 +453,14 @@ mod test {
     fn test_num_multiplication() {
         let mut cs = TestConstraintSystem::new();
 
-        let n = AllocatedNum::alloc(cs.namespace(|| "a"), || Ok(Scalar::from_str("12").unwrap()))
-            .unwrap();
-        let n2 = AllocatedNum::alloc(cs.namespace(|| "b"), || Ok(Scalar::from_str("10").unwrap()))
-            .unwrap();
+        let n = AllocatedNum::alloc(cs.namespace(|| "a"), || Ok(Scalar::from(12))).unwrap();
+        let n2 = AllocatedNum::alloc(cs.namespace(|| "b"), || Ok(Scalar::from(10))).unwrap();
         let n3 = n.mul(&mut cs, &n2).unwrap();
 
         assert!(cs.is_satisfied());
-        assert!(cs.get("product num") == Scalar::from_str("120").unwrap());
-        assert!(n3.value.unwrap() == Scalar::from_str("120").unwrap());
-        cs.set("product num", Scalar::from_str("121").unwrap());
+        assert!(cs.get("product num") == Scalar::from(120));
+        assert!(n3.value.unwrap() == Scalar::from(120));
+        cs.set("product num", Scalar::from(121));
         assert!(!cs.is_satisfied());
     }
 
@@ -510,11 +508,11 @@ mod test {
         {
             let mut cs = TestConstraintSystem::new();
 
-            let n = AllocatedNum::alloc(&mut cs, || Ok(Scalar::from_str("3").unwrap())).unwrap();
+            let n = AllocatedNum::alloc(&mut cs, || Ok(Scalar::from(3))).unwrap();
             n.assert_nonzero(&mut cs).unwrap();
 
             assert!(cs.is_satisfied());
-            cs.set("ephemeral inverse", Scalar::from_str("3").unwrap());
+            cs.set("ephemeral inverse", Scalar::from(3));
             assert!(cs.which_is_unsatisfied() == Some("nonzero assertion constraint"));
         }
         {
