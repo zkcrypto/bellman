@@ -124,7 +124,9 @@ impl<Scalar: PrimeField> AllocatedNum<Scalar> {
             found_one |= b;
             if !found_one {
                 // a_bit should also be false
-                a_bit.map(|e| assert!(!e));
+                if let Some(e) = a_bit {
+                    assert!(!e);
+                }
                 continue;
             }
 
