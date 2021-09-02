@@ -313,15 +313,10 @@ fn test_with_bls12() {
             .collect::<Vec<_>>(),
     );
 
-    let now = std::time::Instant::now();
     let naive: <Bls12 as Engine>::G1 = naive_multiexp(g.clone(), v.clone());
-    println!("Naive: {}", now.elapsed().as_millis());
 
-    let now = std::time::Instant::now();
     let pool = Worker::new();
-
     let fast = multiexp(&pool, (g, 0), FullDensity, v_bits).wait().unwrap();
-    println!("Fast: {}", now.elapsed().as_millis());
 
     assert_eq!(naive, fast);
 }
