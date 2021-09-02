@@ -313,7 +313,7 @@ fn test_with_bls12() {
             .collect::<Vec<_>>(),
     );
 
-    let naive: <Bls12 as Engine>::G1 = naive_multiexp(g.clone(), v.clone());
+    let naive: <Bls12 as Engine>::G1 = naive_multiexp(g.clone(), v);
 
     let pool = Worker::new();
     let fast = multiexp(&pool, (g, 0), FullDensity, v_bits).wait().unwrap();

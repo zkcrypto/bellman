@@ -133,8 +133,7 @@ impl<Scalar: PrimeField> AllocatedNum<Scalar> {
             if b {
                 // This is part of a run of ones. Let's just
                 // allocate the boolean with the expected value.
-                let a_bit =
-                    AllocatedBit::alloc(cs.namespace(|| format!("bit {}", i)), a_bit.clone())?;
+                let a_bit = AllocatedBit::alloc(cs.namespace(|| format!("bit {}", i)), a_bit)?;
                 // ... and add it to the current run of ones.
                 current_run.push(a_bit.clone());
                 result.push(a_bit);
@@ -160,7 +159,7 @@ impl<Scalar: PrimeField> AllocatedNum<Scalar> {
 
                 let a_bit = AllocatedBit::alloc_conditionally(
                     cs.namespace(|| format!("bit {}", i)),
-                    a_bit.clone(),
+                    a_bit,
                     &last_run.as_ref().expect("char always starts with a one"),
                 )?;
                 result.push(a_bit);

@@ -75,7 +75,7 @@ fn proc_lc<Scalar: PrimeField>(terms: &[(Variable, Scalar)]) -> BTreeMap<Ordered
     let mut to_remove = vec![];
     for (var, coeff) in map.iter() {
         if coeff.is_zero() {
-            to_remove.push(var.clone())
+            to_remove.push(*var);
         }
     }
 
@@ -404,7 +404,7 @@ impl<Scalar: PrimeField> ConstraintSystem<Scalar> for TestConstraintSystem<Scala
     {
         let name = name_fn().into();
         let path = compute_path(&self.current_namespace, name.clone());
-        self.set_named_obj(path.clone(), NamedObject::Namespace);
+        self.set_named_obj(path, NamedObject::Namespace);
         self.current_namespace.push(name);
     }
 
