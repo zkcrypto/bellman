@@ -19,7 +19,7 @@ use super::SynthesisError;
 pub trait SourceBuilder<G: PrimeCurveAffine>: Send + Sync + 'static + Clone {
     type Source: Source<G>;
 
-    fn new(self) -> Self::Source;
+    fn build(self) -> Self::Source;
 }
 
 /// A source of bases, like an iterator.
@@ -45,7 +45,7 @@ impl<G> AddAssignFromSource for G where G: PrimeCurve {}
 impl<G: PrimeCurveAffine> SourceBuilder<G> for (Arc<Vec<G>>, usize) {
     type Source = (Arc<Vec<G>>, usize);
 
-    fn new(self) -> (Arc<Vec<G>>, usize) {
+    fn build(self) -> (Arc<Vec<G>>, usize) {
         (self.0.clone(), self.1)
     }
 }
@@ -173,7 +173,7 @@ where
         let mut acc = G::identity();
 
         // Build a source for the bases
-        let mut bases = bases.new();
+        let mut bases = bases.build();
 
         // Create space for the buckets
         let mut buckets = vec![G::identity(); (1 << c) - 1];
