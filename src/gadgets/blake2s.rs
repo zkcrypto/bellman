@@ -79,13 +79,11 @@ const SIGMA: [[usize; 16]; 10] = [
        END FUNCTION.
 */
 
+#[allow(clippy::many_single_char_names)]
 fn mixing_g<Scalar: PrimeField, CS: ConstraintSystem<Scalar>, M>(
     mut cs: M,
     v: &mut [UInt32],
-    a: usize,
-    b: usize,
-    c: usize,
-    d: usize,
+    (a, b, c, d): (usize, usize, usize, usize),
     x: &UInt32,
     y: &UInt32,
 ) -> Result<(), SynthesisError>
@@ -164,6 +162,7 @@ where
        END FUNCTION.
 */
 
+#[allow(clippy::many_single_char_names)]
 fn blake2s_compression<Scalar: PrimeField, CS: ConstraintSystem<Scalar>>(
     mut cs: CS,
     h: &mut [UInt32],
@@ -219,40 +218,28 @@ fn blake2s_compression<Scalar: PrimeField, CS: ConstraintSystem<Scalar>>(
             mixing_g(
                 cs.namespace(|| "mixing invocation 1"),
                 &mut v,
-                0,
-                4,
-                8,
-                12,
+                (0, 4, 8, 12),
                 &m[s[0]],
                 &m[s[1]],
             )?;
             mixing_g(
                 cs.namespace(|| "mixing invocation 2"),
                 &mut v,
-                1,
-                5,
-                9,
-                13,
+                (1, 5, 9, 13),
                 &m[s[2]],
                 &m[s[3]],
             )?;
             mixing_g(
                 cs.namespace(|| "mixing invocation 3"),
                 &mut v,
-                2,
-                6,
-                10,
-                14,
+                (2, 6, 10, 14),
                 &m[s[4]],
                 &m[s[5]],
             )?;
             mixing_g(
                 cs.namespace(|| "mixing invocation 4"),
                 &mut v,
-                3,
-                7,
-                11,
-                15,
+                (3, 7, 11, 15),
                 &m[s[6]],
                 &m[s[7]],
             )?;
@@ -260,40 +247,28 @@ fn blake2s_compression<Scalar: PrimeField, CS: ConstraintSystem<Scalar>>(
             mixing_g(
                 cs.namespace(|| "mixing invocation 5"),
                 &mut v,
-                0,
-                5,
-                10,
-                15,
+                (0, 5, 10, 15),
                 &m[s[8]],
                 &m[s[9]],
             )?;
             mixing_g(
                 cs.namespace(|| "mixing invocation 6"),
                 &mut v,
-                1,
-                6,
-                11,
-                12,
+                (1, 6, 11, 12),
                 &m[s[10]],
                 &m[s[11]],
             )?;
             mixing_g(
                 cs.namespace(|| "mixing invocation 7"),
                 &mut v,
-                2,
-                7,
-                8,
-                13,
+                (2, 7, 8, 13),
                 &m[s[12]],
                 &m[s[13]],
             )?;
             mixing_g(
                 cs.namespace(|| "mixing invocation 8"),
                 &mut v,
-                3,
-                4,
-                9,
-                14,
+                (3, 4, 9, 14),
                 &m[s[14]],
                 &m[s[15]],
             )?;
@@ -347,21 +322,17 @@ pub fn blake2s<Scalar: PrimeField, CS: ConstraintSystem<Scalar>>(
     assert_eq!(personalization.len(), 8);
     assert!(input.len() % 8 == 0);
 
-    let mut h = Vec::with_capacity(8);
-    h.push(UInt32::constant(0x6A09E667 ^ 0x01010000 ^ 32));
-    h.push(UInt32::constant(0xBB67AE85));
-    h.push(UInt32::constant(0x3C6EF372));
-    h.push(UInt32::constant(0xA54FF53A));
-    h.push(UInt32::constant(0x510E527F));
-    h.push(UInt32::constant(0x9B05688C));
-
-    // Personalization is stored here
-    h.push(UInt32::constant(
-        0x1F83D9AB ^ LittleEndian::read_u32(&personalization[0..4]),
-    ));
-    h.push(UInt32::constant(
-        0x5BE0CD19 ^ LittleEndian::read_u32(&personalization[4..8]),
-    ));
+    let mut h = vec![
+        UInt32::constant(0x6A09E667 ^ 0x01010000 ^ 32),
+        UInt32::constant(0xBB67AE85),
+        UInt32::constant(0x3C6EF372),
+        UInt32::constant(0xA54FF53A),
+        UInt32::constant(0x510E527F),
+        UInt32::constant(0x9B05688C),
+        // Personalization is stored here
+        UInt32::constant(0x1F83D9AB ^ LittleEndian::read_u32(&personalization[0..4])),
+        UInt32::constant(0x5BE0CD19 ^ LittleEndian::read_u32(&personalization[4..8])),
+    ];
 
     let mut blocks: Vec<Vec<UInt32>> = vec![];
 
@@ -639,7 +610,7 @@ mod test {
             hex!("a1309e334376c8f36a736a4ab0e691ef931ee3ebdb9ea96187127136fea622a1"),
             hex!("82fefff60f265cea255252f7c194a7f93965dffee0609ef74eb67f0d76cd41c6"),
         ];
-        for i in 0..2 {
+        for expected in &expecteds {
             let mut h = Blake2sParams::new()
                 .hash_length(32)
                 .personal(b"12345678")
@@ -691,7 +662,7 @@ mod test {
                 }
             }
 
-            assert_eq!(expecteds[i], hash_result.as_bytes());
+            assert_eq!(expected, hash_result.as_bytes());
         }
     }
 }

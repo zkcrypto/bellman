@@ -35,6 +35,7 @@ pub fn mimc<S: PrimeField>(mut xl: S, mut xr: S, constants: &[S]) -> S {
 
 /// This is our demo circuit for proving knowledge of the
 /// preimage of a MiMC hash invocation.
+#[allow(clippy::upper_case_acronyms)]
 pub struct MiMCDemo<'a, S: PrimeField> {
     pub xl: Option<S>,
     pub xr: Option<S>,

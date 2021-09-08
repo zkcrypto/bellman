@@ -20,16 +20,18 @@ enum NamedObject {
     Namespace,
 }
 
+type NamedConstraint<Scalar> = (
+    LinearCombination<Scalar>,
+    LinearCombination<Scalar>,
+    LinearCombination<Scalar>,
+    String,
+);
+
 /// Constraint system for testing purposes.
 pub struct TestConstraintSystem<Scalar: PrimeField> {
     named_objects: HashMap<String, NamedObject>,
     current_namespace: Vec<String>,
-    constraints: Vec<(
-        LinearCombination<Scalar>,
-        LinearCombination<Scalar>,
-        LinearCombination<Scalar>,
-        String,
-    )>,
+    constraints: Vec<NamedConstraint<Scalar>>,
     inputs: Vec<(Scalar, String)>,
     aux: Vec<(Scalar, String)>,
 }
@@ -75,7 +77,7 @@ fn proc_lc<Scalar: PrimeField>(terms: &[(Variable, Scalar)]) -> BTreeMap<Ordered
     let mut to_remove = vec![];
     for (var, coeff) in map.iter() {
         if coeff.is_zero() {
-            to_remove.push(var.clone())
+            to_remove.push(*var);
         }
     }
 
@@ -133,6 +135,12 @@ fn eval_lc<Scalar: PrimeField>(
     }
 
     acc
+}
+
+impl<Scalar: PrimeField> Default for TestConstraintSystem<Scalar> {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<Scalar: PrimeField> TestConstraintSystem<Scalar> {
@@ -200,7 +208,7 @@ impl<Scalar: PrimeField> TestConstraintSystem<Scalar> {
         };
 
         for &(ref a, ref b, ref c, ref name) in &self.constraints {
-            write!(&mut s, "\n").unwrap();
+            writeln!(&mut s).unwrap();
 
             write!(&mut s, "{}: ", name).unwrap();
             pp(&mut s, a);
@@ -210,7 +218,7 @@ impl<Scalar: PrimeField> TestConstraintSystem<Scalar> {
             pp(&mut s, c);
         }
 
-        write!(&mut s, "\n").unwrap();
+        writeln!(&mut s).unwrap();
 
         s
     }
@@ -404,7 +412,7 @@ impl<Scalar: PrimeField> ConstraintSystem<Scalar> for TestConstraintSystem<Scala
     {
         let name = name_fn().into();
         let path = compute_path(&self.current_namespace, name.clone());
-        self.set_named_obj(path.clone(), NamedObject::Namespace);
+        self.set_named_obj(path, NamedObject::Namespace);
         self.current_namespace.push(name);
     }
 

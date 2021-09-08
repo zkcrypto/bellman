@@ -43,12 +43,10 @@ fn eval<S: PrimeField>(
             }
         }
 
-        if coeff == S::one() {
-            acc.add_assign(&tmp);
-        } else {
-            tmp.mul_assign(&coeff);
-            acc.add_assign(&tmp);
+        if coeff != S::one() {
+            tmp *= coeff;
         }
+        acc += tmp;
     }
 
     acc
@@ -174,6 +172,7 @@ where
     create_proof::<E, C, P>(circuit, params, r, s)
 }
 
+#[allow(clippy::many_single_char_names)]
 pub fn create_proof<E, C, P: ParameterSource<E>>(
     circuit: C,
     mut params: P,
@@ -313,18 +312,18 @@ where
         return Err(SynthesisError::UnexpectedIdentity);
     }
 
-    let mut g_a = vk.delta_g1 * &r;
+    let mut g_a = vk.delta_g1 * r;
     AddAssign::<&E::G1Affine>::add_assign(&mut g_a, &vk.alpha_g1);
-    let mut g_b = vk.delta_g2 * &s;
+    let mut g_b = vk.delta_g2 * s;
     AddAssign::<&E::G2Affine>::add_assign(&mut g_b, &vk.beta_g2);
     let mut g_c;
     {
         let mut rs = r;
         rs.mul_assign(&s);
 
-        g_c = vk.delta_g1 * &rs;
-        AddAssign::<&E::G1>::add_assign(&mut g_c, &(vk.alpha_g1 * &s));
-        AddAssign::<&E::G1>::add_assign(&mut g_c, &(vk.beta_g1 * &r));
+        g_c = vk.delta_g1 * rs;
+        AddAssign::<&E::G1>::add_assign(&mut g_c, &(vk.alpha_g1 * s));
+        AddAssign::<&E::G1>::add_assign(&mut g_c, &(vk.beta_g1 * r));
     }
     let mut a_answer = a_inputs.wait()?;
     AddAssign::<&E::G1>::add_assign(&mut a_answer, &a_aux.wait()?);

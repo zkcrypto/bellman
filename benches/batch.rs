@@ -70,7 +70,7 @@ fn bench_batch_verify(c: &mut Criterion) {
             |b, proofs| {
                 b.iter(|| {
                     for (proof, input) in proofs.iter() {
-                        let _ = verify_proof(&pvk, &proof, &[*input]);
+                        let _ = verify_proof(&pvk, proof, &[*input]);
                     }
                 })
             },

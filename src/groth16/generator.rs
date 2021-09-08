@@ -155,6 +155,7 @@ impl<Scalar: PrimeField> ConstraintSystem<Scalar> for KeypairAssembly<Scalar> {
 }
 
 /// Create parameters for a circuit, given some toxic waste.
+#[allow(clippy::too_many_arguments)]
 pub fn generate_parameters<E, C>(
     circuit: C,
     g1: E::G1,
@@ -300,6 +301,7 @@ where
     let mut ic = vec![E::G1Affine::identity(); assembly.num_inputs];
     let mut l = vec![E::G1Affine::identity(); assembly.num_aux];
 
+    #[allow(clippy::too_many_arguments)]
     fn eval<E: Engine>(
         // wNAF window tables
         g1_wnaf: &Wnaf<usize, &[E::G1], &mut Vec<i64>>,
@@ -393,7 +395,6 @@ where
 
                         // Compute B query (in G1/G2)
                         if !bt.is_zero() {
-                            ();
                             *b_g1 = g1_wnaf.scalar(&bt);
                             *b_g2 = g2_wnaf.scalar(&bt);
                         }
@@ -467,12 +468,12 @@ where
     let g2 = g2.to_affine();
 
     let vk = VerifyingKey::<E> {
-        alpha_g1: (g1 * &alpha).to_affine(),
-        beta_g1: (g1 * &beta).to_affine(),
-        beta_g2: (g2 * &beta).to_affine(),
-        gamma_g2: (g2 * &gamma).to_affine(),
-        delta_g1: (g1 * &delta).to_affine(),
-        delta_g2: (g2 * &delta).to_affine(),
+        alpha_g1: (g1 * alpha).to_affine(),
+        beta_g1: (g1 * beta).to_affine(),
+        beta_g2: (g2 * beta).to_affine(),
+        gamma_g2: (g2 * gamma).to_affine(),
+        delta_g1: (g1 * delta).to_affine(),
+        delta_g2: (g2 * delta).to_affine(),
         ic,
     };
 

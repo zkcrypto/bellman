@@ -13,6 +13,8 @@ and this project adheres to Rust's notion of
   `bellman` will use. The default, which has not changed, is to use the same
   number of threads as logical CPUs.
 - `bellman::multicore::Waiter`
+- `Default` bound for `bellman::multiexp::DensityTracker`.
+- `Default` bound for `bellman::gadgets::test::TestConstraintSystem`.
 
 ### Changed
 - `bellman::multicore` has migrated from `crossbeam` to `rayon`:
@@ -22,6 +24,7 @@ and this project adheres to Rust's notion of
     `bellman::multicore::Waiter<Result<G, SynthesisError>>` instead of
     `Box<dyn Future<Item = G, Error = SynthesisError>>`.
   - `bellman::multicore::log_num_cpus` is renamed to `log_num_threads`.
+- `bellman::multiexp::SourceBuilder::new` is renamed to `SourceBuilder::build`.
 
 ### Removed
 - `bellman::multicore::WorkerFuture` (replaced by `Waiter`).

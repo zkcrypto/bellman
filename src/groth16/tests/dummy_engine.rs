@@ -87,6 +87,7 @@ impl<'r> Add<&'r Fr> for Fr {
 impl Add for Fr {
     type Output = Self;
 
+    #[allow(clippy::op_ref)]
     fn add(self, other: Self) -> Self {
         self + &other
     }
@@ -117,6 +118,7 @@ impl<'r> Sub<&'r Fr> for Fr {
 impl Sub for Fr {
     type Output = Self;
 
+    #[allow(clippy::op_ref)]
     fn sub(self, other: Self) -> Self {
         self - &other
     }
@@ -147,6 +149,7 @@ impl<'r> Mul<&'r Fr> for Fr {
 impl Mul for Fr {
     type Output = Self;
 
+    #[allow(clippy::op_ref)]
     fn mul(self, other: Self) -> Self {
         self * &other
     }
@@ -217,6 +220,7 @@ impl Field for Fr {
         }
     }
 
+    #[allow(clippy::many_single_char_names)]
     fn sqrt(&self) -> CtOption<Self> {
         // Tonelli-Shank's algorithm for q mod 16 = 1
         // https://eprint.iacr.org/2012/685.pdf (page 12, algorithm 5)
