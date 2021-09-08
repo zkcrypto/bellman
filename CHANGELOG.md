@@ -6,6 +6,8 @@ and this project adheres to Rust's notion of
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [0.11.0] - 2021-09-08
 ### Added
 - `bellman` now uses `rayon` for multithreading when the (default) `multicore`
   feature flag is enabled. This means that, when this flag is enabled, the
