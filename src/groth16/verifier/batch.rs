@@ -119,7 +119,7 @@ where
             // actually loop, but handles the edge case.
             let z = loop {
                 let z = E::Fr::random(&mut rng);
-                if !z.is_zero() {
+                if !z.is_zero_vartime() {
                     break z;
                 }
             };

@@ -74,7 +74,7 @@ impl<S: PrimeField, G: Group<S>> EvaluationDomain<S, G> {
             omega,
             omegainv: omega.invert().unwrap(),
             geninv: S::multiplicative_generator().invert().unwrap(),
-            minv: S::from_str(&format!("{}", m)).unwrap().invert().unwrap(),
+            minv: S::from(m as u64).invert().unwrap(),
         })
     }
 

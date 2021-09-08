@@ -92,11 +92,11 @@ impl<Scalar: PrimeField> Circuit<Scalar> for XorDemo<Scalar> {
 fn test_xordemo() {
     let g1 = Fr::one();
     let g2 = Fr::one();
-    let alpha = Fr::from_str("48577").unwrap();
-    let beta = Fr::from_str("22580").unwrap();
-    let gamma = Fr::from_str("53332").unwrap();
-    let delta = Fr::from_str("5481").unwrap();
-    let tau = Fr::from_str("3673").unwrap();
+    let alpha = Fr::from(48577);
+    let beta = Fr::from(22580);
+    let gamma = Fr::from(53332);
+    let delta = Fr::from(5481);
+    let tau = Fr::from(3673);
 
     let params = {
         let c = XorDemo {
@@ -131,7 +131,7 @@ fn test_xordemo() {
     // Let's turn it into a 2^3 root of unity.
     root_of_unity = root_of_unity.pow_vartime(&[1u64 << 7]);
     assert_eq!(Fr::one(), root_of_unity.pow_vartime(&[1u64 << 3]));
-    assert_eq!(Fr::from_str("20201").unwrap(), root_of_unity);
+    assert_eq!(Fr::from(20201), root_of_unity);
 
     // Let's compute all the points in our evaluation domain.
     let mut points = Vec::with_capacity(8);
@@ -215,15 +215,15 @@ fn test_xordemo() {
 
     let u_i = [59158, 48317, 21767, 10402]
         .iter()
-        .map(|e| Fr::from_str(&format!("{}", e)).unwrap())
+        .map(|e| Fr::from(*e))
         .collect::<Vec<Fr>>();
     let v_i = [0, 0, 60619, 30791]
         .iter()
-        .map(|e| Fr::from_str(&format!("{}", e)).unwrap())
+        .map(|e| Fr::from(*e))
         .collect::<Vec<Fr>>();
     let w_i = [0, 23320, 41193, 41193]
         .iter()
-        .map(|e| Fr::from_str(&format!("{}", e)).unwrap())
+        .map(|e| Fr::from(*e))
         .collect::<Vec<Fr>>();
 
     for (u, a) in u_i.iter().zip(&params.a[..]) {
@@ -279,8 +279,8 @@ fn test_xordemo() {
 
     let pvk = prepare_verifying_key(&params.vk);
 
-    let r = Fr::from_str("27134").unwrap();
-    let s = Fr::from_str("17146").unwrap();
+    let r = Fr::from(27134);
+    let s = Fr::from(17146);
 
     let proof = {
         let c = XorDemo {
@@ -367,7 +367,7 @@ fn test_xordemo() {
             .iter()
             .enumerate()
         {
-            let coeff = Fr::from_str(&format!("{:?}", coeff)).unwrap();
+            let coeff = Fr::from(*coeff);
 
             let mut tmp = params.h[i];
             tmp.mul_assign(&coeff);

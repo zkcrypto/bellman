@@ -15,9 +15,9 @@ edition = "2018"
 [dependencies]
 bitvec = "0.22"
 blake2s_simd = "0.5"
-ff = "0.10"
-group = "0.10"
-pairing = { version = "0.20", optional = true }
+ff = "0.11"
+group = "0.11"
+pairing = { version = "0.21", optional = true }
 rand_core = "0.6"
 byteorder = "1"
 subtle = "2.2.1"
@@ -30,7 +30,7 @@ num_cpus = { version = "1", optional = true }
 rayon = { version = "1.5.1", optional = true }
 
 [dev-dependencies]
-bls12_381 = "0.5"
+bls12_381 = "0.6"
 criterion = "0.3"
 hex-literal = "0.3"
 rand = "0.8"

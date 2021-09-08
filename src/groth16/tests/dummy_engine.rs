@@ -67,7 +67,7 @@ impl Neg for Fr {
     type Output = Self;
 
     fn neg(mut self) -> Self {
-        if !<Fr as Field>::is_zero(&self) {
+        if !<Fr as Field>::is_zero_vartime(&self) {
             self.0 = MODULUS_R - self.0;
         }
         self
@@ -197,8 +197,8 @@ impl Field for Fr {
         Fr(Wrapping(1))
     }
 
-    fn is_zero(&self) -> bool {
-        (self.0).0 == 0
+    fn is_zero(&self) -> Choice {
+        (self.0).0.ct_eq(&0)
     }
 
     fn square(&self) -> Self {
@@ -210,14 +210,10 @@ impl Field for Fr {
     }
 
     fn invert(&self) -> CtOption<Self> {
-        if <Fr as Field>::is_zero(self) {
-            CtOption::new(<Fr as Field>::zero(), Choice::from(0))
-        } else {
-            CtOption::new(
-                self.pow_vartime(&[(MODULUS_R.0 as u64) - 2]),
-                Choice::from(1),
-            )
-        }
+        CtOption::new(
+            self.pow_vartime(&[(MODULUS_R.0 as u64) - 2]),
+            !<Fr as Field>::is_zero(self),
+        )
     }
 
     #[allow(clippy::many_single_char_names)]
@@ -297,21 +293,18 @@ impl PrimeField for Fr {
     const CAPACITY: u32 = 15;
     const S: u32 = 10;
 
-    fn from_repr(repr: FrRepr) -> Option<Self> {
+    fn from_repr(repr: FrRepr) -> CtOption<Self> {
         let v = u64::from_le_bytes(repr.0);
-        if v >= (MODULUS_R.0 as u64) {
-            None
-        } else {
-            Some(Fr(Wrapping(v as u32)))
-        }
+        let is_some = Choice::from(if v >= (MODULUS_R.0 as u64) { 0 } else { 1 });
+        CtOption::new(Fr(Wrapping(v as u32)), is_some)
     }
 
     fn to_repr(&self) -> FrRepr {
         FrRepr::from(*self)
     }
 
-    fn is_odd(&self) -> bool {
-        (self.0).0 % 2 != 0
+    fn is_odd(&self) -> Choice {
+        Choice::from(((self.0).0 % 2) as u8)
     }
 
     fn multiplicative_generator() -> Fr {
@@ -335,7 +328,7 @@ impl PrimeFieldBits for Fr {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct DummyEngine;
 
 impl Engine for DummyEngine {
@@ -396,7 +389,7 @@ impl Group for Fr {
     }
 
     fn is_identity(&self) -> Choice {
-        Choice::from(if <Fr as Field>::is_zero(self) { 1 } else { 0 })
+        <Fr as Field>::is_zero(self)
     }
 
     fn double(&self) -> Self {
@@ -452,7 +445,7 @@ impl PrimeCurveAffine for Fr {
     }
 
     fn is_identity(&self) -> Choice {
-        Choice::from(if <Fr as Field>::is_zero(self) { 1 } else { 0 })
+        <Fr as Field>::is_zero(self)
     }
 
     fn to_curve(&self) -> Self::Curve {
