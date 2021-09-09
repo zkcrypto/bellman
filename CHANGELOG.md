@@ -6,6 +6,8 @@ and this project adheres to Rust's notion of
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [0.11.1] - 2021-09-09
 ### Fixed
 - Compiling with `--no-default-features --features groth16` (i.e. disabling the
   `multicore` feature flag) works again.
