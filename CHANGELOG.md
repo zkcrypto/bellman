@@ -6,6 +6,14 @@ and this project adheres to Rust's notion of
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Fixed
+- Compiling with `--no-default-features --features groth16` (i.e. disabling the
+  `multicore` feature flag) works again.
+
+### Changed
+- `bellman::multicore::Waiter::wait` now consumes `self` (better reflecting the
+  fact that you can't wait on the same result twice), instead of taking `&self`
+  with `multicore` enabled and `&mut self` with multicore disabled.
 
 ## [0.11.0] - 2021-09-08
 ### Added
