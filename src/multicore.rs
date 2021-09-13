@@ -96,8 +96,8 @@ mod implementation {
     }
 
     impl<T> Waiter<T> {
-        /// Wait for the result.
-        pub fn wait(&self) -> T {
+        /// Consumes this waiter and blocks until the result is ready.
+        pub fn wait(self) -> T {
             // This will be Some if this thread is in the global thread pool.
             if rayon::current_thread_index().is_some() {
                 let msg = "wait() cannot be called from within a thread pool since that would lead to deadlocks";
@@ -177,8 +177,8 @@ mod implementation {
     }
 
     impl<T> Waiter<T> {
-        /// Wait for the result.
-        pub fn wait(&mut self) -> T {
+        /// Consumes this waiter and blocks until the result is ready.
+        pub fn wait(mut self) -> T {
             self.val.take().expect("unmet data dependency")
         }
 

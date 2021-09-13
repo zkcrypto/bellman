@@ -7,6 +7,16 @@ and this project adheres to Rust's notion of
 
 ## [Unreleased]
 
+## [0.11.1] - 2021-09-09
+### Fixed
+- Compiling with `--no-default-features --features groth16` (i.e. disabling the
+  `multicore` feature flag) works again.
+
+### Changed
+- `bellman::multicore::Waiter::wait` now consumes `self` (better reflecting the
+  fact that you can't wait on the same result twice), instead of taking `&self`
+  with `multicore` enabled and `&mut self` with multicore disabled.
+
 ## [0.11.0] - 2021-09-08
 ### Added
 - `bellman` now uses `rayon` for multithreading when the (default) `multicore`

@@ -36,8 +36,11 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        target:
-          - wasm32-wasi
+        name: [wasi]
+        include:
+        - name: wasi
+          target: wasm32-wasi
+          build_flags: --no-default-features --features groth16
 
     steps:
       - uses: actions/checkout@v2
@@ -52,7 +55,7 @@ jobs:
         with:
           command: fetch
       - name: Build for target
-        run: cargo build --verbose --no-default-features --target ${{ matrix.target }}
+        run: cargo build --verbose --target ${{ matrix.target }} ${{ matrix.build_flags }}
 
   bitrot:
     name: Bitrot check
