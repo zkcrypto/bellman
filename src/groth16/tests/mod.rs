@@ -379,3 +379,70 @@ fn test_xordemo() {
 
     assert!(verify_proof(&pvk, &proof, &[Fr::one()]).is_ok());
 }
+
+struct MultWithZeroCoeffs<F> {
+    a: Option<F>,
+    b: Option<F>,
+    c: Option<F>,
+    /// Whether to attach the zero coefficient to the "1" variable, or a different variable.
+    one_var: bool,
+}
+
+impl<F: ff::PrimeField> Circuit<F> for &MultWithZeroCoeffs<F> {
+    fn synthesize<CS: ConstraintSystem<F>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
+        let a = cs.alloc_input(|| "a", || Ok(self.a.unwrap()))?;
+        let b = cs.alloc_input(|| "b", || Ok(self.b.unwrap()))?;
+        let c = cs.alloc_input(|| "c", || Ok(self.c.unwrap()))?;
+        if self.one_var {
+            cs.enforce(
+                || "cs",
+                // notice the zero coefficients
+                |z| z + (F::from(0), CS::one()) + a,
+                |z| z + (F::from(0), CS::one()) + b,
+                |z| z + (F::from(0), CS::one()) + c,
+            );
+        } else {
+            cs.enforce(
+                || "cs",
+                // notice the zero coefficients
+                |z| z + (F::from(0), a) + a,
+                |z| z + (F::from(0), a) + b,
+                |z| z + (F::from(0), a) + c,
+            );
+        }
+        Ok(())
+    }
+}
+
+fn zero_coeff_test(one_var: bool) {
+        let m = MultWithZeroCoeffs {
+            a: Some(Fr::from(5)),
+            b: Some(Fr::from(6)),
+            c: Some(Fr::from(30)),
+            one_var,
+        };
+        let g1 = Fr::one();
+        let g2 = Fr::one();
+        let alpha = Fr::from(48577);
+        let beta = Fr::from(22580);
+        let gamma = Fr::from(53332);
+        let delta = Fr::from(5481);
+        let tau = Fr::from(3673);
+        let pk =
+            generate_parameters::<DummyEngine, _>(&m, g1, g2, alpha, beta, gamma, delta, tau).unwrap();
+        let r = Fr::from(27134);
+        let s = Fr::from(17146);
+        let pf = create_proof(&m, &pk, r, s).unwrap();
+        let pvk = prepare_verifying_key(&pk.vk);
+        verify_proof(&pvk, &pf, &[Fr::from(5), Fr::from(6), Fr::from(30)]).unwrap();
+}
+
+#[test]
+fn zero_coeff_one_var() {
+    zero_coeff_test(true);
+}
+
+#[test]
+fn zero_coeff_non_one_var() {
+    zero_coeff_test(false);
+}
