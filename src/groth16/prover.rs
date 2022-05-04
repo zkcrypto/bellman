@@ -28,25 +28,27 @@ fn eval<S: PrimeField>(
     for &(index, coeff) in lc.0.iter() {
         let mut tmp;
 
-        match index {
-            Variable(Index::Input(i)) => {
-                tmp = input_assignment[i];
-                if let Some(ref mut v) = input_density {
-                    v.inc(i);
+        if !coeff.is_zero_vartime() {
+            match index {
+                Variable(Index::Input(i)) => {
+                    tmp = input_assignment[i];
+                    if let Some(ref mut v) = input_density {
+                        v.inc(i);
+                    }
+                }
+                Variable(Index::Aux(i)) => {
+                    tmp = aux_assignment[i];
+                    if let Some(ref mut v) = aux_density {
+                        v.inc(i);
+                    }
                 }
             }
-            Variable(Index::Aux(i)) => {
-                tmp = aux_assignment[i];
-                if let Some(ref mut v) = aux_density {
-                    v.inc(i);
-                }
-            }
-        }
 
-        if coeff != S::one() {
-            tmp *= coeff;
+            if coeff != S::one() {
+                tmp *= coeff;
+            }
+            acc += tmp;
         }
-        acc += tmp;
     }
 
     acc
