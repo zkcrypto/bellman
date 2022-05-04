@@ -122,7 +122,7 @@ impl<'a> QueryDensity for &'a DensityTracker {
     type Iter = Box<dyn 'a + Iterator<Item = bool>>;
 
     fn iter(self) -> Self::Iter {
-        Box::new(self.bv.iter().by_val())
+        Box::new(self.bv.iter().by_vals())
     }
 
     fn get_query_size(self) -> Option<usize> {
@@ -207,7 +207,7 @@ where
                 } else {
                     let exp = exp
                         .into_iter()
-                        .by_val()
+                        .by_vals()
                         .skip(skip as usize)
                         .take(c as usize)
                         .enumerate()

@@ -107,7 +107,7 @@ impl<Scalar: PrimeField> AllocatedNum<Scalar> {
         let b = (-Scalar::one()).to_le_bits();
 
         // Get the bits of a in big-endian order
-        let mut a = a.as_ref().map(|e| e.iter().by_val().rev());
+        let mut a = a.as_ref().map(|e| e.iter().by_vals().rev());
 
         let mut result = vec![];
 
@@ -117,7 +117,7 @@ impl<Scalar: PrimeField> AllocatedNum<Scalar> {
 
         let mut found_one = false;
         let mut i = 0;
-        for b in b.iter().by_val().rev() {
+        for b in b.iter().by_vals().rev() {
             let a_bit = a.as_mut().map(|e| e.next().unwrap());
 
             // Skip over unset bits at the beginning
@@ -568,7 +568,7 @@ mod test {
             for (b, a) in r
                 .to_le_bits()
                 .iter()
-                .by_val()
+                .by_vals()
                 .rev()
                 .skip(1)
                 .zip(bits.iter().rev())
