@@ -7,6 +7,11 @@ and this project adheres to Rust's notion of
 
 ## [Unreleased]
 
+## [0.12.0] - 2022-05-04
+### Changed
+- MSRV bumped to `1.56.0`
+- Bumped dependencies to `ff 0.12`, `group 0.12`, `pairing 0.22`, `bitvec 1.0`, `blake2s_simd 1.0`.
+
 ## [0.11.2] - 2022-05-04
 ### Fixed
 - Groth16 prover now correctly computes query densitites with respect to linear

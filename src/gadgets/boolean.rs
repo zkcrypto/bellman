@@ -322,12 +322,12 @@ pub fn field_into_allocated_bits_le<
     let values = match value {
         Some(ref value) => {
             let field_char = F::char_le_bits();
-            let mut field_char = field_char.iter().by_ref().rev();
+            let mut field_char = field_char.iter().by_refs().rev();
 
             let mut tmp = Vec::with_capacity(F::NUM_BITS as usize);
 
             let mut found_one = false;
-            for b in value.to_le_bits().iter().by_val().rev() {
+            for b in value.to_le_bits().iter().by_vals().rev() {
                 // Skip leading bits
                 found_one |= field_char.next().unwrap();
                 if !found_one {
@@ -1533,15 +1533,15 @@ mod test {
 
         assert_eq!(bits.len(), 64);
 
-        assert_eq!(bits[63].get_value().unwrap(), true);
-        assert_eq!(bits[63 - 1].get_value().unwrap(), true);
-        assert_eq!(bits[63 - 2].get_value().unwrap(), true);
-        assert_eq!(bits[63 - 3].get_value().unwrap(), false);
-        assert_eq!(bits[63 - 4].get_value().unwrap(), true);
-        assert_eq!(bits[63 - 5].get_value().unwrap(), true);
-        assert_eq!(bits[63 - 20].get_value().unwrap(), true);
-        assert_eq!(bits[63 - 21].get_value().unwrap(), false);
-        assert_eq!(bits[63 - 22].get_value().unwrap(), false);
+        assert!(bits[63].get_value().unwrap());
+        assert!(bits[63 - 1].get_value().unwrap());
+        assert!(bits[63 - 2].get_value().unwrap());
+        assert!(!bits[63 - 3].get_value().unwrap());
+        assert!(bits[63 - 4].get_value().unwrap());
+        assert!(bits[63 - 5].get_value().unwrap());
+        assert!(bits[63 - 20].get_value().unwrap());
+        assert!(!bits[63 - 21].get_value().unwrap());
+        assert!(!bits[63 - 22].get_value().unwrap());
     }
 
     #[test]
@@ -1559,14 +1559,14 @@ mod test {
 
         assert_eq!(bits.len(), 255);
 
-        assert_eq!(bits[254].value.unwrap(), false);
-        assert_eq!(bits[254 - 1].value.unwrap(), false);
-        assert_eq!(bits[254 - 2].value.unwrap(), true);
-        assert_eq!(bits[254 - 3].value.unwrap(), false);
-        assert_eq!(bits[254 - 4].value.unwrap(), true);
-        assert_eq!(bits[254 - 5].value.unwrap(), false);
-        assert_eq!(bits[254 - 20].value.unwrap(), true);
-        assert_eq!(bits[254 - 23].value.unwrap(), true);
+        assert!(!bits[254].value.unwrap());
+        assert!(!bits[254 - 1].value.unwrap());
+        assert!(bits[254 - 2].value.unwrap());
+        assert!(!bits[254 - 3].value.unwrap());
+        assert!(bits[254 - 4].value.unwrap());
+        assert!(!bits[254 - 5].value.unwrap());
+        assert!(bits[254 - 20].value.unwrap());
+        assert!(bits[254 - 23].value.unwrap());
     }
 
     #[test]

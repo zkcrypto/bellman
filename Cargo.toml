@@ -9,15 +9,15 @@ homepage = "https://github.com/zkcrypto/bellman"
 license = "MIT/Apache-2.0"
 name = "bellman"
 repository = "https://github.com/zkcrypto/bellman"
-version = "0.11.2"
-edition = "2018"
+version = "0.12.0"
+edition = "2021"
 
 [dependencies]
-bitvec = "0.22"
-blake2s_simd = "0.5"
-ff = "0.11"
-group = "0.11"
-pairing = { version = "0.21", optional = true }
+bitvec = "1"
+blake2s_simd = "1"
+ff = "0.12"
+group = "0.12"
+pairing = { version = "0.22", optional = true }
 rand_core = "0.6"
 byteorder = "1"
 subtle = "2.2.1"
@@ -30,12 +30,12 @@ num_cpus = { version = "1", optional = true }
 rayon = { version = "1.5.1", optional = true }
 
 [dev-dependencies]
-bls12_381 = "0.6"
+bls12_381 = "0.7"
 criterion = "0.3"
 hex-literal = "0.3"
 rand = "0.8"
 rand_xorshift = "0.3"
-sha2 = "0.9"
+sha2 = "0.10"
 
 [features]
 groth16 = ["pairing"]
