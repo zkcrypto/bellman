@@ -7,6 +7,12 @@ and this project adheres to Rust's notion of
 
 ## [Unreleased]
 
+## [0.11.2] - 2022-05-04
+### Fixed
+- Groth16 prover now correctly computes query densitites with respect to linear
+  combinations that contain coefficients of zero.
+- Fixed an infinite recursion bug in the `Display` implementation for `SynthesisError`.
+
 ## [0.11.1] - 2021-09-09
 ### Fixed
 - Compiling with `--no-default-features --features groth16` (i.e. disabling the
