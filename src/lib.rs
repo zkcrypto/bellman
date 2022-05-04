@@ -208,9 +208,7 @@ impl<Scalar: PrimeField> Add<(Scalar, Variable)> for LinearCombination<Scalar> {
     type Output = LinearCombination<Scalar>;
 
     fn add(mut self, (coeff, var): (Scalar, Variable)) -> LinearCombination<Scalar> {
-        if !coeff.is_zero_vartime() {
-            self.0.push((var, coeff));
-        }
+        self.0.push((var, coeff));
 
         self
     }
