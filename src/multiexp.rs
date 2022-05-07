@@ -156,10 +156,61 @@ impl DensityTracker {
     }
 }
 
+enum ChunkedExponent {
+    Zero,
+    One,
+    Chunks(Vec<u64>),
+}
+
+/// An exponent
+pub enum Exponent<F: PrimeFieldBits> {
+    Zero,
+    One,
+    Bits(FieldBits<F::ReprBits>),
+}
+
+impl<F: PrimeFieldBits> From<&F> for Exponent<F> {
+    fn from(exp: &F) -> Self {
+        if exp.is_zero_vartime() {
+            Exponent::Zero
+        } else if exp == &F::one() {
+            Exponent::One
+        } else {
+            Exponent::Bits(exp.to_le_bits())
+        }
+    }
+}
+
+impl<F: PrimeFieldBits> From<F> for Exponent<F> {
+    fn from(exp: F) -> Self {
+        (&exp).into()
+    }
+}
+
+impl<F: PrimeFieldBits> Exponent<F> {
+    fn chunks(&self, c: usize) -> ChunkedExponent {
+        match self {
+            Self::Zero => ChunkedExponent::Zero,
+            Self::One => ChunkedExponent::One,
+            Self::Bits(exp) => ChunkedExponent::Chunks(
+                exp.chunks(c)
+                    .map(|chunk| {
+                        chunk
+                            .iter()
+                            .by_vals()
+                            .enumerate()
+                            .fold(0u64, |acc, (i, b)| acc + ((b as u64) << i))
+                    })
+                    .collect(),
+            ),
+        }
+    }
+}
+
 fn multiexp_inner<Q, D, G, S>(
     bases: S,
     density_map: D,
-    exponents: Arc<Vec<FieldBits<<G::Scalar as PrimeFieldBits>::ReprBits>>>,
+    exponents: Arc<Vec<Exponent<G::Scalar>>>,
     c: u32,
 ) -> Result<G, SynthesisError>
 where
@@ -172,8 +223,8 @@ where
     // Perform this region of the multiexp
     let this = move |bases: S,
                      density_map: D,
-                     exponents: Arc<Vec<FieldBits<<G::Scalar as PrimeFieldBits>::ReprBits>>>,
-                     skip: u32|
+                     exponents: Arc<Vec<ChunkedExponent>>,
+                     chunk: usize|
           -> Result<_, SynthesisError> {
         // Accumulate the result
         let mut acc = G::identity();
@@ -185,38 +236,29 @@ where
         let mut buckets = vec![G::identity(); (1 << c) - 1];
 
         // only the first round uses this
-        let handle_trivial = skip == 0;
+        let handle_trivial = chunk == 0;
 
         // Sort the bases into buckets
         for (exp, density) in exponents.iter().zip(density_map.as_ref().iter()) {
             if density {
-                let (exp_is_zero, exp_is_one) = {
-                    let (first, rest) = exp.split_first().unwrap();
-                    let rest_unset = rest.not_any();
-                    (!*first && rest_unset, *first && rest_unset)
-                };
-
-                if exp_is_zero {
-                    bases.skip(1)?;
-                } else if exp_is_one {
-                    if handle_trivial {
-                        acc.add_assign_from_source(&mut bases)?;
-                    } else {
-                        bases.skip(1)?;
+                match exp {
+                    ChunkedExponent::Zero => bases.skip(1)?,
+                    ChunkedExponent::One => {
+                        if handle_trivial {
+                            acc.add_assign_from_source(&mut bases)?;
+                        } else {
+                            bases.skip(1)?;
+                        }
                     }
-                } else {
-                    let exp = exp
-                        .into_iter()
-                        .by_vals()
-                        .skip(skip as usize)
-                        .take(c as usize)
-                        .enumerate()
-                        .fold(0u64, |acc, (i, b)| acc + ((b as u64) << i));
+                    ChunkedExponent::Chunks(chunks) => {
+                        let exp = chunks[chunk];
 
-                    if exp != 0 {
-                        (&mut buckets[(exp - 1) as usize]).add_assign_from_source(&mut bases)?;
-                    } else {
-                        bases.skip(1)?;
+                        if exp != 0 {
+                            (&mut buckets[(exp - 1) as usize])
+                                .add_assign_from_source(&mut bases)?;
+                        } else {
+                            bases.skip(1)?;
+                        }
                     }
                 }
             }
@@ -235,10 +277,19 @@ where
         Ok(acc)
     };
 
+    // Split the exponents into chunks.
+    let exponents = Arc::new(
+        exponents
+            .iter()
+            .map(|exp| exp.chunks(c as usize))
+            .collect::<Vec<_>>(),
+    );
+
     let parts = (0..G::Scalar::NUM_BITS)
         .into_par_iter()
         .step_by(c as usize)
-        .map(|skip| this(bases.clone(), density_map.clone(), exponents.clone(), skip))
+        .enumerate()
+        .map(|(chunk, _)| this(bases.clone(), density_map.clone(), exponents.clone(), chunk))
         .collect::<Vec<Result<_, _>>>();
 
     parts
@@ -255,7 +306,7 @@ pub fn multiexp<Q, D, G, S>(
     pool: &Worker,
     bases: S,
     density_map: D,
-    exponents: Arc<Vec<FieldBits<<G::Scalar as PrimeFieldBits>::ReprBits>>>,
+    exponents: Arc<Vec<Exponent<G::Scalar>>>,
 ) -> Waiter<Result<G, SynthesisError>>
 where
     for<'a> &'a Q: QueryDensity,
@@ -311,7 +362,7 @@ fn test_with_bls12() {
             .map(|_| Scalar::random(&mut rng))
             .collect::<Vec<_>>(),
     );
-    let v_bits = Arc::new(v.iter().map(|e| e.to_le_bits()).collect::<Vec<_>>());
+    let v_bits = Arc::new(v.iter().map(|e| e.into()).collect::<Vec<_>>());
     let g = Arc::new(
         (0..SAMPLES)
             .map(|_| <Bls12 as Engine>::G1::random(&mut rng).to_affine())
