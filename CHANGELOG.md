@@ -6,6 +6,17 @@ and this project adheres to Rust's notion of
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+- `bellman::multiexp::Exponent`
+
+### Changed
+- `bellman::multiexp::multiexp` now takes exponents as `Arc<Vec<Exponent<_>>>`
+  instead of `Arc<Vec<FieldBits<_>>>`.
+
+### Fixed
+- Migrating from `bitvec 0.22` to `bitvec 1.0` caused a performance regression
+  in `bellman::multiexp::multiexp`, slowing down proof creation. Some of that
+  performance has been regained by refactoring `multiexp`.
 
 ## [0.12.0] - 2022-05-04
 ### Changed

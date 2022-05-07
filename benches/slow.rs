@@ -4,7 +4,7 @@ use bellman::{
 };
 use bls12_381::{Bls12, Scalar};
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use ff::{Field, PrimeFieldBits};
+use ff::Field;
 use group::{Curve, Group};
 use pairing::Engine;
 use rand_core::SeedableRng;
@@ -20,7 +20,7 @@ fn bench_parts(c: &mut Criterion) {
             .map(|_| Scalar::random(&mut rng))
             .collect::<Vec<_>>(),
     );
-    let v_bits = Arc::new(v.iter().map(|e| e.to_le_bits()).collect::<Vec<_>>());
+    let v_bits = Arc::new(v.iter().map(|e| e.into()).collect::<Vec<_>>());
     let g = Arc::new(
         (0..samples)
             .map(|_| <Bls12 as Engine>::G1::random(&mut rng).to_affine())
