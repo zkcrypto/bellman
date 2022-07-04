@@ -22,6 +22,12 @@ use group::{Curve, Group};
 use pairing::{MillerLoopResult, MultiMillerLoop};
 use rand_core::{CryptoRng, RngCore};
 
+#[cfg(feature = "multicore")]
+use rand_core::OsRng;
+
+#[cfg(feature = "multicore")]
+use rayon::{iter::ParallelIterator, prelude::ParallelSlice};
+
 use crate::{
     groth16::{PreparedVerifyingKey, Proof, VerifyingKey},
     VerificationError,
@@ -165,6 +171,119 @@ where
             Ok(())
         } else {
             Err(VerificationError::InvalidProof)
+        }
+    }
+
+    /// Perform batch verification with a particular `VerifyingKey`, returning
+    /// `Ok(())` if all proofs were verified and `VerificationError` otherwise.
+    ///
+    /// This performs the bulk of internal arithmetic over the global rayon
+    /// threadpool.
+    #[cfg(feature = "multicore")]
+    #[allow(non_snake_case)]
+    pub fn verify_multicore(self, vk: &VerifyingKey<E>) -> Result<(), VerificationError> {
+        if self
+            .items
+            .iter()
+            .any(|Item { inputs, .. }| inputs.len() + 1 != vk.ic.len())
+        {
+            return Err(VerificationError::InvalidVerifyingKey);
+        }
+
+        struct Accumulator<E: MultiMillerLoop> {
+            gammas: Vec<E::Fr>,
+            delta: E::G1,
+            y: E::Fr,
+            ml_result: Option<E::Result>,
+        }
+
+        impl<E: MultiMillerLoop> Accumulator<E> {
+            fn new(ic_len: usize) -> Self {
+                Accumulator {
+                    gammas: vec![E::Fr::zero(); ic_len],
+                    delta: E::G1::identity(),
+                    y: E::Fr::zero(),
+                    ml_result: None,
+                }
+            }
+        }
+
+        let ic_len = vk.ic.len();
+
+        let acc = self
+            .items
+            // This chunk size was obtained heuristically.
+            .par_chunks(8)
+            .map(|items| {
+                let mut acc = Accumulator::<E>::new(ic_len);
+                let mut ml_terms: Vec<(E::G1Affine, E::G2Prepared)> = vec![];
+                let z = loop {
+                    let z = E::Fr::random(&mut OsRng);
+                    if !z.is_zero_vartime() {
+                        break z;
+                    }
+                };
+                let mut cur_z = z;
+                for Item { proof, inputs } in items {
+                    acc.gammas[0] += &cur_z;
+                    for (a_i, acc_gamma_i) in
+                        Iterator::zip(inputs.iter(), acc.gammas.iter_mut().skip(1))
+                    {
+                        *acc_gamma_i += &(cur_z * a_i);
+                    }
+                    acc.delta += proof.c * cur_z;
+                    acc.y += &cur_z;
+                    ml_terms.push(((proof.a * cur_z).into(), (-proof.b).into()));
+
+                    cur_z *= z;
+                }
+                let ml_terms = ml_terms.iter().map(|(a, b)| (a, b)).collect::<Vec<_>>();
+                acc.ml_result = Some(E::multi_miller_loop(&ml_terms[..]));
+                acc
+            })
+            .reduce(
+                || Accumulator::<E>::new(ic_len),
+                |mut a, b| {
+                    for (a, b) in a.gammas.iter_mut().zip(b.gammas.into_iter()) {
+                        *a += b;
+                    }
+                    a.delta += b.delta;
+                    a.y += b.y;
+                    a.ml_result = match (a.ml_result, b.ml_result) {
+                        (Some(a), Some(b)) => Some(a + b),
+                        (Some(a), None) | (None, Some(a)) => Some(a),
+                        (None, None) => None,
+                    };
+                    a
+                },
+            );
+
+        // TODO: could use a multiexp (Bos-Coster maybe?)
+        let psi = vk
+            .ic
+            .iter()
+            .zip(acc.gammas.into_iter())
+            .map(|(&psi_i, acc_gamma_i)| psi_i * acc_gamma_i)
+            .sum();
+
+        match acc.ml_result {
+            None => Ok(()),
+            Some(mut ml_result) => {
+                ml_result += E::multi_miller_loop(&[
+                    (&acc.delta.to_affine(), &E::G2Prepared::from(vk.delta_g2)),
+                    (&E::G1Affine::from(psi), &E::G2Prepared::from(vk.gamma_g2)),
+                    (
+                        &E::G1Affine::from(vk.alpha_g1 * acc.y),
+                        &E::G2Prepared::from(vk.beta_g2),
+                    ),
+                ]);
+
+                if ml_result.final_exponentiation() == E::Gt::identity() {
+                    Ok(())
+                } else {
+                    Err(VerificationError::InvalidProof)
+                }
+            }
         }
     }
 }
