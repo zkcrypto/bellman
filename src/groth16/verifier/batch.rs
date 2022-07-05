@@ -29,7 +29,7 @@ use rand_core::OsRng;
 use rayon::{iter::ParallelIterator, prelude::ParallelSlice};
 
 use crate::{
-    groth16::{PreparedVerifyingKey, Proof, VerifyingKey},
+    groth16::{PreparedVerifyingKey, Proof},
     VerificationError,
 };
 
@@ -96,24 +96,24 @@ where
         self.items.push(item.into())
     }
 
-    /// Perform batch verification with a particular `VerifyingKey`, returning
+    /// Perform batch verification with a particular `PreparedVerifyingKey`, returning
     /// `Ok(())` if all proofs were verified and `VerificationError` otherwise.
     #[allow(non_snake_case)]
     pub fn verify<R: RngCore + CryptoRng>(
         self,
         mut rng: R,
-        vk: &VerifyingKey<E>,
+        pvk: &PreparedVerifyingKey<E>,
     ) -> Result<(), VerificationError> {
         if self
             .items
             .iter()
-            .any(|Item { inputs, .. }| inputs.len() + 1 != vk.ic.len())
+            .any(|Item { inputs, .. }| inputs.len() + 1 != pvk.ic.len())
         {
             return Err(VerificationError::InvalidVerifyingKey);
         }
 
         let mut ml_terms = Vec::<(E::G1Affine, E::G2Prepared)>::new();
-        let mut acc_Gammas = vec![E::Fr::zero(); vk.ic.len()];
+        let mut acc_Gammas = vec![E::Fr::zero(); pvk.ic.len()];
         let mut acc_Delta = E::G1::identity();
         let mut acc_Y = E::Fr::zero();
 
@@ -136,20 +136,27 @@ where
             for (a_i, acc_Gamma_i) in Iterator::zip(inputs.iter(), acc_Gammas.iter_mut().skip(1)) {
                 *acc_Gamma_i += &(z * a_i);
             }
+            // TODO: could use multiexp here across all items
             acc_Delta += proof.c * z;
             acc_Y += &z;
         }
 
-        ml_terms.push((acc_Delta.to_affine(), E::G2Prepared::from(vk.delta_g2)));
+        let mut ml_terms = ml_terms.iter().map(|(a, b)| (a, b)).collect::<Vec<_>>();
 
-        let Psi = vk
+        let acc_Delta = acc_Delta.to_affine();
+
+        ml_terms.push((&acc_Delta, &pvk.delta_g2));
+
+        // TODO: could use multiexp here
+        let Psi = pvk
             .ic
             .iter()
             .zip(acc_Gammas.iter())
             .map(|(&Psi_i, acc_Gamma_i)| Psi_i * acc_Gamma_i)
-            .sum();
+            .sum::<E::G1>()
+            .to_affine();
 
-        ml_terms.push((E::G1Affine::from(Psi), E::G2Prepared::from(vk.gamma_g2)));
+        ml_terms.push((&Psi, &pvk.gamma_g2));
 
         // Covers the [acc_Y]⋅e(alpha_g1, beta_g2) component
         //
@@ -160,12 +167,11 @@ where
         //     ([acc_Y]⋅alpha_g1, beta_g2)
         // to our Miller loop terms because
         //     [acc_Y]⋅e(alpha_g1, beta_g2) = e([acc_Y]⋅alpha_g1, beta_g2)
-        ml_terms.push((
-            E::G1Affine::from(vk.alpha_g1 * acc_Y),
-            E::G2Prepared::from(vk.beta_g2),
-        ));
-
-        let ml_terms = ml_terms.iter().map(|(a, b)| (a, b)).collect::<Vec<_>>();
+        // TODO: figure out if it's actually slower to remove this and replace
+        // it with exponentiation by the precomputed alpha*beta. if not then
+        // at least this could be turned into a wNAF window table
+        let alpha_y = E::G1Affine::from(pvk.alpha_g1 * acc_Y);
+        ml_terms.push((&alpha_y, &pvk.beta_g2));
 
         if E::multi_miller_loop(&ml_terms[..]).final_exponentiation() == E::Gt::identity() {
             Ok(())
@@ -181,11 +187,11 @@ where
     /// threadpool.
     #[cfg(feature = "multicore")]
     #[allow(non_snake_case)]
-    pub fn verify_multicore(self, vk: &VerifyingKey<E>) -> Result<(), VerificationError> {
+    pub fn verify_multicore(self, pvk: &PreparedVerifyingKey<E>) -> Result<(), VerificationError> {
         if self
             .items
             .iter()
-            .any(|Item { inputs, .. }| inputs.len() + 1 != vk.ic.len())
+            .any(|Item { inputs, .. }| inputs.len() + 1 != pvk.ic.len())
         {
             return Err(VerificationError::InvalidVerifyingKey);
         }
@@ -208,7 +214,7 @@ where
             }
         }
 
-        let ic_len = vk.ic.len();
+        let ic_len = pvk.ic.len();
 
         let acc = self
             .items
@@ -231,6 +237,7 @@ where
                     {
                         *acc_gamma_i += &(cur_z * a_i);
                     }
+                    // TODO: could be done via multiexp across items
                     acc.delta += proof.c * cur_z;
                     acc.y += &cur_z;
                     ml_terms.push(((proof.a * cur_z).into(), (-proof.b).into()));
@@ -262,7 +269,7 @@ where
             None => Ok(()),
             Some(mut ml_result) => {
                 // TODO: could use a multiexp (Bos-Coster maybe?)
-                let psi = vk
+                let psi = pvk
                     .ic
                     .iter()
                     .zip(acc.gammas.into_iter())
@@ -270,12 +277,12 @@ where
                     .sum();
 
                 ml_result += E::multi_miller_loop(&[
-                    (&acc.delta.to_affine(), &E::G2Prepared::from(vk.delta_g2)),
-                    (&E::G1Affine::from(psi), &E::G2Prepared::from(vk.gamma_g2)),
-                    (
-                        &E::G1Affine::from(vk.alpha_g1 * acc.y),
-                        &E::G2Prepared::from(vk.beta_g2),
-                    ),
+                    (&acc.delta.to_affine(), &pvk.delta_g2),
+                    (&E::G1Affine::from(psi), &pvk.gamma_g2),
+                    // TODO: figure out of it's better to exponentiate
+                    // precomputed alpha*beta by y here instead; otherwise
+                    // consider using a window table
+                    (&E::G1Affine::from(pvk.alpha_g1 * acc.y), &pvk.beta_g2),
                 ]);
 
                 if ml_result.final_exponentiation() == E::Gt::identity() {
