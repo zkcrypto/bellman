@@ -258,17 +258,17 @@ where
                 },
             );
 
-        // TODO: could use a multiexp (Bos-Coster maybe?)
-        let psi = vk
-            .ic
-            .iter()
-            .zip(acc.gammas.into_iter())
-            .map(|(&psi_i, acc_gamma_i)| psi_i * acc_gamma_i)
-            .sum();
-
         match acc.ml_result {
             None => Ok(()),
             Some(mut ml_result) => {
+                // TODO: could use a multiexp (Bos-Coster maybe?)
+                let psi = vk
+                    .ic
+                    .iter()
+                    .zip(acc.gammas.into_iter())
+                    .map(|(&psi_i, acc_gamma_i)| psi_i * acc_gamma_i)
+                    .sum();
+
                 ml_result += E::multi_miller_loop(&[
                     (&acc.delta.to_affine(), &E::G2Prepared::from(vk.delta_g2)),
                     (&E::G1Affine::from(psi), &E::G2Prepared::from(vk.gamma_g2)),
