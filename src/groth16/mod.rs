@@ -407,6 +407,12 @@ pub struct PreparedVerifyingKey<E: MultiMillerLoop> {
     neg_delta_g2: E::G2Prepared,
     /// Copy of IC from `VerifiyingKey`.
     ic: Vec<E::G1Affine>,
+
+    // Batch verification needs
+    alpha_g1: E::G1Affine,
+    delta_g2: E::G2Prepared,
+    gamma_g2: E::G2Prepared,
+    beta_g2: E::G2Prepared,
 }
 
 pub trait ParameterSource<E: Engine> {

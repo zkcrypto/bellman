@@ -17,6 +17,11 @@ pub fn prepare_verifying_key<E: MultiMillerLoop>(vk: &VerifyingKey<E>) -> Prepar
         neg_gamma_g2: gamma.into(),
         neg_delta_g2: delta.into(),
         ic: vk.ic.clone(),
+
+        alpha_g1: vk.alpha_g1,
+        delta_g2: vk.delta_g2.into(),
+        gamma_g2: vk.gamma_g2.into(),
+        beta_g2: vk.beta_g2.into(),
     }
 }
 

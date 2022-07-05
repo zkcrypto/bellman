@@ -7,6 +7,10 @@ and this project adheres to Rust's notion of
 
 ## [Unreleased]
 
+### Changed
+- The `verify` and `verify_multicore` methods of batch verification for Groth16
+  now take a `PreparedVerifyingKey` instead for performance improvement.
+
 ## [0.13.1] - 2022-07-05
 ### Added
 - `bellman::groth16::batch::Verifier` now has a `verify_multicore` method (when

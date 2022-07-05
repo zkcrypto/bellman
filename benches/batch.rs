@@ -85,7 +85,7 @@ fn bench_batch_verify(c: &mut Criterion) {
                     for (proof, input) in proofs.iter() {
                         batch.queue((proof.clone(), vec![*input]));
                     }
-                    batch.verify(&mut rng, &params.vk)
+                    batch.verify(&mut rng, &pvk)
                 })
             },
         );

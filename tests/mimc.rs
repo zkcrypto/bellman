@@ -182,7 +182,7 @@ fn batch_verify() {
     let batch_start = Instant::now();
 
     // Verify this batch for this specific verifying key
-    assert!(batch.verify(rng, &params.vk).is_ok());
+    assert!(batch.verify(rng, &pvk).is_ok());
 
     batch_verifying += batch_start.elapsed();
 
