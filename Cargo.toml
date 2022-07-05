@@ -9,7 +9,7 @@ homepage = "https://github.com/zkcrypto/bellman"
 license = "MIT/Apache-2.0"
 name = "bellman"
 repository = "https://github.com/zkcrypto/bellman"
-version = "0.13.0"
+version = "0.13.1"
 edition = "2021"
 
 [dependencies]
