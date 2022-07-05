@@ -7,6 +7,15 @@ and this project adheres to Rust's notion of
 
 ## [Unreleased]
 
+### Added
+- `bellman::groth16::batch::Verifier` now has a `verify_multicore` method (when
+  the `multicore` feature is enabled) which will internally use the global rayon
+  thread pool to parallelize the verification of a batch of proofs.
+
+### Changed
+- The `multicore` feature now requires the `getrandom` feature of the
+  `rand_core` crate.
+
 ## [0.13.0] - 2022-05-06
 ### Added
 - `bellman::multiexp::Exponent`
