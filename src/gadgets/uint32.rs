@@ -348,7 +348,7 @@ impl UInt32 {
 
             // Iterate over each bit of the operand and add the operand to
             // the linear combination
-            let mut coeff = Scalar::one();
+            let mut coeff = Scalar::ONE;
             for bit in &op.bits {
                 lc = lc + &bit.lc(CS::one(), coeff);
 
@@ -376,7 +376,7 @@ impl UInt32 {
         let mut result_lc = LinearCombination::zero();
 
         // Allocate each bit of the result
-        let mut coeff = Scalar::one();
+        let mut coeff = Scalar::ONE;
         let mut i = 0;
         while max_value != 0 {
             // Allocate the bit
@@ -627,9 +627,9 @@ mod test {
 
             // Flip a bit and see if the addition constraint still works
             if cs.get("addition/result bit 0/boolean").is_zero_vartime() {
-                cs.set("addition/result bit 0/boolean", Field::one());
+                cs.set("addition/result bit 0/boolean", Field::ONE);
             } else {
-                cs.set("addition/result bit 0/boolean", Field::zero());
+                cs.set("addition/result bit 0/boolean", Field::ZERO);
             }
 
             assert!(!cs.is_satisfied());

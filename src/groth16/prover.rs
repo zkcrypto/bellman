@@ -23,7 +23,7 @@ fn eval<S: PrimeField>(
     input_assignment: &[S],
     aux_assignment: &[S],
 ) -> S {
-    let mut acc = S::zero();
+    let mut acc = S::ZERO;
 
     for &(index, coeff) in lc.0.iter() {
         let mut tmp;
@@ -44,7 +44,7 @@ fn eval<S: PrimeField>(
                 }
             }
 
-            if coeff != S::one() {
+            if coeff != S::ONE {
                 tmp *= coeff;
             }
             acc += tmp;
@@ -197,7 +197,7 @@ where
         aux_assignment: vec![],
     };
 
-    prover.alloc_input(|| "", || Ok(E::Fr::one()))?;
+    prover.alloc_input(|| "", || Ok(E::Fr::ONE))?;
 
     circuit.synthesize(&mut prover)?;
 

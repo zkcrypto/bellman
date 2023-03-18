@@ -60,7 +60,7 @@ impl<S: PrimeField, G: Group<S>> EvaluationDomain<S, G> {
         }
 
         // Compute omega, the 2^exp primitive root of unity
-        let mut omega = S::root_of_unity();
+        let mut omega = S::ROOT_OF_UNITY;
         for _ in exp..S::S {
             omega = omega.square();
         }
@@ -73,7 +73,7 @@ impl<S: PrimeField, G: Group<S>> EvaluationDomain<S, G> {
             exp,
             omega,
             omegainv: omega.invert().unwrap(),
-            geninv: S::multiplicative_generator().invert().unwrap(),
+            geninv: S::MULTIPLICATIVE_GENERATOR.invert().unwrap(),
             minv: S::from(m as u64).invert().unwrap(),
         })
     }
@@ -113,7 +113,7 @@ impl<S: PrimeField, G: Group<S>> EvaluationDomain<S, G> {
     }
 
     pub fn coset_fft(&mut self, worker: &Worker) {
-        self.distribute_powers(worker, S::multiplicative_generator());
+        self.distribute_powers(worker, S::MULTIPLICATIVE_GENERATOR);
         self.fft(worker);
     }
 
@@ -128,7 +128,7 @@ impl<S: PrimeField, G: Group<S>> EvaluationDomain<S, G> {
     /// tau^m - 1 for these radix-2 domains.
     pub fn z(&self, tau: &S) -> S {
         let mut tmp = tau.pow_vartime(&[self.coeffs.len() as u64]);
-        tmp.sub_assign(&S::one());
+        tmp.sub_assign(&S::ONE);
 
         tmp
     }
@@ -137,7 +137,7 @@ impl<S: PrimeField, G: Group<S>> EvaluationDomain<S, G> {
     /// evaluation domain, so we must perform division over
     /// a coset.
     pub fn divide_by_z_on_coset(&mut self, worker: &Worker) {
-        let i = self.z(&S::multiplicative_generator()).invert().unwrap();
+        let i = self.z(&S::MULTIPLICATIVE_GENERATOR).invert().unwrap();
 
         worker.scope(self.coeffs.len(), |scope, chunk| {
             for v in self.coeffs.chunks_mut(chunk) {
@@ -245,7 +245,7 @@ impl<S: PrimeField> Clone for Scalar<S> {
 
 impl<S: PrimeField> Group<S> for Scalar<S> {
     fn group_zero() -> Self {
-        Scalar(S::zero())
+        Scalar(S::ZERO)
     }
     fn group_mul_assign(&mut self, by: &S) {
         self.0.mul_assign(by);
@@ -295,7 +295,7 @@ fn serial_fft<S: PrimeField, T: Group<S>>(a: &mut [T], omega: &S, log_n: u32) {
 
         let mut k = 0;
         while k < n {
-            let mut w = S::one();
+            let mut w = S::ONE;
             for j in 0..m {
                 let mut t = a[(k + j + m) as usize];
                 t.group_mul_assign(&w);
@@ -336,7 +336,7 @@ fn parallel_fft<S: PrimeField, T: Group<S>>(
                 let omega_j = omega.pow_vartime(&[j as u64]);
                 let omega_step = omega.pow_vartime(&[(j as u64) << log_new_n]);
 
-                let mut elt = S::one();
+                let mut elt = S::ONE;
                 for (i, tmp) in tmp.iter_mut().enumerate() {
                     for s in 0..num_cpus {
                         let idx = (i + (s << log_new_n)) % (1 << log_n);
@@ -392,7 +392,7 @@ fn polynomial_arith() {
                     .collect();
 
                 // naive evaluation
-                let mut naive = vec![Scalar(S::zero()); coeffs_a + coeffs_b];
+                let mut naive = vec![Scalar(S::ZERO); coeffs_a + coeffs_b];
                 for (i1, a) in a.iter().enumerate() {
                     for (i2, b) in b.iter().enumerate() {
                         let mut prod = *a;
@@ -401,8 +401,8 @@ fn polynomial_arith() {
                     }
                 }
 
-                a.resize(coeffs_a + coeffs_b, Scalar(S::zero()));
-                b.resize(coeffs_a + coeffs_b, Scalar(S::zero()));
+                a.resize(coeffs_a + coeffs_b, Scalar(S::ZERO));
+                b.resize(coeffs_a + coeffs_b, Scalar(S::ZERO));
 
                 let mut a = EvaluationDomain::from_coeffs(a).unwrap();
                 let mut b = EvaluationDomain::from_coeffs(b).unwrap();
