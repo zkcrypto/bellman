@@ -264,7 +264,7 @@ impl Field for Fr {
     }
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
 pub struct FrRepr([u8; 8]);
 
 impl From<Fr> for FrRepr {
@@ -288,12 +288,6 @@ impl AsMut<[u8]> for FrRepr {
 impl AsRef<[u8]> for FrRepr {
     fn as_ref(&self) -> &[u8] {
         &self.0[..]
-    }
-}
-
-impl Default for FrRepr {
-    fn default() -> FrRepr {
-        FrRepr([0; 8])
     }
 }
 
