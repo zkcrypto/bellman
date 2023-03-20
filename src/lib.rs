@@ -227,7 +227,7 @@ impl<Scalar: PrimeField> Add<Variable> for LinearCombination<Scalar> {
     type Output = LinearCombination<Scalar>;
 
     fn add(self, other: Variable) -> LinearCombination<Scalar> {
-        self + (Scalar::one(), other)
+        self + (Scalar::ONE, other)
     }
 }
 
@@ -235,7 +235,7 @@ impl<Scalar: PrimeField> Sub<Variable> for LinearCombination<Scalar> {
     type Output = LinearCombination<Scalar>;
 
     fn sub(self, other: Variable) -> LinearCombination<Scalar> {
-        self - (Scalar::one(), other)
+        self - (Scalar::ONE, other)
     }
 }
 

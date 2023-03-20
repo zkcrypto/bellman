@@ -173,7 +173,7 @@ impl<F: PrimeFieldBits> From<&F> for Exponent<F> {
     fn from(exp: &F) -> Self {
         if exp.is_zero_vartime() {
             Exponent::Zero
-        } else if exp == &F::one() {
+        } else if exp == &F::ONE {
             Exponent::One
         } else {
             Exponent::Bits(exp.to_le_bits())

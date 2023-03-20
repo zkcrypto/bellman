@@ -23,9 +23,9 @@ impl<Scalar: PrimeField> Circuit<Scalar> for XorDemo<Scalar> {
             || {
                 if self.a.is_some() {
                     if self.a.unwrap() {
-                        Ok(Scalar::one())
+                        Ok(Scalar::ONE)
                     } else {
-                        Ok(Scalar::zero())
+                        Ok(Scalar::ZERO)
                     }
                 } else {
                     Err(SynthesisError::AssignmentMissing)
@@ -45,9 +45,9 @@ impl<Scalar: PrimeField> Circuit<Scalar> for XorDemo<Scalar> {
             || {
                 if self.b.is_some() {
                     if self.b.unwrap() {
-                        Ok(Scalar::one())
+                        Ok(Scalar::ONE)
                     } else {
-                        Ok(Scalar::zero())
+                        Ok(Scalar::ZERO)
                     }
                 } else {
                     Err(SynthesisError::AssignmentMissing)
@@ -67,9 +67,9 @@ impl<Scalar: PrimeField> Circuit<Scalar> for XorDemo<Scalar> {
             || {
                 if self.a.is_some() && self.b.is_some() {
                     if self.a.unwrap() ^ self.b.unwrap() {
-                        Ok(Scalar::one())
+                        Ok(Scalar::ONE)
                     } else {
-                        Ok(Scalar::zero())
+                        Ok(Scalar::ZERO)
                     }
                 } else {
                     Err(SynthesisError::AssignmentMissing)
@@ -90,8 +90,8 @@ impl<Scalar: PrimeField> Circuit<Scalar> for XorDemo<Scalar> {
 
 #[test]
 fn test_xordemo() {
-    let g1 = Fr::one();
-    let g2 = Fr::one();
+    let g1 = Fr::ONE;
+    let g2 = Fr::ONE;
     let alpha = Fr::from(48577);
     let beta = Fr::from(22580);
     let gamma = Fr::from(53332);
@@ -123,14 +123,14 @@ fn test_xordemo() {
     // have 7 elements (it's a quotient polynomial)
     assert_eq!(7, params.h.len());
 
-    let mut root_of_unity = Fr::root_of_unity();
+    let mut root_of_unity = Fr::ROOT_OF_UNITY;
 
     // We expect this to be a 2^10 root of unity
-    assert_eq!(Fr::one(), root_of_unity.pow_vartime(&[1u64 << 10]));
+    assert_eq!(Fr::ONE, root_of_unity.pow_vartime(&[1u64 << 10]));
 
     // Let's turn it into a 2^3 root of unity.
     root_of_unity = root_of_unity.pow_vartime(&[1u64 << 7]);
-    assert_eq!(Fr::one(), root_of_unity.pow_vartime(&[1u64 << 3]));
+    assert_eq!(Fr::ONE, root_of_unity.pow_vartime(&[1u64 << 3]));
     assert_eq!(Fr::from(20201), root_of_unity);
 
     // Let's compute all the points in our evaluation domain.
@@ -142,9 +142,9 @@ fn test_xordemo() {
     // Let's compute t(tau) = (tau - p_0)(tau - p_1)...
     //                      = tau^8 - 1
     let mut t_at_tau = tau.pow_vartime(&[8u64]);
-    t_at_tau.sub_assign(&Fr::one());
+    t_at_tau.sub_assign(&Fr::ONE);
     {
-        let mut tmp = Fr::one();
+        let mut tmp = Fr::ONE;
         for p in &points {
             let mut term = tau;
             term.sub_assign(p);
@@ -161,7 +161,7 @@ fn test_xordemo() {
         let mut coeff = delta_inverse;
         coeff.mul_assign(&t_at_tau);
 
-        let mut cur = Fr::one();
+        let mut cur = Fr::ONE;
         for h in params.h.iter() {
             let mut tmp = cur;
             tmp.mul_assign(&coeff);
@@ -230,19 +230,11 @@ fn test_xordemo() {
         assert_eq!(u, a);
     }
 
-    for (v, b) in v_i
-        .iter()
-        .filter(|&&e| e != Fr::zero())
-        .zip(&params.b_g1[..])
-    {
+    for (v, b) in v_i.iter().filter(|&&e| e != Fr::ZERO).zip(&params.b_g1[..]) {
         assert_eq!(v, b);
     }
 
-    for (v, b) in v_i
-        .iter()
-        .filter(|&&e| e != Fr::zero())
-        .zip(&params.b_g2[..])
-    {
+    for (v, b) in v_i.iter().filter(|&&e| e != Fr::ZERO).zip(&params.b_g2[..]) {
         assert_eq!(v, b);
     }
 
@@ -340,7 +332,7 @@ fn test_xordemo() {
     // h(x) = P(x) / t(x)
     //      = 49752*x^6 + 13914*x^5 + 29243*x^4 + 27227*x^3 + 62362*x^2 + 35703*x + 4032
     {
-        let mut expected_c = Fr::zero();
+        let mut expected_c = Fr::ZERO;
 
         // A * s
         let mut tmp = proof.a;
@@ -377,7 +369,7 @@ fn test_xordemo() {
         assert_eq!(expected_c, proof.c);
     }
 
-    assert!(verify_proof(&pvk, &proof, &[Fr::one()]).is_ok());
+    assert!(verify_proof(&pvk, &proof, &[Fr::ONE]).is_ok());
 }
 
 struct MultWithZeroCoeffs<F> {
@@ -421,8 +413,8 @@ fn zero_coeff_test(one_var: bool) {
         c: Some(Fr::from(30)),
         one_var,
     };
-    let g1 = Fr::one();
-    let g2 = Fr::one();
+    let g1 = Fr::ONE;
+    let g2 = Fr::ONE;
     let alpha = Fr::from(48577);
     let beta = Fr::from(22580);
     let gamma = Fr::from(53332);

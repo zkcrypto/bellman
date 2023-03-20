@@ -15,7 +15,7 @@ where
 {
     for (i, bits) in bits.chunks(Scalar::CAPACITY as usize).enumerate() {
         let mut num = Num::<Scalar>::zero();
-        let mut coeff = Scalar::one();
+        let mut coeff = Scalar::ONE;
         for bit in bits {
             num = num.add_bool_with_coeff(CS::one(), bit, coeff);
 
@@ -27,7 +27,7 @@ where
         // num * 1 = input
         cs.enforce(
             || format!("packing constraint {}", i),
-            |_| num.lc(Scalar::one()),
+            |_| num.lc(Scalar::ONE),
             |lc| lc + CS::one(),
             |lc| lc + input,
         );
@@ -54,8 +54,8 @@ pub fn compute_multipacking<Scalar: PrimeField>(bits: &[bool]) -> Vec<Scalar> {
     let mut result = vec![];
 
     for bits in bits.chunks(Scalar::CAPACITY as usize) {
-        let mut cur = Scalar::zero();
-        let mut coeff = Scalar::one();
+        let mut cur = Scalar::ZERO;
+        let mut coeff = Scalar::ONE;
 
         for bit in bits {
             if *bit {

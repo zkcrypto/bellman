@@ -6,6 +6,9 @@ and this project adheres to Rust's notion of
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Changed
+- MSRV bumped to `1.60.0`
+- Bumped dependencies to `ff 0.13`, `group 0.13`, `pairing 0.23`.
 
 ## [0.13.1] - 2022-07-05
 ### Added

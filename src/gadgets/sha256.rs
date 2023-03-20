@@ -92,7 +92,7 @@ where
 
     let mut w = input
         .chunks(32)
-        .map(|e| UInt32::from_bits_be(e))
+        .map(UInt32::from_bits_be)
         .collect::<Vec<_>>();
 
     // We can save some constraints by combining some of

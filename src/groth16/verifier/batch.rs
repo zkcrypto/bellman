@@ -113,9 +113,9 @@ where
         }
 
         let mut ml_terms = Vec::<(E::G1Affine, E::G2Prepared)>::new();
-        let mut acc_Gammas = vec![E::Fr::zero(); vk.ic.len()];
+        let mut acc_Gammas = vec![E::Fr::ZERO; vk.ic.len()];
         let mut acc_Delta = E::G1::identity();
-        let mut acc_Y = E::Fr::zero();
+        let mut acc_Y = E::Fr::ZERO;
 
         for Item { proof, inputs } in self.items.into_iter() {
             // The spec is explicit that z != 0.  Field::random is defined to
@@ -200,9 +200,9 @@ where
         impl<E: MultiMillerLoop> Accumulator<E> {
             fn new(ic_len: usize) -> Self {
                 Accumulator {
-                    gammas: vec![E::Fr::zero(); ic_len],
+                    gammas: vec![E::Fr::ZERO; ic_len],
                     delta: E::G1::identity(),
-                    y: E::Fr::zero(),
+                    y: E::Fr::ZERO,
                     ml_result: None,
                 }
             }

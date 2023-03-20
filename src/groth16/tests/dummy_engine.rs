@@ -6,10 +6,10 @@ use group::{
 use pairing::{Engine, MillerLoopResult, MultiMillerLoop, PairingCurveAffine};
 
 use rand_core::RngCore;
-use std::fmt;
 use std::iter::Sum;
 use std::num::Wrapping;
 use std::ops::{Add, AddAssign, BitAnd, Mul, MulAssign, Neg, Shr, Sub, SubAssign};
+use std::{fmt, iter::Product};
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
 
 const MODULUS_R: Wrapping<u32> = Wrapping(64513);
@@ -19,7 +19,7 @@ pub struct Fr(Wrapping<u32>);
 
 impl Default for Fr {
     fn default() -> Self {
-        <Fr as Field>::zero()
+        <Fr as Field>::ZERO
     }
 }
 
@@ -53,13 +53,25 @@ impl ConditionallySelectable for Fr {
 
 impl Sum for Fr {
     fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
-        iter.fold(Self::zero(), ::std::ops::Add::add)
+        iter.fold(Self::ZERO, ::std::ops::Add::add)
     }
 }
 
 impl<'r> Sum<&'r Fr> for Fr {
     fn sum<I: Iterator<Item = &'r Fr>>(iter: I) -> Self {
-        iter.fold(Self::zero(), ::std::ops::Add::add)
+        iter.fold(Self::ZERO, ::std::ops::Add::add)
+    }
+}
+
+impl Product for Fr {
+    fn product<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.fold(Self::ONE, ::std::ops::Mul::mul)
+    }
+}
+
+impl<'r> Product<&'r Fr> for Fr {
+    fn product<I: Iterator<Item = &'r Fr>>(iter: I) -> Self {
+        iter.fold(Self::ONE, ::std::ops::Mul::mul)
     }
 }
 
@@ -185,16 +197,11 @@ impl Shr<u32> for Fr {
 }
 
 impl Field for Fr {
+    const ZERO: Self = Fr(Wrapping(0));
+    const ONE: Self = Fr(Wrapping(1));
+
     fn random(mut rng: impl RngCore) -> Self {
         Fr(Wrapping(rng.next_u32()) % MODULUS_R)
-    }
-
-    fn zero() -> Self {
-        Fr(Wrapping(0))
-    }
-
-    fn one() -> Self {
-        Fr(Wrapping(1))
     }
 
     fn is_zero(&self) -> Choice {
@@ -216,23 +223,27 @@ impl Field for Fr {
         )
     }
 
+    fn sqrt_ratio(num: &Self, div: &Self) -> (Choice, Self) {
+        ff::helpers::sqrt_ratio_generic(num, div)
+    }
+
     #[allow(clippy::many_single_char_names)]
     fn sqrt(&self) -> CtOption<Self> {
         // Tonelli-Shank's algorithm for q mod 16 = 1
         // https://eprint.iacr.org/2012/685.pdf (page 12, algorithm 5)
-        let mut c = Fr::root_of_unity();
+        let mut c = Fr::ROOT_OF_UNITY;
         // r = self^((t + 1) // 2)
         let mut r = self.pow_vartime([32u64]);
         // t = self^t
         let mut t = self.pow_vartime([63u64]);
         let mut m = Fr::S;
 
-        while t != <Fr as Field>::one() {
+        while t != <Fr as Field>::ONE {
             let mut i = 1;
             {
                 let mut t2i = t.square();
                 loop {
-                    if t2i == <Fr as Field>::one() {
+                    if t2i == <Fr as Field>::ONE {
                         break;
                     }
                     t2i = t2i.square();
@@ -253,7 +264,7 @@ impl Field for Fr {
     }
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
 pub struct FrRepr([u8; 8]);
 
 impl From<Fr> for FrRepr {
@@ -280,12 +291,6 @@ impl AsRef<[u8]> for FrRepr {
     }
 }
 
-impl Default for FrRepr {
-    fn default() -> FrRepr {
-        FrRepr([0; 8])
-    }
-}
-
 impl PrimeField for Fr {
     type Repr = FrRepr;
 
@@ -307,13 +312,12 @@ impl PrimeField for Fr {
         Choice::from(((self.0).0 % 2) as u8)
     }
 
-    fn multiplicative_generator() -> Fr {
-        Fr(Wrapping(5))
-    }
-
-    fn root_of_unity() -> Fr {
-        Fr(Wrapping(57751))
-    }
+    const MODULUS: &'static str = "64513";
+    const TWO_INV: Self = Fr(Wrapping(32257));
+    const MULTIPLICATIVE_GENERATOR: Self = Fr(Wrapping(5));
+    const ROOT_OF_UNITY: Self = Fr(Wrapping(57751));
+    const ROOT_OF_UNITY_INV: Self = Fr(Wrapping(12832));
+    const DELTA: Self = Fr(Wrapping(38779));
 }
 
 impl PrimeFieldBits for Fr {
@@ -352,7 +356,7 @@ impl MultiMillerLoop for DummyEngine {
     type Result = Fr;
 
     fn multi_miller_loop(terms: &[(&Self::G1Affine, &Self::G2Prepared)]) -> Self::Result {
-        let mut acc = <Fr as Field>::zero();
+        let mut acc = <Fr as Field>::ZERO;
 
         for &(a, b) in terms {
             let mut tmp = *a;
@@ -381,11 +385,11 @@ impl Group for Fr {
     }
 
     fn identity() -> Self {
-        <Fr as Field>::zero()
+        <Fr as Field>::ZERO
     }
 
     fn generator() -> Self {
-        <Fr as Field>::one()
+        <Fr as Field>::ONE
     }
 
     fn is_identity(&self) -> Choice {
@@ -437,11 +441,11 @@ impl PrimeCurveAffine for Fr {
     type Scalar = Fr;
 
     fn identity() -> Self {
-        <Fr as Field>::zero()
+        <Fr as Field>::ZERO
     }
 
     fn generator() -> Self {
-        <Fr as Field>::one()
+        <Fr as Field>::ONE
     }
 
     fn is_identity(&self) -> Choice {
