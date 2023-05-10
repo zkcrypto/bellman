@@ -511,6 +511,35 @@ impl Boolean {
         }
     }
 
+    /// Perform OR over two boolean operands
+    pub fn or<'a, Scalar, CS>(cs: CS, a: &'a Self, b: &'a Self) -> Result<Self, SynthesisError>
+    where
+        Scalar: PrimeField,
+        CS: ConstraintSystem<Scalar>,
+    {
+        match (a, b) {
+            // false OR x is always x
+            (&Boolean::Constant(false), x) | (x, &Boolean::Constant(false)) => {
+                Ok(x.clone())
+            }
+            // true OR x is always true
+            (&Boolean::Constant(true), _) | (_, &Boolean::Constant(true)) => Ok(Boolean::Constant(true)),
+            // a OR (NOT b) = NOT((NOT a) AND b) = NOT(b AND (NOT a))
+            (&Boolean::Is(ref a), &Boolean::Not(ref b))
+            | (&Boolean::Not(ref b), &Boolean::Is(ref a)) => {
+                Ok(Boolean::Not(AllocatedBit::and_not(cs, b, a)?))
+            }
+            // (NOT a) OR (NOT b) = NOT(a AND b)
+            (&Boolean::Not(ref a), &Boolean::Not(ref b)) => {
+                Ok(Boolean::Not(AllocatedBit::and(cs, a, b)?))
+            }
+            // a OR b = NOT(a NOR b) 
+            (&Boolean::Is(ref a), &Boolean::Is(ref b)) => {
+                Ok(Boolean::Not(AllocatedBit::nor(cs, a, b)?))
+            }
+        }
+    }
+
     /// Computes (a and b) xor ((not a) and c)
     pub fn sha256_ch<'a, Scalar, CS>(
         mut cs: CS,
