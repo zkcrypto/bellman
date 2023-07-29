@@ -115,7 +115,7 @@ dependencies = [
 [[package]]
 name = "bls12_381"
 version = "0.8.0"
-source = "git+https://github.com/zkcrypto/bls12_381.git?rev=d5df9da6b20619bf77cc432447c02f8f6a6a1fb3#d5df9da6b20619bf77cc432447c02f8f6a6a1fb3"
+source = "git+https://github.com/zkcrypto/bls12_381.git?rev=b859693951a28bb2e44515adbf54395aa8ec7a9a#b859693951a28bb2e44515adbf54395aa8ec7a9a"
 dependencies = [
  "ff",
  "group",
@@ -390,8 +390,7 @@ dependencies = [
 [[package]]
 name = "group"
 version = "0.14.0-pre.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1ff6a0b2dd4b981b1ae9e3e6830ab146771f3660d31d57bafd9018805a91b0f1"
+source = "git+https://github.com/zkcrypto/group.git?rev=21104854da7f316c470213ab4a2ace239d24dd28#21104854da7f316c470213ab4a2ace239d24dd28"
 dependencies = [
  "ff",
  "rand_core",

@@ -32,11 +32,11 @@ pub trait Source<G: PrimeCurveAffine> {
 
 pub trait AddAssignFromSource: PrimeCurve {
     /// Parses the element from the source. Fails if the point is at infinity.
-    fn add_assign_from_source<S: Source<<Self as PrimeCurve>::Affine>>(
+    fn add_assign_from_source<S: Source<Self::Affine>>(
         &mut self,
         source: &mut S,
     ) -> Result<(), SynthesisError> {
-        AddAssign::<&<Self as PrimeCurve>::Affine>::add_assign(self, source.next()?);
+        AddAssign::<&Self::Affine>::add_assign(self, source.next()?);
         Ok(())
     }
 }
@@ -218,7 +218,7 @@ where
     D: Send + Sync + 'static + Clone + AsRef<Q>,
     G: PrimeCurve,
     G::Scalar: PrimeFieldBits,
-    S: SourceBuilder<<G as PrimeCurve>::Affine>,
+    S: SourceBuilder<G::Affine>,
 {
     // Perform this region of the multiexp
     let this = move |bases: S,
@@ -313,7 +313,7 @@ where
     D: Send + Sync + 'static + Clone + AsRef<Q>,
     G: PrimeCurve,
     G::Scalar: PrimeFieldBits,
-    S: SourceBuilder<<G as PrimeCurve>::Affine>,
+    S: SourceBuilder<G::Affine>,
 {
     let c = if exponents.len() < 32 {
         3u32
@@ -335,7 +335,7 @@ where
 #[test]
 fn test_with_bls12() {
     fn naive_multiexp<G: PrimeCurve>(
-        bases: Arc<Vec<<G as PrimeCurve>::Affine>>,
+        bases: Arc<Vec<G::Affine>>,
         exponents: Arc<Vec<G::Scalar>>,
     ) -> G {
         assert_eq!(bases.len(), exponents.len());

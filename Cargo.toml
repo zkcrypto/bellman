@@ -60,4 +60,5 @@ harness = false
 maintenance = { status = "actively-developed" }
 
 [patch.crates-io]
-bls12_381 = { git = "https://github.com/zkcrypto/bls12_381.git", rev = "d5df9da6b20619bf77cc432447c02f8f6a6a1fb3" }
+bls12_381 = { git = "https://github.com/zkcrypto/bls12_381.git", rev = "b859693951a28bb2e44515adbf54395aa8ec7a9a" }
+group = { git = "https://github.com/zkcrypto/group.git", rev = "21104854da7f316c470213ab4a2ace239d24dd28" }
