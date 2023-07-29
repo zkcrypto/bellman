@@ -3,7 +3,7 @@ use std::ops::{AddAssign, MulAssign};
 use std::sync::Arc;
 
 use ff::{Field, PrimeField, PrimeFieldBits};
-use group::{prime::PrimeCurveAffine, Curve};
+use group::{Curve, CurveAffine};
 use pairing::Engine;
 
 use super::{ParameterSource, Proof};

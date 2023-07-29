@@ -2,7 +2,7 @@
 //!
 //! [Groth16]: https://eprint.iacr.org/2016/260
 
-use group::{prime::PrimeCurveAffine, GroupEncoding, UncompressedEncoding};
+use group::{CurveAffine, GroupEncoding, UncompressedEncoding};
 use pairing::{Engine, MultiMillerLoop};
 
 use crate::SynthesisError;

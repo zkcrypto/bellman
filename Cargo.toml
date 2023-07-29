@@ -58,3 +58,7 @@ harness = false
 
 [badges]
 maintenance = { status = "actively-developed" }
+
+[patch.crates-io]
+bls12_381 = { git = "https://github.com/zkcrypto/bls12_381.git", rev = "3d96155c306f6e3febfcb06c9b7754433458f7b5" }
+group = { git = "https://github.com/zkcrypto/group.git", rev = "85c484fff517135cedfe265ef893bd4b8d745300" }
