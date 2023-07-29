@@ -1,4 +1,4 @@
-use group::{prime::PrimeCurveAffine, Curve};
+use group::{Curve, CurveAffine};
 use pairing::{MillerLoopResult, MultiMillerLoop};
 use std::ops::{AddAssign, Neg};
 

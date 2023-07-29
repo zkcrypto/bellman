@@ -1,7 +1,7 @@
 use ff::{Field, FieldBits, PrimeField, PrimeFieldBits};
 use group::{
-    prime::{PrimeCurve, PrimeCurveAffine, PrimeGroup},
-    Curve, Group, GroupEncoding, UncompressedEncoding, WnafGroup,
+    prime::{PrimeCurve, PrimeGroup},
+    Curve, CurveAffine, Group, GroupEncoding, UncompressedEncoding, WnafGroup,
 };
 use pairing::{Engine, MillerLoopResult, MultiMillerLoop, PairingCurveAffine};
 
@@ -404,7 +404,7 @@ impl Group for Fr {
 impl PrimeGroup for Fr {}
 
 impl Curve for Fr {
-    type AffineRepr = Fr;
+    type Affine = Fr;
 
     fn to_affine(&self) -> Fr {
         *self
@@ -417,9 +417,7 @@ impl WnafGroup for Fr {
     }
 }
 
-impl PrimeCurve for Fr {
-    type Affine = Fr;
-}
+impl PrimeCurve for Fr {}
 
 #[derive(Copy, Clone, Default)]
 pub struct FakePoint;
@@ -436,7 +434,7 @@ impl AsRef<[u8]> for FakePoint {
     }
 }
 
-impl PrimeCurveAffine for Fr {
+impl CurveAffine for Fr {
     type Curve = Fr;
     type Scalar = Fr;
 
