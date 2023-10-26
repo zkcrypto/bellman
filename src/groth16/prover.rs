@@ -227,8 +227,7 @@ where
         a.divide_by_z_on_coset(&worker);
         a.icoset_fft(&worker);
         let mut a = a.into_coeffs();
-        let a_len = a.len() - 1;
-        a.truncate(a_len);
+        a.pop();
         // TODO: parallelize if it's even helpful
         let a = Arc::new(a.into_iter().map(|s| s.0.into()).collect::<Vec<_>>());
 
