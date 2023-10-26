@@ -270,20 +270,12 @@ fn best_fft<S: PrimeField, T: Group<S>>(a: &mut [T], worker: &Worker, omega: &S,
 
 #[allow(clippy::many_single_char_names)]
 fn serial_fft<S: PrimeField, T: Group<S>>(a: &mut [T], omega: &S, log_n: u32) {
-    fn bitreverse(mut n: u32, l: u32) -> u32 {
-        let mut r = 0;
-        for _ in 0..l {
-            r = (r << 1) | (n & 1);
-            n >>= 1;
-        }
-        r
-    }
-
     let n = a.len() as u32;
     assert_eq!(n, 1 << log_n);
+    let offset = 32 - log_n;
 
     for k in 0..n {
-        let rk = bitreverse(k, log_n);
+        let rk = k.reverse_bits() >> offset;
         if k < rk {
             a.swap(rk as usize, k as usize);
         }
