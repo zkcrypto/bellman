@@ -1,4 +1,4 @@
-# bellman [![Crates.io](https://img.shields.io/crates/v/bellman.svg)](https://crates.io/crates/bellman) #
+# bellman
 
 `bellman` is a crate for building zk-SNARK circuits. It provides circuit traits
 and primitive structures, as well as basic gadget implementations such as
