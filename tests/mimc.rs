@@ -4,7 +4,7 @@ use rand::thread_rng;
 // For benchmarking
 use std::time::{Duration, Instant};
 
-// Bring in some tools for using finite fiels
+// Bring in some tools for using finite fields
 use ff::Field;
 
 // We're going to use the BLS12-381 pairing-friendly elliptic curve.

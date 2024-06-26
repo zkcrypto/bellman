@@ -113,7 +113,7 @@ impl<S: PrimeField> ConstraintSystem<S> for ProvingAssignment<S> {
         self.a.push(Scalar(eval(
             &a,
             // Inputs have full density in the A query
-            // because there are constraints of the
+            // because there are constraints on the
             // form x * 0 = 0 for each input.
             None,
             Some(&mut self.a_aux_density),
