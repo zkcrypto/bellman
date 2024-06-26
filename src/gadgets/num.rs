@@ -1,4 +1,4 @@
-//! Gadgets representing numbers in the scalar field of the underlying curve.
+//! Gadgets represent numbers in the scalar field of the underlying curve.
 
 use ff::{PrimeField, PrimeFieldBits};
 
