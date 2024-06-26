@@ -6,7 +6,7 @@ use crate::{ConstraintSystem, LinearCombination, SynthesisError, Variable};
 
 use super::Assignment;
 
-/// Represents a variable in the constraint system which is guaranteed
+/// Represents a variable in the constraint system that is guaranteed
 /// to be either zero or one.
 #[derive(Clone)]
 pub struct AllocatedBit {
