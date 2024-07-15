@@ -20,11 +20,10 @@
 //!         multipack,
 //!         sha256::sha256,
 //!     },
-//!     groth16, Circuit, ConstraintSystem, SynthesisError,
+//!     Circuit, ConstraintSystem, SynthesisError,
 //! };
 //! use bls12_381::Bls12;
 //! use ff::PrimeField;
-//! use pairing::Engine;
 //! use rand::rngs::OsRng;
 //! use sha2::{Digest, Sha256};
 //!
@@ -139,8 +138,6 @@
 
 pub mod domain;
 pub mod gadgets;
-#[cfg(feature = "groth16")]
-pub mod groth16;
 pub mod multicore;
 pub mod multiexp;
 

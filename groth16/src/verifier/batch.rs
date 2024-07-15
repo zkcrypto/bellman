@@ -17,6 +17,7 @@
 
 use std::ops::AddAssign;
 
+use bellman::VerificationError;
 use ff::Field;
 use group::{Curve, Group};
 use pairing::{MillerLoopResult, MultiMillerLoop};
@@ -28,10 +29,7 @@ use rand_core::OsRng;
 #[cfg(feature = "multicore")]
 use rayon::{iter::ParallelIterator, prelude::ParallelSlice};
 
-use crate::{
-    groth16::{PreparedVerifyingKey, Proof, VerifyingKey},
-    VerificationError,
-};
+use crate::{PreparedVerifyingKey, Proof, VerifyingKey};
 
 /// A batch verification item.
 ///

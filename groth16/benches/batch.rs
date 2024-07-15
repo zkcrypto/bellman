@@ -4,7 +4,7 @@ use bls12_381::Bls12;
 use ff::Field;
 use rand::thread_rng;
 
-use bellman::groth16::{
+use groth16::{
     batch, create_random_proof, generate_random_parameters, prepare_verifying_key, verify_proof,
 };
 

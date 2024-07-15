@@ -6,7 +6,7 @@ use self::dummy_engine::*;
 use std::marker::PhantomData;
 use std::ops::{AddAssign, MulAssign, SubAssign};
 
-use crate::{Circuit, ConstraintSystem, SynthesisError};
+use bellman::{Circuit, ConstraintSystem, SynthesisError};
 
 use super::{create_proof, generate_parameters, prepare_verifying_key, verify_proof};
 

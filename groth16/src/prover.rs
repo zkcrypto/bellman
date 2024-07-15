@@ -8,13 +8,13 @@ use pairing::Engine;
 
 use super::{ParameterSource, Proof};
 
-use crate::{Circuit, ConstraintSystem, Index, LinearCombination, SynthesisError, Variable};
+use bellman::{Circuit, ConstraintSystem, Index, LinearCombination, SynthesisError, Variable};
 
-use crate::domain::{EvaluationDomain, Scalar};
+use bellman::domain::{EvaluationDomain, Scalar};
 
-use crate::multiexp::{multiexp, DensityTracker, FullDensity};
+use bellman::multiexp::{multiexp, DensityTracker, FullDensity};
 
-use crate::multicore::Worker;
+use bellman::multicore::Worker;
 
 fn eval<S: PrimeField>(
     lc: &LinearCombination<S>,
@@ -25,18 +25,18 @@ fn eval<S: PrimeField>(
 ) -> S {
     let mut acc = S::ZERO;
 
-    for &(index, coeff) in lc.0.iter() {
+    for &(index, coeff) in lc.as_ref() {
         let mut tmp;
 
         if !coeff.is_zero_vartime() {
-            match index {
-                Variable(Index::Input(i)) => {
+            match index.get_unchecked() {
+                Index::Input(i) => {
                     tmp = input_assignment[i];
                     if let Some(ref mut v) = input_density {
                         v.inc(i);
                     }
                 }
-                Variable(Index::Aux(i)) => {
+                Index::Aux(i) => {
                     tmp = aux_assignment[i];
                     if let Some(ref mut v) = aux_density {
                         v.inc(i);
@@ -83,7 +83,9 @@ impl<S: PrimeField> ConstraintSystem<S> for ProvingAssignment<S> {
         self.a_aux_density.add_element();
         self.b_aux_density.add_element();
 
-        Ok(Variable(Index::Aux(self.aux_assignment.len() - 1)))
+        Ok(Variable::new_unchecked(Index::Aux(
+            self.aux_assignment.len() - 1,
+        )))
     }
 
     fn alloc_input<F, A, AR>(&mut self, _: A, f: F) -> Result<Variable, SynthesisError>
@@ -95,7 +97,9 @@ impl<S: PrimeField> ConstraintSystem<S> for ProvingAssignment<S> {
         self.input_assignment.push(f()?);
         self.b_input_density.add_element();
 
-        Ok(Variable(Index::Input(self.input_assignment.len() - 1)))
+        Ok(Variable::new_unchecked(Index::Input(
+            self.input_assignment.len() - 1,
+        )))
     }
 
     fn enforce<A, AR, LA, LB, LC>(&mut self, _: A, a: LA, b: LB, c: LC)
@@ -202,7 +206,12 @@ where
     circuit.synthesize(&mut prover)?;
 
     for i in 0..prover.input_assignment.len() {
-        prover.enforce(|| "", |lc| lc + Variable(Index::Input(i)), |lc| lc, |lc| lc);
+        prover.enforce(
+            || "",
+            |lc| lc + Variable::new_unchecked(Index::Input(i)),
+            |lc| lc,
+            |lc| lc,
+        );
     }
 
     let worker = Worker::new();
