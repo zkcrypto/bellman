@@ -1,6 +1,6 @@
 [package]
 name = "groth16"
-version = "0.0.0"
+version = "0.1.0"
 authors = [
     "Sean Bowe <ewillbefull@gmail.com>",
     "Jack Grigg <thestr4d@gmail.com>",
