@@ -8,11 +8,11 @@ use pairing::Engine;
 
 use super::{Parameters, VerifyingKey};
 
-use crate::{Circuit, ConstraintSystem, Index, LinearCombination, SynthesisError, Variable};
+use bellman::{Circuit, ConstraintSystem, Index, LinearCombination, SynthesisError, Variable};
 
-use crate::domain::{EvaluationDomain, Scalar};
+use bellman::domain::{EvaluationDomain, Scalar};
 
-use crate::multicore::Worker;
+use bellman::multicore::Worker;
 
 /// Generates a random common reference string for
 /// a circuit.
@@ -71,7 +71,7 @@ impl<Scalar: PrimeField> ConstraintSystem<Scalar> for KeypairAssembly<Scalar> {
         self.bt_aux.push(vec![]);
         self.ct_aux.push(vec![]);
 
-        Ok(Variable(Index::Aux(index)))
+        Ok(Variable::new_unchecked(Index::Aux(index)))
     }
 
     fn alloc_input<F, A, AR>(&mut self, _: A, _: F) -> Result<Variable, SynthesisError>
@@ -90,7 +90,7 @@ impl<Scalar: PrimeField> ConstraintSystem<Scalar> for KeypairAssembly<Scalar> {
         self.bt_inputs.push(vec![]);
         self.ct_inputs.push(vec![]);
 
-        Ok(Variable(Index::Input(index)))
+        Ok(Variable::new_unchecked(Index::Input(index)))
     }
 
     fn enforce<A, AR, LA, LB, LC>(&mut self, _: A, a: LA, b: LB, c: LC)
@@ -107,10 +107,10 @@ impl<Scalar: PrimeField> ConstraintSystem<Scalar> for KeypairAssembly<Scalar> {
             aux: &mut [Vec<(Scalar, usize)>],
             this_constraint: usize,
         ) {
-            for (index, coeff) in l.0 {
-                match index {
-                    Variable(Index::Input(id)) => inputs[id].push((coeff, this_constraint)),
-                    Variable(Index::Aux(id)) => aux[id].push((coeff, this_constraint)),
+            for (index, coeff) in l.as_ref() {
+                match index.get_unchecked() {
+                    Index::Input(id) => inputs[id].push((*coeff, this_constraint)),
+                    Index::Aux(id) => aux[id].push((*coeff, this_constraint)),
                 }
             }
         }
@@ -193,7 +193,12 @@ where
     // Input constraints to ensure full density of IC query
     // x * 0 = 0
     for i in 0..assembly.num_inputs {
-        assembly.enforce(|| "", |lc| lc + Variable(Index::Input(i)), |lc| lc, |lc| lc);
+        assembly.enforce(
+            || "",
+            |lc| lc + Variable::new_unchecked(Index::Input(i)),
+            |lc| lc,
+            |lc| lc,
+        );
     }
 
     // Create bases for blind evaluation of polynomials at tau

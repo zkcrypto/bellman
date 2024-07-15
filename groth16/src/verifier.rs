@@ -4,7 +4,7 @@ use std::ops::{AddAssign, Neg};
 
 use super::{PreparedVerifyingKey, Proof, VerifyingKey};
 
-use crate::VerificationError;
+use bellman::VerificationError;
 
 pub mod batch;
 

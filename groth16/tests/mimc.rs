@@ -11,7 +11,7 @@ use ff::Field;
 use bls12_381::{Bls12, Scalar};
 
 // We're going to use the Groth16 proving system.
-use bellman::groth16::{
+use groth16::{
     batch, create_random_proof, generate_random_parameters, prepare_verifying_key, verify_proof,
     Proof,
 };

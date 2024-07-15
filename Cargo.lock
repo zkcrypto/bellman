@@ -48,6 +48,7 @@ dependencies = [
  "criterion",
  "crossbeam-channel",
  "ff",
+ "groth16",
  "group",
  "hex-literal",
  "lazy_static",
@@ -341,6 +342,22 @@ dependencies = [
  "cfg-if",
  "libc",
  "wasi",
+]
+
+[[package]]
+name = "groth16"
+version = "0.0.0"
+dependencies = [
+ "bellman",
+ "bls12_381",
+ "byteorder",
+ "criterion",
+ "ff",
+ "group",
+ "pairing",
+ "rand",
+ "rand_core",
+ "subtle",
 ]
 
 [[package]]
