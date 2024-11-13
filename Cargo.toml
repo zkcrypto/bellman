@@ -27,7 +27,7 @@ group = "0.13"
 pairing = { version = "0.23", optional = true }
 rand_core = "0.6"
 byteorder = "1"
-subtle = "2.2.1"
+subtle = "2.5"
 
 # Multicore dependencies
 crossbeam-channel = { version = "0.5.1", optional = true }
