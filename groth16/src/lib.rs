@@ -404,7 +404,7 @@ pub struct PreparedVerifyingKey<E: MultiMillerLoop> {
     neg_gamma_g2: E::G2Prepared,
     /// -delta in G2
     neg_delta_g2: E::G2Prepared,
-    /// Copy of IC from `VerifiyingKey`.
+    /// Copy of IC from `VerifyingKey`.
     ic: Vec<E::G1Affine>,
 }
 
