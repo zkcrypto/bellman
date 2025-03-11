@@ -151,7 +151,7 @@ impl DensityTracker {
         }
     }
 
-    pub fn get_total_density(&self) -> usize {
+    pub fn count_active_elements(&self) -> usize {
         self.bv.count_ones()
     }
 }
