@@ -22,10 +22,10 @@ rust-version = "1.63"
 [dependencies]
 bitvec = "1"
 blake2s_simd = "1"
-ff = "0.13"
-group = "0.13"
-pairing = { version = "0.23", optional = true }
-rand_core = "0.6"
+ff = "=0.14.0-pre.0"
+group = "=0.14.0-pre.0"
+pairing = { version = "=0.24.0-pre.0", optional = true }
+rand_core = "0.9"
 byteorder = "1"
 subtle = "2.2.1"
 
@@ -40,16 +40,16 @@ rayon = { version = "1.5.1", optional = true }
 bls12_381 = "0.8"
 criterion = "0.4"
 hex-literal = "0.3"
-pairing = "0.23"
-rand = "0.8"
-rand_xorshift = "0.3"
+pairing = "=0.24.0-pre.0"
+rand = "0.9"
+rand_xorshift = "0.4"
 sha2 = "0.10"
 
 # Only for doctests.
 groth16 = { path = "groth16" }
 
 [features]
-multicore = ["crossbeam-channel", "lazy_static", "log", "num_cpus", "rayon", "rand_core/getrandom"]
+multicore = ["crossbeam-channel", "lazy_static", "log", "num_cpus", "rayon"]
 default = ["multicore"]
 
 [[bench]]
@@ -58,3 +58,6 @@ harness = false
 
 [badges]
 maintenance = { status = "actively-developed" }
+
+[patch.crates-io]
+bls12_381 = { git = "https://github.com/zkcrypto/bls12_381.git", rev = "d5df9da6b20619bf77cc432447c02f8f6a6a1fb3" }
