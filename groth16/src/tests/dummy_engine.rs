@@ -1,11 +1,11 @@
 use ff::{Field, FieldBits, PrimeField, PrimeFieldBits};
 use group::{
-    prime::{PrimeCurve, PrimeCurveAffine, PrimeGroup},
-    Curve, Group, GroupEncoding, UncompressedEncoding, WnafGroup,
+    prime::{PrimeCurve, PrimeGroup},
+    Curve, CurveAffine, Group, GroupEncoding, UncompressedEncoding, WnafGroup,
 };
 use pairing::{Engine, MillerLoopResult, MultiMillerLoop, PairingCurveAffine};
 
-use rand_core::RngCore;
+use rand_core::TryRngCore;
 use std::iter::Sum;
 use std::num::Wrapping;
 use std::ops::{Add, AddAssign, BitAnd, Mul, MulAssign, Neg, Shr, Sub, SubAssign};
@@ -200,8 +200,8 @@ impl Field for Fr {
     const ZERO: Self = Fr(Wrapping(0));
     const ONE: Self = Fr(Wrapping(1));
 
-    fn random(mut rng: impl RngCore) -> Self {
-        Fr(Wrapping(rng.next_u32()) % MODULUS_R)
+    fn try_from_rng<R: TryRngCore + ?Sized>(rng: &mut R) -> Result<Self, R::Error> {
+        Ok(Fr(Wrapping(rng.try_next_u32()?) % MODULUS_R))
     }
 
     fn is_zero(&self) -> Choice {
@@ -380,8 +380,8 @@ impl MillerLoopResult for Fr {
 impl Group for Fr {
     type Scalar = Fr;
 
-    fn random(rng: impl RngCore) -> Self {
-        <Fr as Field>::random(rng)
+    fn try_from_rng<R: TryRngCore + ?Sized>(rng: &mut R) -> Result<Self, R::Error> {
+        <Fr as Field>::try_from_rng(rng)
     }
 
     fn identity() -> Self {
@@ -404,7 +404,7 @@ impl Group for Fr {
 impl PrimeGroup for Fr {}
 
 impl Curve for Fr {
-    type AffineRepr = Fr;
+    type Affine = Fr;
 
     fn to_affine(&self) -> Fr {
         *self
@@ -417,9 +417,7 @@ impl WnafGroup for Fr {
     }
 }
 
-impl PrimeCurve for Fr {
-    type Affine = Fr;
-}
+impl PrimeCurve for Fr {}
 
 #[derive(Copy, Clone, Default)]
 pub struct FakePoint;
@@ -436,7 +434,7 @@ impl AsRef<[u8]> for FakePoint {
     }
 }
 
-impl PrimeCurveAffine for Fr {
+impl CurveAffine for Fr {
     type Curve = Fr;
     type Scalar = Fr;
 

@@ -6,6 +6,9 @@ and this project adheres to Rust's notion of
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Changed
+- MSRV bumped to `1.63.0`
+
 ### Removed
 - `bellman::groth16` (moved to the `groth16` crate).
 
