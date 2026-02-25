@@ -17,7 +17,7 @@ name = "bellman"
 repository = "https://github.com/zkcrypto/bellman"
 version = "0.14.0"
 edition = "2021"
-rust-version = "1.60"
+rust-version = "1.63"
 
 [dependencies]
 bitvec = "1"
