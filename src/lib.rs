@@ -24,7 +24,7 @@
 //! };
 //! use bls12_381::Bls12;
 //! use ff::PrimeField;
-//! use rand::rngs::OsRng;
+//! use rand::rng;
 //! use sha2::{Digest, Sha256};
 //!
 //! /// Our own SHA-256d gadget. Input and output are in little-endian bit order.
@@ -99,7 +99,7 @@
 //! // be generated securely using a multiparty computation.
 //! let params = {
 //!     let c = MyCircuit { preimage: None };
-//!     groth16::generate_random_parameters::<Bls12, _, _>(c, &mut OsRng).unwrap()
+//!     groth16::generate_random_parameters::<Bls12, _, _>(c, &mut rng()).unwrap()
 //! };
 //!
 //! // Prepare the verification key (for proof verification).
@@ -115,7 +115,7 @@
 //! };
 //!
 //! // Create a Groth16 proof with our parameters.
-//! let proof = groth16::create_random_proof(c, &params, &mut OsRng).unwrap();
+//! let proof = groth16::create_random_proof(c, &params, &mut rng()).unwrap();
 //!
 //! // Pack the hash as inputs for proof verification.
 //! let hash_bits = multipack::bytes_to_bits_le(&hash);
@@ -443,8 +443,8 @@ pub struct Namespace<'a, Scalar: PrimeField, CS: ConstraintSystem<Scalar>>(
     PhantomData<Scalar>,
 );
 
-impl<'cs, Scalar: PrimeField, CS: ConstraintSystem<Scalar>> ConstraintSystem<Scalar>
-    for Namespace<'cs, Scalar, CS>
+impl<Scalar: PrimeField, CS: ConstraintSystem<Scalar>> ConstraintSystem<Scalar>
+    for Namespace<'_, Scalar, CS>
 {
     type Root = CS::Root;
 
@@ -502,7 +502,7 @@ impl<'cs, Scalar: PrimeField, CS: ConstraintSystem<Scalar>> ConstraintSystem<Sca
     }
 }
 
-impl<'a, Scalar: PrimeField, CS: ConstraintSystem<Scalar>> Drop for Namespace<'a, Scalar, CS> {
+impl<Scalar: PrimeField, CS: ConstraintSystem<Scalar>> Drop for Namespace<'_, Scalar, CS> {
     fn drop(&mut self) {
         self.get_root().pop_namespace()
     }
@@ -510,9 +510,7 @@ impl<'a, Scalar: PrimeField, CS: ConstraintSystem<Scalar>> Drop for Namespace<'a
 
 /// Convenience implementation of ConstraintSystem<Scalar> for mutable references to
 /// constraint systems.
-impl<'cs, Scalar: PrimeField, CS: ConstraintSystem<Scalar>> ConstraintSystem<Scalar>
-    for &'cs mut CS
-{
+impl<Scalar: PrimeField, CS: ConstraintSystem<Scalar>> ConstraintSystem<Scalar> for &mut CS {
     type Root = CS::Root;
 
     fn one() -> Variable {

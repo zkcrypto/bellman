@@ -126,22 +126,22 @@ fn test_xordemo() {
     let mut root_of_unity = Fr::ROOT_OF_UNITY;
 
     // We expect this to be a 2^10 root of unity
-    assert_eq!(Fr::ONE, root_of_unity.pow_vartime(&[1u64 << 10]));
+    assert_eq!(Fr::ONE, root_of_unity.pow_vartime([1u64 << 10]));
 
     // Let's turn it into a 2^3 root of unity.
-    root_of_unity = root_of_unity.pow_vartime(&[1u64 << 7]);
-    assert_eq!(Fr::ONE, root_of_unity.pow_vartime(&[1u64 << 3]));
+    root_of_unity = root_of_unity.pow_vartime([1u64 << 7]);
+    assert_eq!(Fr::ONE, root_of_unity.pow_vartime([1u64 << 3]));
     assert_eq!(Fr::from(20201), root_of_unity);
 
     // Let's compute all the points in our evaluation domain.
     let mut points = Vec::with_capacity(8);
     for i in 0u64..8 {
-        points.push(root_of_unity.pow_vartime(&[i]));
+        points.push(root_of_unity.pow_vartime([i]));
     }
 
     // Let's compute t(tau) = (tau - p_0)(tau - p_1)...
     //                      = tau^8 - 1
-    let mut t_at_tau = tau.pow_vartime(&[8u64]);
+    let mut t_at_tau = tau.pow_vartime([8u64]);
     t_at_tau.sub_assign(&Fr::ONE);
     {
         let mut tmp = Fr::ONE;

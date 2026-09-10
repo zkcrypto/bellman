@@ -1,7 +1,10 @@
 use super::multicore::{Waiter, Worker};
 use bitvec::vec::BitVec;
 use ff::{FieldBits, PrimeField, PrimeFieldBits};
-use group::prime::{PrimeCurve, PrimeCurveAffine};
+use group::{
+    prime::{PrimeCurve, PrimeCurveAffine},
+    Curve,
+};
 use std::io;
 use std::iter;
 use std::ops::AddAssign;
@@ -32,11 +35,11 @@ pub trait Source<G: PrimeCurveAffine> {
 
 pub trait AddAssignFromSource: PrimeCurve {
     /// Parses the element from the source. Fails if the point is at infinity.
-    fn add_assign_from_source<S: Source<<Self as PrimeCurve>::Affine>>(
+    fn add_assign_from_source<S: Source<<Self as Curve>::Affine>>(
         &mut self,
         source: &mut S,
     ) -> Result<(), SynthesisError> {
-        AddAssign::<&<Self as PrimeCurve>::Affine>::add_assign(self, source.next()?);
+        AddAssign::<&<Self as Curve>::Affine>::add_assign(self, source.next()?);
         Ok(())
     }
 }
@@ -102,7 +105,7 @@ impl AsRef<FullDensity> for FullDensity {
     }
 }
 
-impl<'a> QueryDensity for &'a FullDensity {
+impl QueryDensity for &FullDensity {
     type Iter = iter::Repeat<bool>;
 
     fn iter(self) -> Self::Iter {
@@ -218,7 +221,7 @@ where
     D: Send + Sync + 'static + Clone + AsRef<Q>,
     G: PrimeCurve,
     G::Scalar: PrimeFieldBits,
-    S: SourceBuilder<<G as PrimeCurve>::Affine>,
+    S: SourceBuilder<<G as Curve>::Affine>,
 {
     // Perform this region of the multiexp
     let this = move |bases: S,
@@ -254,8 +257,7 @@ where
                         let exp = chunks[chunk];
 
                         if exp != 0 {
-                            (&mut buckets[(exp - 1) as usize])
-                                .add_assign_from_source(&mut bases)?;
+                            buckets[(exp - 1) as usize].add_assign_from_source(&mut bases)?;
                         } else {
                             bases.skip(1)?;
                         }
@@ -313,7 +315,7 @@ where
     D: Send + Sync + 'static + Clone + AsRef<Q>,
     G: PrimeCurve,
     G::Scalar: PrimeFieldBits,
-    S: SourceBuilder<<G as PrimeCurve>::Affine>,
+    S: SourceBuilder<<G as Curve>::Affine>,
 {
     let c = if exponents.len() < 32 {
         3u32
@@ -335,7 +337,7 @@ where
 #[test]
 fn test_with_bls12() {
     fn naive_multiexp<G: PrimeCurve>(
-        bases: Arc<Vec<<G as PrimeCurve>::Affine>>,
+        bases: Arc<Vec<<G as Curve>::Affine>>,
         exponents: Arc<Vec<G::Scalar>>,
     ) -> G {
         assert_eq!(bases.len(), exponents.len());
@@ -356,7 +358,7 @@ fn test_with_bls12() {
 
     const SAMPLES: usize = 1 << 14;
 
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     let v = Arc::new(
         (0..SAMPLES)
             .map(|_| Scalar::random(&mut rng))

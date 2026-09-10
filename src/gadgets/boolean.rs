@@ -275,7 +275,7 @@ pub fn u64_into_boolean_vec_le<Scalar: PrimeField, CS: ConstraintSystem<Scalar>>
             let mut tmp = Vec::with_capacity(64);
 
             for i in 0..64 {
-                tmp.push(Some(*value >> i & 1 == 1));
+                tmp.push(Some((*value >> i) & 1 == 1));
             }
 
             tmp
@@ -501,13 +501,9 @@ impl Boolean {
                 Ok(Boolean::Is(AllocatedBit::and_not(cs, is, not)?))
             }
             // (NOT a) AND (NOT b) = a NOR b
-            (&Boolean::Not(ref a), &Boolean::Not(ref b)) => {
-                Ok(Boolean::Is(AllocatedBit::nor(cs, a, b)?))
-            }
+            (Boolean::Not(a), Boolean::Not(b)) => Ok(Boolean::Is(AllocatedBit::nor(cs, a, b)?)),
             // a AND b
-            (&Boolean::Is(ref a), &Boolean::Is(ref b)) => {
-                Ok(Boolean::Is(AllocatedBit::and(cs, a, b)?))
-            }
+            (Boolean::Is(a), Boolean::Is(b)) => Ok(Boolean::Is(AllocatedBit::and(cs, a, b)?)),
         }
     }
 

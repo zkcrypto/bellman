@@ -75,7 +75,7 @@ pub fn compute_multipacking<Scalar: PrimeField>(bits: &[bool]) -> Vec<Scalar> {
 fn test_multipacking() {
     use crate::ConstraintSystem;
     use bls12_381::Scalar;
-    use rand_core::{RngCore, SeedableRng};
+    use rand_core::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
 
     use super::boolean::{AllocatedBit, Boolean};
