@@ -6,6 +6,10 @@ and this project adheres to Rust's notion of
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+- The `multicore` feature, which the crate's source already referenced but never
+  declared. Without it `groth16::batch::Verifier::verify_multicore` (gated on
+  that feature) could not be compiled by any consumer.
 
 ### Changed
 - MSRV bumped to `1.85`.
