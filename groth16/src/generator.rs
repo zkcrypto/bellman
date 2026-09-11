@@ -1,9 +1,9 @@
-use rand_core::RngCore;
+use rand_core::Rng;
 use std::ops::{AddAssign, MulAssign};
 use std::sync::Arc;
 
 use ff::{Field, PrimeField};
-use group::{prime::PrimeCurveAffine, Curve, Group, Wnaf, WnafGroup};
+use group::{Curve, CurveAffine, Group, Wnaf, WnafGroup};
 use pairing::Engine;
 
 use super::{Parameters, VerifyingKey};
@@ -25,7 +25,7 @@ where
     E::G1: WnafGroup,
     E::G2: WnafGroup,
     C: Circuit<E::Fr>,
-    R: RngCore,
+    R: Rng,
 {
     let g1 = E::G1::random(&mut rng);
     let g2 = E::G2::random(&mut rng);
@@ -252,7 +252,7 @@ where
             worker.scope(powers_of_tau.len(), |scope, chunk| {
                 for (i, powers_of_tau) in powers_of_tau.chunks_mut(chunk).enumerate() {
                     scope.spawn(move |_scope| {
-                        let mut current_tau_power = tau.pow_vartime(&[(i * chunk) as u64]);
+                        let mut current_tau_power = tau.pow_vartime([(i * chunk) as u64]);
 
                         for p in powers_of_tau {
                             p.0 = current_tau_power;

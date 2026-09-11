@@ -6,8 +6,18 @@ and this project adheres to Rust's notion of
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Changed
+- MSRV bumped to `1.85.0`.
+- Bumped dependencies to `ff 0.14`, `group 0.14`, `rand_core 0.10`,
+  `pairing 0.24`.
+- `bellman::multiexp::{Source, SourceBuilder}` are now parameterised by a
+  `group::CurveAffine` (which `group::prime::PrimeCurveAffine` is now a marker
+  trait over).
+
 ### Removed
 - `bellman::groth16` (moved to the `groth16` crate).
+- The `multicore` feature no longer enables a `getrandom` feature of the
+  `rand_core` crate, which `rand_core 0.10` removed along with `OsRng`.
 
 ## [0.14.0] - 2023-03-20
 ### Changed

@@ -201,10 +201,7 @@ fn blake2s_compression<Scalar: PrimeField, CS: ConstraintSystem<Scalar>>(
     )?;
 
     if f {
-        v[14] = v[14].xor(
-            cs.namespace(|| "third xor"),
-            &UInt32::constant(u32::max_value()),
-        )?;
+        v[14] = v[14].xor(cs.namespace(|| "third xor"), &UInt32::constant(u32::MAX))?;
     }
 
     {
@@ -381,7 +378,7 @@ mod test {
     use blake2s_simd::Params as Blake2sParams;
     use bls12_381::Scalar;
     use hex_literal::hex;
-    use rand_core::{RngCore, SeedableRng};
+    use rand_core::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
 
     use super::blake2s;

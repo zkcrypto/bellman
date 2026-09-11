@@ -17,15 +17,15 @@ name = "bellman"
 repository = "https://github.com/zkcrypto/bellman"
 version = "0.14.0"
 edition = "2021"
-rust-version = "1.60"
+rust-version = "1.85"
 
 [dependencies]
 bitvec = "1"
 blake2s_simd = "1"
-ff = "0.13"
-group = "0.13"
-pairing = { version = "0.23", optional = true }
-rand_core = "0.6"
+ff = "0.14"
+group = "0.14"
+pairing = { version = "0.24.0-pre.0", optional = true }
+rand_core = "0.10"
 byteorder = "1"
 subtle = "2.2.1"
 
@@ -40,16 +40,16 @@ rayon = { version = "1.5.1", optional = true }
 bls12_381 = "0.8"
 criterion = "0.4"
 hex-literal = "0.3"
-pairing = "0.23"
-rand = "0.8"
-rand_xorshift = "0.3"
+pairing = "0.24.0-pre.0"
+rand = "0.10"
+rand_xorshift = "0.5"
 sha2 = "0.10"
 
 # Only for doctests.
 groth16 = { path = "groth16" }
 
 [features]
-multicore = ["crossbeam-channel", "lazy_static", "log", "num_cpus", "rayon", "rand_core/getrandom"]
+multicore = ["crossbeam-channel", "lazy_static", "log", "num_cpus", "rayon"]
 default = ["multicore"]
 
 [[bench]]
@@ -58,3 +58,7 @@ harness = false
 
 [badges]
 maintenance = { status = "actively-developed" }
+
+[patch.crates-io]
+bls12_381 = { git = "https://github.com/dannywillems/bls12_381.git", rev = "90261e682a44da54ffbc0089ac5aea105ec74cbf" }
+pairing = { git = "https://github.com/dannywillems/pairing.git", rev = "e0fb32c2fc29e61cf89bbbfbe2ea604b069500c9" }

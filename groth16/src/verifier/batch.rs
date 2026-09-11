@@ -21,10 +21,12 @@ use bellman::VerificationError;
 use ff::Field;
 use group::{Curve, Group};
 use pairing::{MillerLoopResult, MultiMillerLoop};
-use rand_core::{CryptoRng, RngCore};
+use rand_core::{CryptoRng, Rng};
 
 #[cfg(feature = "multicore")]
-use rand_core::OsRng;
+use rand::rngs::SysRng;
+#[cfg(feature = "multicore")]
+use rand_core::UnwrapErr;
 
 #[cfg(feature = "multicore")]
 use rayon::{iter::ParallelIterator, prelude::ParallelSlice};
@@ -97,7 +99,7 @@ where
     /// Perform batch verification with a particular `VerifyingKey`, returning
     /// `Ok(())` if all proofs were verified and `VerificationError` otherwise.
     #[allow(non_snake_case)]
-    pub fn verify<R: RngCore + CryptoRng>(
+    pub fn verify<R: Rng + CryptoRng>(
         self,
         mut rng: R,
         vk: &VerifyingKey<E>,
@@ -216,7 +218,7 @@ where
                 let mut acc = Accumulator::<E>::new(ic_len);
                 let mut ml_terms: Vec<(E::G1Affine, E::G2Prepared)> = vec![];
                 let z = loop {
-                    let z = E::Fr::random(&mut OsRng);
+                    let z = E::Fr::random(&mut UnwrapErr(SysRng));
                     if !z.is_zero_vartime() {
                         break z;
                     }
@@ -263,7 +265,7 @@ where
                 let psi = vk
                     .ic
                     .iter()
-                    .zip(acc.gammas.into_iter())
+                    .zip(acc.gammas)
                     .map(|(&psi_i, acc_gamma_i)| psi_i * acc_gamma_i)
                     .sum();
 

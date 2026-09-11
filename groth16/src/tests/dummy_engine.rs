@@ -1,11 +1,11 @@
 use ff::{Field, FieldBits, PrimeField, PrimeFieldBits};
 use group::{
-    prime::{PrimeCurve, PrimeCurveAffine, PrimeGroup},
-    Curve, Group, GroupEncoding, UncompressedEncoding, WnafGroup,
+    prime::{PrimeCurve, PrimeGroup},
+    Curve, CurveAffine, Group, GroupEncoding, UncompressedEncoding, WnafGroup,
 };
 use pairing::{Engine, MillerLoopResult, MultiMillerLoop, PairingCurveAffine};
 
-use rand_core::RngCore;
+use rand_core::TryRng;
 use std::iter::Sum;
 use std::num::Wrapping;
 use std::ops::{Add, AddAssign, BitAnd, Mul, MulAssign, Neg, Shr, Sub, SubAssign};
@@ -86,7 +86,7 @@ impl Neg for Fr {
     }
 }
 
-impl<'r> Add<&'r Fr> for Fr {
+impl Add<&Fr> for Fr {
     type Output = Self;
 
     fn add(self, other: &Self) -> Self {
@@ -105,7 +105,7 @@ impl Add for Fr {
     }
 }
 
-impl<'r> AddAssign<&'r Fr> for Fr {
+impl AddAssign<&Fr> for Fr {
     fn add_assign(&mut self, other: &Self) {
         self.0 = (self.0 + other.0) % MODULUS_R;
     }
@@ -117,7 +117,7 @@ impl AddAssign for Fr {
     }
 }
 
-impl<'r> Sub<&'r Fr> for Fr {
+impl Sub<&Fr> for Fr {
     type Output = Self;
 
     fn sub(self, other: &Self) -> Self {
@@ -136,7 +136,7 @@ impl Sub for Fr {
     }
 }
 
-impl<'r> SubAssign<&'r Fr> for Fr {
+impl SubAssign<&Fr> for Fr {
     fn sub_assign(&mut self, other: &Self) {
         self.0 = ((MODULUS_R + self.0) - other.0) % MODULUS_R;
     }
@@ -148,7 +148,7 @@ impl SubAssign for Fr {
     }
 }
 
-impl<'r> Mul<&'r Fr> for Fr {
+impl Mul<&Fr> for Fr {
     type Output = Self;
 
     fn mul(self, other: &Self) -> Self {
@@ -167,7 +167,7 @@ impl Mul for Fr {
     }
 }
 
-impl<'r> MulAssign<&'r Fr> for Fr {
+impl MulAssign<&Fr> for Fr {
     fn mul_assign(&mut self, other: &Self) {
         self.0 = (self.0 * other.0) % MODULUS_R;
     }
@@ -200,8 +200,8 @@ impl Field for Fr {
     const ZERO: Self = Fr(Wrapping(0));
     const ONE: Self = Fr(Wrapping(1));
 
-    fn random(mut rng: impl RngCore) -> Self {
-        Fr(Wrapping(rng.next_u32()) % MODULUS_R)
+    fn try_random<R: TryRng + ?Sized>(rng: &mut R) -> Result<Self, R::Error> {
+        Ok(Fr(Wrapping(rng.try_next_u32()?) % MODULUS_R))
     }
 
     fn is_zero(&self) -> Choice {
@@ -218,7 +218,7 @@ impl Field for Fr {
 
     fn invert(&self) -> CtOption<Self> {
         CtOption::new(
-            self.pow_vartime(&[(MODULUS_R.0 as u64) - 2]),
+            self.pow_vartime([(MODULUS_R.0 as u64) - 2]),
             !<Fr as Field>::is_zero(self),
         )
     }
@@ -346,7 +346,7 @@ impl Engine for DummyEngine {
     type Gt = Fr;
 
     fn pairing(p: &Self::G1Affine, q: &Self::G2Affine) -> Self::Gt {
-        Self::multi_miller_loop(&[(p, &(*q))]).final_exponentiation()
+        Self::multi_miller_loop(&[(p, q)]).final_exponentiation()
     }
 }
 
@@ -380,8 +380,8 @@ impl MillerLoopResult for Fr {
 impl Group for Fr {
     type Scalar = Fr;
 
-    fn random(rng: impl RngCore) -> Self {
-        <Fr as Field>::random(rng)
+    fn try_random<R: TryRng + ?Sized>(rng: &mut R) -> Result<Self, R::Error> {
+        <Fr as Field>::try_random(rng)
     }
 
     fn identity() -> Self {
@@ -404,7 +404,7 @@ impl Group for Fr {
 impl PrimeGroup for Fr {}
 
 impl Curve for Fr {
-    type AffineRepr = Fr;
+    type Affine = Fr;
 
     fn to_affine(&self) -> Fr {
         *self
@@ -417,9 +417,7 @@ impl WnafGroup for Fr {
     }
 }
 
-impl PrimeCurve for Fr {
-    type Affine = Fr;
-}
+impl PrimeCurve for Fr {}
 
 #[derive(Copy, Clone, Default)]
 pub struct FakePoint;
@@ -436,7 +434,7 @@ impl AsRef<[u8]> for FakePoint {
     }
 }
 
-impl PrimeCurveAffine for Fr {
+impl CurveAffine for Fr {
     type Curve = Fr;
     type Scalar = Fr;
 
