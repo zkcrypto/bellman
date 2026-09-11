@@ -404,6 +404,7 @@ dependencies = [
  "pairing",
  "rand",
  "rand_core",
+ "rayon",
  "subtle",
 ]
 

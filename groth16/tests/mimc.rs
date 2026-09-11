@@ -16,6 +16,9 @@ use groth16::{
     Proof,
 };
 
+#[cfg(feature = "multicore")]
+use bellman::VerificationError;
+
 mod common;
 
 use common::*;
@@ -204,4 +207,59 @@ fn batch_verify() {
         "Amortized batch verifying time: {:?} seconds",
         batch_amortized
     );
+}
+
+/// Exercises the `multicore` batch verifier.
+///
+/// `Verifier::verify_multicore` is gated behind the `multicore` feature, so it is only
+/// compiled (and only reachable) when that feature is on. Without a test under the
+/// feature, the path can rot unnoticed while the rest of the crate keeps building.
+#[test]
+#[cfg(feature = "multicore")]
+fn batch_verify_multicore() {
+    const SAMPLES: u32 = 4;
+
+    let mut rng = rng();
+
+    let constants = (0..MIMC_ROUNDS)
+        .map(|_| Scalar::random(&mut rng))
+        .collect::<Vec<_>>();
+
+    let params = {
+        let c = MiMCDemo {
+            xl: None,
+            xr: None,
+            constants: &constants,
+        };
+
+        generate_random_parameters::<Bls12, _, _>(c, &mut rng).unwrap()
+    };
+
+    let mut valid = batch::Verifier::new();
+    let mut tampered = batch::Verifier::new();
+
+    for _ in 0..SAMPLES {
+        let xl = Scalar::random(&mut rng);
+        let xr = Scalar::random(&mut rng);
+        let image = mimc(xl, xr, &constants);
+
+        let c = MiMCDemo {
+            xl: Some(xl),
+            xr: Some(xr),
+            constants: &constants,
+        };
+        let proof = create_random_proof(c, &params, &mut rng).unwrap();
+
+        valid.queue((proof.clone(), [image].into()));
+        // Same proof, but bound to a public input it does not attest to.
+        tampered.queue((proof, [image + Scalar::ONE].into()));
+    }
+
+    assert!(valid.verify_multicore(&params.vk).is_ok());
+    // Specifically `InvalidProof`, not `InvalidVerifyingKey`: the tampered batch must be
+    // rejected by the pairing check, not waved away by the input-length precondition.
+    assert!(matches!(
+        tampered.verify_multicore(&params.vk),
+        Err(VerificationError::InvalidProof)
+    ));
 }
