@@ -1,4 +1,4 @@
-use group::{prime::PrimeCurveAffine, Curve};
+use group::{Curve, CurveAffine};
 use pairing::{MillerLoopResult, MultiMillerLoop};
 use std::ops::{AddAssign, Neg};
 
@@ -20,8 +20,8 @@ pub fn prepare_verifying_key<E: MultiMillerLoop>(vk: &VerifyingKey<E>) -> Prepar
     }
 }
 
-pub fn verify_proof<'a, E: MultiMillerLoop>(
-    pvk: &'a PreparedVerifyingKey<E>,
+pub fn verify_proof<E: MultiMillerLoop>(
+    pvk: &PreparedVerifyingKey<E>,
     proof: &Proof<E>,
     public_inputs: &[E::Fr],
 ) -> Result<(), VerificationError> {

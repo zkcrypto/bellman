@@ -6,6 +6,11 @@ and this project adheres to Rust's notion of
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Changed
+- MSRV bumped to `1.85.0`
+- Bumped dependencies to `ff 0.14`, `group 0.14`, `pairing 0.24`,
+  `rand_core 0.10`.
+
 ### Removed
 - `bellman::groth16` (moved to the `groth16` crate).
 

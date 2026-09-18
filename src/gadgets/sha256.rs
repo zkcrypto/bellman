@@ -167,7 +167,7 @@ where
         let ch = UInt32::sha256_ch(cs.namespace(|| "ch"), &new_e, &f, &g)?;
 
         // temp1 := h + S1 + ch + k[i] + w[i]
-        let temp1 = vec![
+        let temp1 = [
             h.clone(),
             s1,
             ch,
@@ -185,7 +185,7 @@ where
         let maj = UInt32::sha256_maj(cs.namespace(|| "maj"), &new_a, &b, &c)?;
 
         // temp2 := S0 + maj
-        let temp2 = vec![s0, maj];
+        let temp2 = [s0, maj];
 
         /*
         h := g
@@ -276,7 +276,7 @@ mod test {
     use crate::gadgets::test::TestConstraintSystem;
     use bls12_381::Scalar;
     use hex_literal::hex;
-    use rand_core::{RngCore, SeedableRng};
+    use rand_core::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
 
     #[test]

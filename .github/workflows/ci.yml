@@ -23,8 +23,8 @@ jobs:
         name: [wasi]
         include:
         - name: wasi
-          target: wasm32-wasi
-          build_flags: --no-default-features --features groth16
+          target: wasm32-wasip1
+          build_flags: --no-default-features
 
     steps:
       - uses: actions/checkout@v3

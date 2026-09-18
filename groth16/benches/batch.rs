@@ -2,7 +2,7 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Through
 
 use bls12_381::Bls12;
 use ff::Field;
-use rand::thread_rng;
+use rand::rng;
 
 use groth16::{
     batch, create_random_proof, generate_random_parameters, prepare_verifying_key, verify_proof,
@@ -19,7 +19,7 @@ fn bench_batch_verify(c: &mut Criterion) {
     for &n in [8usize, 16, 24, 32, 40, 48, 56, 64].iter() {
         group.throughput(Throughput::Elements(n as u64));
 
-        let mut rng = thread_rng();
+        let mut rng = rng();
 
         // Generate the MiMC round constants
         let constants = (0..MIMC_ROUNDS)

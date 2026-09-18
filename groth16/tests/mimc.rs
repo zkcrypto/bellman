@@ -1,5 +1,5 @@
 // For randomness (during paramgen and proof generation)
-use rand::thread_rng;
+use rand::rng;
 
 // For benchmarking
 use std::time::{Duration, Instant};
@@ -24,7 +24,7 @@ use common::*;
 fn test_mimc() {
     // This may not be cryptographically safe, use
     // `OsRng` (for example) in production software.
-    let mut rng = thread_rng();
+    let mut rng = rng();
 
     // Generate the MiMC round constants
     let constants = (0..MIMC_ROUNDS)
@@ -104,7 +104,7 @@ fn test_mimc() {
 
 #[test]
 fn batch_verify() {
-    let mut rng = thread_rng();
+    let mut rng = rng();
 
     let mut batch = batch::Verifier::new();
 

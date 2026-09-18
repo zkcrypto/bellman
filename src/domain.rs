@@ -102,7 +102,7 @@ impl<S: PrimeField, G: Group<S>> EvaluationDomain<S, G> {
         worker.scope(self.coeffs.len(), |scope, chunk| {
             for (i, v) in self.coeffs.chunks_mut(chunk).enumerate() {
                 scope.spawn(move |_scope| {
-                    let mut u = g.pow_vartime(&[(i * chunk) as u64]);
+                    let mut u = g.pow_vartime([(i * chunk) as u64]);
                     for v in v.iter_mut() {
                         v.group_mul_assign(&u);
                         u.mul_assign(&g);
@@ -127,7 +127,7 @@ impl<S: PrimeField, G: Group<S>> EvaluationDomain<S, G> {
     /// This evaluates t(tau) for this domain, which is
     /// tau^m - 1 for these radix-2 domains.
     pub fn z(&self, tau: &S) -> S {
-        let mut tmp = tau.pow_vartime(&[self.coeffs.len() as u64]);
+        let mut tmp = tau.pow_vartime([self.coeffs.len() as u64]);
         tmp.sub_assign(&S::ONE);
 
         tmp
@@ -291,7 +291,7 @@ fn serial_fft<S: PrimeField, T: Group<S>>(a: &mut [T], omega: &S, log_n: u32) {
 
     let mut m = 1;
     for _ in 0..log_n {
-        let w_m = omega.pow_vartime(&[u64::from(n / (2 * m))]);
+        let w_m = omega.pow_vartime([u64::from(n / (2 * m))]);
 
         let mut k = 0;
         while k < n {
@@ -325,7 +325,7 @@ fn parallel_fft<S: PrimeField, T: Group<S>>(
     let num_cpus = 1 << log_cpus;
     let log_new_n = log_n - log_cpus;
     let mut tmp = vec![vec![T::group_zero(); 1 << log_new_n]; num_cpus];
-    let new_omega = omega.pow_vartime(&[num_cpus as u64]);
+    let new_omega = omega.pow_vartime([num_cpus as u64]);
 
     worker.scope(0, |scope, _| {
         let a = &*a;
@@ -333,8 +333,8 @@ fn parallel_fft<S: PrimeField, T: Group<S>>(
         for (j, tmp) in tmp.iter_mut().enumerate() {
             scope.spawn(move |_scope| {
                 // Shuffle into a sub-FFT
-                let omega_j = omega.pow_vartime(&[j as u64]);
-                let omega_step = omega.pow_vartime(&[(j as u64) << log_new_n]);
+                let omega_j = omega.pow_vartime([j as u64]);
+                let omega_step = omega.pow_vartime([(j as u64) << log_new_n]);
 
                 let mut elt = S::ONE;
                 for (i, tmp) in tmp.iter_mut().enumerate() {
@@ -377,9 +377,9 @@ fn parallel_fft<S: PrimeField, T: Group<S>>(
 #[test]
 fn polynomial_arith() {
     use bls12_381::Scalar as Fr;
-    use rand_core::RngCore;
+    use rand_core::Rng;
 
-    fn test_mul<S: PrimeField, R: RngCore>(mut rng: &mut R) {
+    fn test_mul<S: PrimeField, R: Rng>(mut rng: &mut R) {
         let worker = Worker::new();
 
         for coeffs_a in 0..70 {
@@ -419,7 +419,7 @@ fn polynomial_arith() {
         }
     }
 
-    let rng = &mut rand::thread_rng();
+    let rng = &mut rand::rng();
 
     test_mul::<Fr, _>(rng);
 }
@@ -428,9 +428,9 @@ fn polynomial_arith() {
 #[test]
 fn fft_composition() {
     use bls12_381::Scalar as Fr;
-    use rand_core::RngCore;
+    use rand_core::Rng;
 
-    fn test_comp<S: PrimeField, R: RngCore>(mut rng: &mut R) {
+    fn test_comp<S: PrimeField, R: Rng>(mut rng: &mut R) {
         let worker = Worker::new();
 
         for coeffs in 0..10 {
@@ -457,7 +457,7 @@ fn fft_composition() {
         }
     }
 
-    let rng = &mut rand::thread_rng();
+    let rng = &mut rand::rng();
 
     test_comp::<Fr, _>(rng);
 }
@@ -466,10 +466,10 @@ fn fft_composition() {
 #[test]
 fn parallel_fft_consistency() {
     use bls12_381::Scalar as Fr;
-    use rand_core::RngCore;
+    use rand_core::Rng;
     use std::cmp::min;
 
-    fn test_consistency<S: PrimeField, R: RngCore>(mut rng: &mut R) {
+    fn test_consistency<S: PrimeField, R: Rng>(mut rng: &mut R) {
         let worker = Worker::new();
 
         for _ in 0..5 {
@@ -492,7 +492,7 @@ fn parallel_fft_consistency() {
         }
     }
 
-    let rng = &mut rand::thread_rng();
+    let rng = &mut rand::rng();
 
     test_consistency::<Fr, _>(rng);
 }
