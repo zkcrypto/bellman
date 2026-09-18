@@ -1,9 +1,9 @@
 use bellman::{
     multicore::Worker,
-    multiexp::{multiexp, FullDensity},
+    multiexp::{FullDensity, multiexp},
 };
 use bls12_381::{Bls12, Scalar};
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use ff::Field;
 use group::{Curve, Group};
 use pairing::Engine;

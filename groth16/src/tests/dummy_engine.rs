@@ -1,7 +1,7 @@
 use ff::{Field, FieldBits, PrimeField, PrimeFieldBits};
 use group::{
-    prime::{PrimeCurve, PrimeGroup},
     Curve, CurveAffine, Group, GroupEncoding, UncompressedEncoding, WnafGroup,
+    prime::{PrimeCurve, PrimeGroup},
 };
 use pairing::{Engine, MillerLoopResult, MultiMillerLoop, PairingCurveAffine};
 

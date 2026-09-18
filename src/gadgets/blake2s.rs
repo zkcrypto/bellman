@@ -382,9 +382,9 @@ mod test {
     use rand_xorshift::XorShiftRng;
 
     use super::blake2s;
+    use crate::ConstraintSystem;
     use crate::gadgets::boolean::{AllocatedBit, Boolean};
     use crate::gadgets::test::TestConstraintSystem;
-    use crate::ConstraintSystem;
 
     #[test]
     fn test_blank_hash() {

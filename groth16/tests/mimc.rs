@@ -12,8 +12,8 @@ use bls12_381::{Bls12, Scalar};
 
 // We're going to use the Groth16 proving system.
 use groth16::{
-    batch, create_random_proof, generate_random_parameters, prepare_verifying_key, verify_proof,
-    Proof,
+    Proof, batch, create_random_proof, generate_random_parameters, prepare_verifying_key,
+    verify_proof,
 };
 
 #[cfg(feature = "multicore")]

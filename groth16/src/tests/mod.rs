@@ -297,7 +297,7 @@ fn test_xordemo() {
         expected_a.add_assign(&u_i[0]); // a_0 = 1
         expected_a.add_assign(&u_i[1]); // a_1 = 1
         expected_a.add_assign(&u_i[2]); // a_2 = 1
-                                        // a_3 = 0
+        // a_3 = 0
         assert_eq!(proof.a, expected_a);
     }
 
@@ -314,7 +314,7 @@ fn test_xordemo() {
         expected_b.add_assign(&v_i[0]); // a_0 = 1
         expected_b.add_assign(&v_i[1]); // a_1 = 1
         expected_b.add_assign(&v_i[2]); // a_2 = 1
-                                        // a_3 = 0
+        // a_3 = 0
         assert_eq!(proof.b, expected_b);
     }
 

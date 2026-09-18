@@ -5,7 +5,7 @@ members = [
 ]
 
 [workspace.package]
-edition = "2021"
+edition = "2024"
 rust-version = "1.85"
 homepage = "https://github.com/zkcrypto/bellman"
 repository = "https://github.com/zkcrypto/bellman"

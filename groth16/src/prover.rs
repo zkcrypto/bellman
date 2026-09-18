@@ -12,7 +12,7 @@ use bellman::{Circuit, ConstraintSystem, Index, LinearCombination, SynthesisErro
 
 use bellman::domain::{EvaluationDomain, Scalar};
 
-use bellman::multiexp::{multiexp, DensityTracker, FullDensity};
+use bellman::multiexp::{DensityTracker, FullDensity, multiexp};
 
 use bellman::multicore::Worker;
 
