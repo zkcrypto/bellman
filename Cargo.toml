@@ -4,6 +4,13 @@ members = [
     "groth16",
 ]
 
+[workspace.package]
+edition = "2021"
+rust-version = "1.85"
+homepage = "https://github.com/zkcrypto/bellman"
+repository = "https://github.com/zkcrypto/bellman"
+license = "MIT OR Apache-2.0"
+
 [workspace.dependencies]
 bellman = { version = "0.14", path = ".", default-features = false }
 groth16 = { version = "0.1", path = "groth16" }
@@ -39,13 +46,13 @@ authors = [
 ]
 description = "zk-SNARK library"
 readme = "README.md"
-homepage = "https://github.com/zkcrypto/bellman"
-license = "MIT/Apache-2.0"
+homepage.workspace = true
+license.workspace = true
 name = "bellman"
-repository = "https://github.com/zkcrypto/bellman"
+repository.workspace = true
 version = "0.14.0"
-edition = "2021"
-rust-version = "1.85"
+edition.workspace = true
+rust-version.workspace = true
 
 [dependencies]
 bitvec.workspace = true
