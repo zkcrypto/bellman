@@ -1,8 +1,8 @@
 //! Helpers for packing vectors of bits into scalar field elements.
 
+use super::Assignment;
 use super::boolean::Boolean;
 use super::num::Num;
-use super::Assignment;
 use crate::{ConstraintSystem, SynthesisError};
 use ff::PrimeField;
 
