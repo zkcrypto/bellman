@@ -4,6 +4,34 @@ members = [
     "groth16",
 ]
 
+[workspace.dependencies]
+bellman = { version = "0.14", path = ".", default-features = false }
+groth16 = { version = "0.1", path = "groth16" }
+
+bitvec = "1"
+blake2s_simd = "1"
+byteorder = "1"
+ff = "0.14"
+group = "0.14"
+pairing = "0.24.0"
+rand_core = "0.10"
+subtle = "2.2.1"
+
+# Multicore dependencies
+crossbeam-channel = "0.5.1"
+lazy_static = "1.4.0"
+log = "0.4"
+num_cpus = "1"
+rand = { version = "0.10", default-features = false }
+rayon = "1.5.1"
+
+# Dev dependencies
+bls12_381 = "0.9"
+criterion = "0.4"
+hex-literal = "0.3"
+rand_xorshift = "0.5"
+sha2 = "0.10"
+
 [package]
 authors = [
     "Sean Bowe <ewillbefull@gmail.com>",
@@ -20,33 +48,33 @@ edition = "2021"
 rust-version = "1.85"
 
 [dependencies]
-bitvec = "1"
-blake2s_simd = "1"
-ff = "0.14"
-group = "0.14"
-pairing = { version = "0.24", optional = true }
-rand_core = "0.10"
-byteorder = "1"
-subtle = "2.2.1"
+bitvec.workspace = true
+blake2s_simd.workspace = true
+ff.workspace = true
+group.workspace = true
+pairing = { workspace = true, optional = true }
+rand_core.workspace = true
+byteorder.workspace = true
+subtle.workspace = true
 
 # Multicore dependencies
-crossbeam-channel = { version = "0.5.1", optional = true }
-lazy_static = { version = "1.4.0", optional = true }
-log = { version = "0.4", optional = true }
-num_cpus = { version = "1", optional = true }
-rayon = { version = "1.5.1", optional = true }
+crossbeam-channel = { workspace = true, optional = true }
+lazy_static = { workspace = true, optional = true }
+log = { workspace = true, optional = true }
+num_cpus = { workspace = true, optional = true }
+rayon = { workspace = true, optional = true }
 
 [dev-dependencies]
-bls12_381 = "0.9"
-criterion = "0.4"
-hex-literal = "0.3"
-pairing = "0.24"
-rand = "0.10"
-rand_xorshift = "0.5"
-sha2 = "0.10"
+bls12_381.workspace = true
+criterion.workspace = true
+hex-literal.workspace = true
+pairing.workspace = true
+rand = { workspace = true, features = ["thread_rng"] }
+rand_xorshift.workspace = true
+sha2.workspace = true
 
 # Only for doctests.
-groth16 = { path = "groth16" }
+groth16.workspace = true
 
 [features]
 multicore = ["crossbeam-channel", "lazy_static", "log", "num_cpus", "rayon"]
