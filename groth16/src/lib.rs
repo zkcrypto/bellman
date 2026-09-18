@@ -432,7 +432,7 @@ pub trait ParameterSource<E: Engine> {
     ) -> Result<(Self::G2Builder, Self::G2Builder), SynthesisError>;
 }
 
-impl<'a, E: Engine> ParameterSource<E> for &'a Parameters<E> {
+impl<E: Engine> ParameterSource<E> for &Parameters<E> {
     type G1Builder = (Arc<Vec<E::G1Affine>>, usize);
     type G2Builder = (Arc<Vec<E::G2Affine>>, usize);
 

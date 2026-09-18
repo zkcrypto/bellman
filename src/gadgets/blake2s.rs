@@ -201,10 +201,7 @@ fn blake2s_compression<Scalar: PrimeField, CS: ConstraintSystem<Scalar>>(
     )?;
 
     if f {
-        v[14] = v[14].xor(
-            cs.namespace(|| "third xor"),
-            &UInt32::constant(u32::max_value()),
-        )?;
+        v[14] = v[14].xor(cs.namespace(|| "third xor"), &UInt32::constant(u32::MAX))?;
     }
 
     {

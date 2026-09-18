@@ -443,8 +443,8 @@ pub struct Namespace<'a, Scalar: PrimeField, CS: ConstraintSystem<Scalar>>(
     PhantomData<Scalar>,
 );
 
-impl<'cs, Scalar: PrimeField, CS: ConstraintSystem<Scalar>> ConstraintSystem<Scalar>
-    for Namespace<'cs, Scalar, CS>
+impl<Scalar: PrimeField, CS: ConstraintSystem<Scalar>> ConstraintSystem<Scalar>
+    for Namespace<'_, Scalar, CS>
 {
     type Root = CS::Root;
 
@@ -502,7 +502,7 @@ impl<'cs, Scalar: PrimeField, CS: ConstraintSystem<Scalar>> ConstraintSystem<Sca
     }
 }
 
-impl<'a, Scalar: PrimeField, CS: ConstraintSystem<Scalar>> Drop for Namespace<'a, Scalar, CS> {
+impl<Scalar: PrimeField, CS: ConstraintSystem<Scalar>> Drop for Namespace<'_, Scalar, CS> {
     fn drop(&mut self) {
         self.get_root().pop_namespace()
     }
@@ -510,9 +510,7 @@ impl<'a, Scalar: PrimeField, CS: ConstraintSystem<Scalar>> Drop for Namespace<'a
 
 /// Convenience implementation of ConstraintSystem<Scalar> for mutable references to
 /// constraint systems.
-impl<'cs, Scalar: PrimeField, CS: ConstraintSystem<Scalar>> ConstraintSystem<Scalar>
-    for &'cs mut CS
-{
+impl<Scalar: PrimeField, CS: ConstraintSystem<Scalar>> ConstraintSystem<Scalar> for &mut CS {
     type Root = CS::Root;
 
     fn one() -> Variable {

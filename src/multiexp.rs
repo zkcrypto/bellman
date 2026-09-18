@@ -102,7 +102,7 @@ impl AsRef<FullDensity> for FullDensity {
     }
 }
 
-impl<'a> QueryDensity for &'a FullDensity {
+impl QueryDensity for &FullDensity {
     type Iter = iter::Repeat<bool>;
 
     fn iter(self) -> Self::Iter {
@@ -254,8 +254,7 @@ where
                         let exp = chunks[chunk];
 
                         if exp != 0 {
-                            (&mut buckets[(exp - 1) as usize])
-                                .add_assign_from_source(&mut bases)?;
+                            buckets[(exp - 1) as usize].add_assign_from_source(&mut bases)?;
                         } else {
                             bases.skip(1)?;
                         }
