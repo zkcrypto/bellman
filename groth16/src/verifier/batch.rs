@@ -21,7 +21,7 @@ use bellman::VerificationError;
 use ff::Field;
 use group::{Curve, Group};
 use pairing::{MillerLoopResult, MultiMillerLoop};
-use rand_core::{CryptoRng, RngCore};
+use rand_core::{CryptoRng, Rng};
 
 #[cfg(feature = "multicore")]
 use rand_core::OsRng;
@@ -97,7 +97,7 @@ where
     /// Perform batch verification with a particular `VerifyingKey`, returning
     /// `Ok(())` if all proofs were verified and `VerificationError` otherwise.
     #[allow(non_snake_case)]
-    pub fn verify<R: RngCore + CryptoRng>(
+    pub fn verify<R: Rng + CryptoRng>(
         self,
         mut rng: R,
         vk: &VerifyingKey<E>,

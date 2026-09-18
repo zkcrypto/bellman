@@ -1,9 +1,9 @@
-use rand_core::RngCore;
+use rand_core::Rng;
 use std::ops::{AddAssign, MulAssign};
 use std::sync::Arc;
 
 use ff::{Field, PrimeField, PrimeFieldBits};
-use group::{prime::PrimeCurveAffine, Curve};
+use group::{Curve, CurveAffine};
 use pairing::Engine;
 
 use super::{ParameterSource, Proof};
@@ -170,7 +170,7 @@ where
     E: Engine,
     E::Fr: PrimeFieldBits,
     C: Circuit<E::Fr>,
-    R: RngCore,
+    R: Rng,
 {
     let r = E::Fr::random(&mut rng);
     let s = E::Fr::random(&mut rng);

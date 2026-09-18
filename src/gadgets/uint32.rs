@@ -417,7 +417,7 @@ mod test {
     use crate::ConstraintSystem;
     use bls12_381::Scalar;
     use ff::Field;
-    use rand_core::{RngCore, SeedableRng};
+    use rand_core::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
 
     #[test]

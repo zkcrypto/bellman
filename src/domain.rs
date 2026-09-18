@@ -377,9 +377,9 @@ fn parallel_fft<S: PrimeField, T: Group<S>>(
 #[test]
 fn polynomial_arith() {
     use bls12_381::Scalar as Fr;
-    use rand_core::RngCore;
+    use rand_core::Rng;
 
-    fn test_mul<S: PrimeField, R: RngCore>(mut rng: &mut R) {
+    fn test_mul<S: PrimeField, R: Rng>(mut rng: &mut R) {
         let worker = Worker::new();
 
         for coeffs_a in 0..70 {
@@ -419,7 +419,7 @@ fn polynomial_arith() {
         }
     }
 
-    let rng = &mut rand::thread_rng();
+    let rng = &mut rand::rng();
 
     test_mul::<Fr, _>(rng);
 }
@@ -428,9 +428,9 @@ fn polynomial_arith() {
 #[test]
 fn fft_composition() {
     use bls12_381::Scalar as Fr;
-    use rand_core::RngCore;
+    use rand_core::Rng;
 
-    fn test_comp<S: PrimeField, R: RngCore>(mut rng: &mut R) {
+    fn test_comp<S: PrimeField, R: Rng>(mut rng: &mut R) {
         let worker = Worker::new();
 
         for coeffs in 0..10 {
@@ -457,7 +457,7 @@ fn fft_composition() {
         }
     }
 
-    let rng = &mut rand::thread_rng();
+    let rng = &mut rand::rng();
 
     test_comp::<Fr, _>(rng);
 }
@@ -466,10 +466,10 @@ fn fft_composition() {
 #[test]
 fn parallel_fft_consistency() {
     use bls12_381::Scalar as Fr;
-    use rand_core::RngCore;
+    use rand_core::Rng;
     use std::cmp::min;
 
-    fn test_consistency<S: PrimeField, R: RngCore>(mut rng: &mut R) {
+    fn test_consistency<S: PrimeField, R: Rng>(mut rng: &mut R) {
         let worker = Worker::new();
 
         for _ in 0..5 {
@@ -492,7 +492,7 @@ fn parallel_fft_consistency() {
         }
     }
 
-    let rng = &mut rand::thread_rng();
+    let rng = &mut rand::rng();
 
     test_consistency::<Fr, _>(rng);
 }

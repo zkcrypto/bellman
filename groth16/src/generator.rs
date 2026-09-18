@@ -1,9 +1,9 @@
-use rand_core::RngCore;
+use rand_core::Rng;
 use std::ops::{AddAssign, MulAssign};
 use std::sync::Arc;
 
 use ff::{Field, PrimeField};
-use group::{prime::PrimeCurveAffine, Curve, Group, Wnaf, WnafGroup};
+use group::{Curve, CurveAffine, Group, Wnaf, WnafGroup};
 use pairing::Engine;
 
 use super::{Parameters, VerifyingKey};
@@ -25,7 +25,7 @@ where
     E::G1: WnafGroup,
     E::G2: WnafGroup,
     C: Circuit<E::Fr>,
-    R: RngCore,
+    R: Rng,
 {
     let g1 = E::G1::random(&mut rng);
     let g2 = E::G2::random(&mut rng);

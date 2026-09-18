@@ -378,7 +378,7 @@ mod test {
     use blake2s_simd::Params as Blake2sParams;
     use bls12_381::Scalar;
     use hex_literal::hex;
-    use rand_core::{RngCore, SeedableRng};
+    use rand_core::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
 
     use super::blake2s;

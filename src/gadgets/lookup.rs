@@ -193,7 +193,7 @@ mod test {
 
     use bls12_381::Scalar;
     use ff::Field;
-    use rand_core::{RngCore, SeedableRng};
+    use rand_core::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
     use std::ops::{AddAssign, Neg};
 

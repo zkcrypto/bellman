@@ -2,7 +2,7 @@
 //!
 //! [Groth16]: https://eprint.iacr.org/2016/260
 
-use group::{prime::PrimeCurveAffine, GroupEncoding, UncompressedEncoding};
+use group::{CurveAffine, GroupEncoding, UncompressedEncoding};
 use pairing::{Engine, MultiMillerLoop};
 
 use bellman::{multiexp::SourceBuilder, SynthesisError};
@@ -480,7 +480,7 @@ mod test_with_bls12_381 {
     use bellman::{Circuit, ConstraintSystem, SynthesisError};
     use bls12_381::{Bls12, Scalar};
     use ff::{Field, PrimeField};
-    use rand::thread_rng;
+    use rand::rng;
     use std::ops::MulAssign;
 
     #[test]
@@ -514,7 +514,7 @@ mod test_with_bls12_381 {
             }
         }
 
-        let mut rng = thread_rng();
+        let mut rng = rng();
 
         let params = generate_random_parameters::<Bls12, _, _>(
             MySillyCircuit { a: None, b: None },

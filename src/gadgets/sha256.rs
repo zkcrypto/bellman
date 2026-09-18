@@ -276,7 +276,7 @@ mod test {
     use crate::gadgets::test::TestConstraintSystem;
     use bls12_381::Scalar;
     use hex_literal::hex;
-    use rand_core::{RngCore, SeedableRng};
+    use rand_core::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
 
     #[test]
