@@ -6,7 +6,7 @@ authors = [
     "Jack Grigg <thestr4d@gmail.com>",
 ]
 edition = "2021"
-rust-version = "1.60"
+rust-version = "1.85"
 description = "Groth16 prover and verifier for Bellman"
 readme = "README.md"
 homepage = "https://github.com/zkcrypto/bellman"
