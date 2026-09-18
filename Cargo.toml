@@ -27,10 +27,10 @@ rayon = "1.5.1"
 
 # Dev dependencies
 bls12_381 = "0.9"
-criterion = "0.4"
-hex-literal = "0.3"
+criterion = "0.7"
+hex-literal = "1"
 rand_xorshift = "0.5"
-sha2 = "0.10"
+sha2 = "0.11"
 
 [package]
 authors = [
