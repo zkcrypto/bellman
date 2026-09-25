@@ -573,7 +573,7 @@ mod test {
                 .skip(1)
                 .zip(bits.iter().rev())
             {
-                if let Boolean::Is(ref a) = a {
+                if let Boolean::Is(a) = a {
                     assert_eq!(b, a.get_value().unwrap());
                 } else {
                     unreachable!()

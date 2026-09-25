@@ -6,7 +6,7 @@
 mod implementation {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
-    use crossbeam_channel::{bounded, Receiver};
+    use crossbeam_channel::{Receiver, bounded};
     use lazy_static::lazy_static;
     use log::{error, trace};
     use rayon::current_num_threads;
@@ -56,10 +56,12 @@ mod implementation {
             if previous_count > *WORKER_SPAWN_MAX_COUNT {
                 let thread_index = rayon::current_thread_index().unwrap_or(0);
                 rayon::scope(move |_| {
-                    trace!("[{}] switching to scope to help clear backlog [threads: current {}, requested {}]",
+                    trace!(
+                        "[{}] switching to scope to help clear backlog [threads: current {}, requested {}]",
                         thread_index,
                         current_num_threads(),
-                        WORKER_SPAWN_COUNTER.load(Ordering::SeqCst));
+                        WORKER_SPAWN_COUNTER.load(Ordering::SeqCst)
+                    );
                     let res = f();
                     sender.send(res).unwrap();
                     WORKER_SPAWN_COUNTER.fetch_sub(1, Ordering::SeqCst);

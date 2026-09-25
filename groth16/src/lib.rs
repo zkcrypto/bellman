@@ -5,7 +5,7 @@
 use group::{CurveAffine, GroupEncoding, UncompressedEncoding};
 use pairing::{Engine, MultiMillerLoop};
 
-use bellman::{multiexp::SourceBuilder, SynthesisError};
+use bellman::{SynthesisError, multiexp::SourceBuilder};
 
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use std::io::{self, Read, Write};

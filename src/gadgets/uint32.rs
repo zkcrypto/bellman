@@ -411,10 +411,10 @@ impl UInt32 {
 #[cfg(test)]
 mod test {
     use super::UInt32;
+    use crate::ConstraintSystem;
     use crate::gadgets::boolean::Boolean;
     use crate::gadgets::multieq::MultiEq;
     use crate::gadgets::test::*;
-    use crate::ConstraintSystem;
     use bls12_381::Scalar;
     use ff::Field;
     use rand_core::{Rng, SeedableRng};
@@ -720,10 +720,10 @@ mod test {
 
             for b in r.bits.iter() {
                 match b {
-                    Boolean::Is(ref b) => {
+                    Boolean::Is(b) => {
                         assert!(b.get_value().unwrap() == (expected & 1 == 1));
                     }
-                    Boolean::Not(ref b) => {
+                    Boolean::Not(b) => {
                         assert!(b.get_value().unwrap() != (expected & 1 == 1));
                     }
                     Boolean::Constant(b) => {
@@ -764,10 +764,10 @@ mod test {
 
             for b in r.bits.iter() {
                 match b {
-                    Boolean::Is(ref b) => {
+                    Boolean::Is(b) => {
                         assert!(b.get_value().unwrap() == (expected & 1 == 1));
                     }
-                    Boolean::Not(ref b) => {
+                    Boolean::Not(b) => {
                         assert!(b.get_value().unwrap() != (expected & 1 == 1));
                     }
                     Boolean::Constant(b) => {

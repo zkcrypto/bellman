@@ -5,13 +5,13 @@ authors = [
     "Sean Bowe <ewillbefull@gmail.com>",
     "Jack Grigg <thestr4d@gmail.com>",
 ]
-edition = "2021"
-rust-version = "1.85"
+edition.workspace = true
+rust-version.workspace = true
 description = "Groth16 prover and verifier for Bellman"
 readme = "README.md"
-homepage = "https://github.com/zkcrypto/bellman"
-repository = "https://github.com/zkcrypto/bellman"
-license = "MIT OR Apache-2.0"
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
 bellman = { workspace = true, default-features = false }
