@@ -26,7 +26,6 @@ subtle = "2.3"
 
 # Multicore dependencies
 crossbeam-channel = "0.5.1"
-lazy_static = "1.4.0"
 log = "0.4"
 num_cpus = "1"
 rand = { version = "0.10", default-features = false }
@@ -66,7 +65,6 @@ subtle.workspace = true
 
 # Multicore dependencies
 crossbeam-channel = { workspace = true, optional = true }
-lazy_static = { workspace = true, optional = true }
 log = { workspace = true, optional = true }
 num_cpus = { workspace = true, optional = true }
 rayon = { workspace = true, optional = true }
@@ -84,7 +82,7 @@ sha2.workspace = true
 groth16.workspace = true
 
 [features]
-multicore = ["crossbeam-channel", "lazy_static", "log", "num_cpus", "rayon"]
+multicore = ["crossbeam-channel", "log", "num_cpus", "rayon"]
 default = ["multicore"]
 
 [[bench]]
