@@ -22,7 +22,7 @@ ff = "0.14"
 group = "0.14"
 pairing = "0.24.0"
 rand_core = "0.10"
-subtle = "2.2.1"
+subtle = "2.3"
 
 # Multicore dependencies
 crossbeam-channel = "0.5.1"
