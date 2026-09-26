@@ -13,7 +13,7 @@ license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
 bellman = { version = "0.15", path = ".", default-features = false }
-groth16 = { version = "0.1", path = "groth16" }
+groth16 = { version = "0.2", path = "groth16" }
 
 bitvec = "1"
 blake2s_simd = "1"
