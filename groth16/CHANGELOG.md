@@ -14,7 +14,7 @@ and this project adheres to Rust's notion of
 ### Changed
 - MSRV bumped to `1.85`.
 - Bumped dependencies to `ff 0.14`, `group 0.14`, `rand_core 0.10`,
-  `pairing 0.24`.
+  `pairing 0.24`, `bellman 0.15`.
 
 ## [0.1.0] - 2024-07-15
 Initial release (moved from `bellman::groth16`)

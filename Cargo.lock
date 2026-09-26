@@ -54,7 +54,7 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "bellman"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "bitvec",
  "blake2s_simd",
