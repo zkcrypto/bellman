@@ -12,8 +12,8 @@ repository = "https://github.com/zkcrypto/bellman"
 license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
-bellman = { version = "0.14", path = ".", default-features = false }
-groth16 = { version = "0.1", path = "groth16" }
+bellman = { version = "0.15", path = ".", default-features = false }
+groth16 = { version = "0.2", path = "groth16" }
 
 bitvec = "1"
 blake2s_simd = "1"
@@ -22,11 +22,10 @@ ff = "0.14"
 group = "0.14"
 pairing = "0.24.0"
 rand_core = "0.10"
-subtle = "2.2.1"
+subtle = "2.3"
 
 # Multicore dependencies
 crossbeam-channel = "0.5.1"
-lazy_static = "1.4.0"
 log = "0.4"
 num_cpus = "1"
 rand = { version = "0.10", default-features = false }
@@ -50,7 +49,7 @@ homepage.workspace = true
 license.workspace = true
 name = "bellman"
 repository.workspace = true
-version = "0.14.0"
+version = "0.15.0"
 edition.workspace = true
 rust-version.workspace = true
 
@@ -66,7 +65,6 @@ subtle.workspace = true
 
 # Multicore dependencies
 crossbeam-channel = { workspace = true, optional = true }
-lazy_static = { workspace = true, optional = true }
 log = { workspace = true, optional = true }
 num_cpus = { workspace = true, optional = true }
 rayon = { workspace = true, optional = true }
@@ -84,7 +82,7 @@ sha2.workspace = true
 groth16.workspace = true
 
 [features]
-multicore = ["crossbeam-channel", "lazy_static", "log", "num_cpus", "rayon"]
+multicore = ["crossbeam-channel", "log", "num_cpus", "rayon"]
 default = ["multicore"]
 
 [[bench]]

@@ -4,19 +4,19 @@
 
 #[cfg(feature = "multicore")]
 mod implementation {
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{
+        LazyLock,
+        atomic::{AtomicUsize, Ordering},
+    };
 
     use crossbeam_channel::{Receiver, bounded};
-    use lazy_static::lazy_static;
     use log::{error, trace};
     use rayon::current_num_threads;
 
     static WORKER_SPAWN_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
-    lazy_static! {
-        // See Worker::compute below for a description of this.
-        static ref WORKER_SPAWN_MAX_COUNT: usize = current_num_threads() * 4;
-    }
+    // See Worker::compute below for a description of this.
+    static WORKER_SPAWN_MAX_COUNT: LazyLock<usize> = LazyLock::new(|| current_num_threads() * 4);
 
     #[derive(Clone, Default)]
     pub struct Worker {}
