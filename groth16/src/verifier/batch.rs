@@ -75,6 +75,48 @@ pub struct Verifier<E: MultiMillerLoop> {
     items: Vec<Item<E>>,
 }
 
+/// Fixed G2 pairing terms for repeated batches under one verifying key.
+///
+/// Creating this once prepares beta, gamma, and delta for repeated batches.
+/// Engines can spend more time preparing these terms to speed up verification.
+pub struct PreparedBatchVerifyingKey<'a, E: MultiMillerLoop> {
+    vk: &'a VerifyingKey<E>,
+    beta_g2: E::G2Prepared,
+    gamma_g2: E::G2Prepared,
+    delta_g2: E::G2Prepared,
+}
+
+impl<E: MultiMillerLoop> std::fmt::Debug for PreparedBatchVerifyingKey<'_, E> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PreparedBatchVerifyingKey")
+            .finish_non_exhaustive()
+    }
+}
+
+impl<'a, E: MultiMillerLoop> From<&'a VerifyingKey<E>> for PreparedBatchVerifyingKey<'a, E> {
+    fn from(vk: &'a VerifyingKey<E>) -> Self {
+        Self {
+            vk,
+            beta_g2: E::prepare_reusable_g2(vk.beta_g2),
+            gamma_g2: E::prepare_reusable_g2(vk.gamma_g2),
+            delta_g2: E::prepare_reusable_g2(vk.delta_g2),
+        }
+    }
+}
+
+impl<'a, E: MultiMillerLoop> PreparedBatchVerifyingKey<'a, E> {
+    // The raw verifier uses each G2 term once, so extra reusable preparation
+    // would cost more than it saves.
+    fn for_one_batch(vk: &'a VerifyingKey<E>) -> Self {
+        Self {
+            vk,
+            beta_g2: vk.beta_g2.into(),
+            gamma_g2: vk.gamma_g2.into(),
+            delta_g2: vk.delta_g2.into(),
+        }
+    }
+}
+
 // Need to impl Default by hand to avoid a derived E: Default bound
 impl<E: MultiMillerLoop> Default for Verifier<E> {
     fn default() -> Self {
@@ -96,12 +138,13 @@ where
         self.items.push(item.into())
     }
 
-    /// Perform batch verification with a particular `VerifyingKey`, returning
-    /// `Ok(())` if all proofs were verified and `VerificationError` otherwise.
-    #[allow(non_snake_case)]
+    /// Perform batch verification with a particular [`VerifyingKey`].
+    ///
+    /// For repeated batches, prepare the key once and use
+    /// [`Verifier::verify_prepared`].
     pub fn verify<R: Rng + CryptoRng>(
         self,
-        mut rng: R,
+        rng: R,
         vk: &VerifyingKey<E>,
     ) -> Result<(), VerificationError> {
         if self
@@ -111,7 +154,39 @@ where
         {
             return Err(VerificationError::InvalidVerifyingKey);
         }
+        if self.items.is_empty() {
+            return Ok(());
+        }
+        self.verify_prepared_unchecked(rng, &PreparedBatchVerifyingKey::for_one_batch(vk))
+    }
 
+    /// Verify a batch using fixed G2 terms prepared for its verifying key.
+    pub fn verify_prepared<R: Rng + CryptoRng>(
+        self,
+        rng: R,
+        pvk: &PreparedBatchVerifyingKey<'_, E>,
+    ) -> Result<(), VerificationError> {
+        let vk = pvk.vk;
+        if self
+            .items
+            .iter()
+            .any(|Item { inputs, .. }| inputs.len() + 1 != vk.ic.len())
+        {
+            return Err(VerificationError::InvalidVerifyingKey);
+        }
+        if self.items.is_empty() {
+            return Ok(());
+        }
+        self.verify_prepared_unchecked(rng, pvk)
+    }
+
+    #[allow(non_snake_case)]
+    fn verify_prepared_unchecked<R: Rng + CryptoRng>(
+        self,
+        mut rng: R,
+        pvk: &PreparedBatchVerifyingKey<'_, E>,
+    ) -> Result<(), VerificationError> {
+        let vk = pvk.vk;
         let mut ml_terms = Vec::<(E::G1Affine, E::G2Prepared)>::new();
         let mut acc_Gammas = vec![E::Fr::ZERO; vk.ic.len()];
         let mut acc_Delta = E::G1::identity();
@@ -140,7 +215,7 @@ where
             acc_Y += &z;
         }
 
-        ml_terms.push((acc_Delta.to_affine(), E::G2Prepared::from(vk.delta_g2)));
+        let delta = acc_Delta.to_affine();
 
         let Psi = vk
             .ic
@@ -149,7 +224,7 @@ where
             .map(|(&Psi_i, acc_Gamma_i)| Psi_i * acc_Gamma_i)
             .sum();
 
-        ml_terms.push((E::G1Affine::from(Psi), E::G2Prepared::from(vk.gamma_g2)));
+        let gamma = E::G1Affine::from(Psi);
 
         // Covers the [acc_Y]⋅e(alpha_g1, beta_g2) component
         //
@@ -160,12 +235,14 @@ where
         //     ([acc_Y]⋅alpha_g1, beta_g2)
         // to our Miller loop terms because
         //     [acc_Y]⋅e(alpha_g1, beta_g2) = e([acc_Y]⋅alpha_g1, beta_g2)
-        ml_terms.push((
-            E::G1Affine::from(vk.alpha_g1 * acc_Y),
-            E::G2Prepared::from(vk.beta_g2),
-        ));
+        let beta = E::G1Affine::from(vk.alpha_g1 * acc_Y);
 
-        let ml_terms = ml_terms.iter().map(|(a, b)| (a, b)).collect::<Vec<_>>();
+        let mut ml_terms = ml_terms.iter().map(|(a, b)| (a, b)).collect::<Vec<_>>();
+        ml_terms.extend([
+            (&delta, &pvk.delta_g2),
+            (&gamma, &pvk.gamma_g2),
+            (&beta, &pvk.beta_g2),
+        ]);
 
         if E::multi_miller_loop(&ml_terms[..]).final_exponentiation() == E::Gt::identity() {
             Ok(())
@@ -174,13 +251,11 @@ where
         }
     }
 
-    /// Perform batch verification with a particular `VerifyingKey`, returning
-    /// `Ok(())` if all proofs were verified and `VerificationError` otherwise.
+    /// Perform batch verification using the global Rayon thread pool.
     ///
-    /// This performs the bulk of internal arithmetic over the global rayon
-    /// threadpool.
+    /// For repeated batches, prepare the key once and use
+    /// [`Verifier::verify_multicore_prepared`].
     #[cfg(feature = "multicore")]
-    #[allow(non_snake_case)]
     pub fn verify_multicore(self, vk: &VerifyingKey<E>) -> Result<(), VerificationError> {
         if self
             .items
@@ -189,7 +264,40 @@ where
         {
             return Err(VerificationError::InvalidVerifyingKey);
         }
+        if self.items.is_empty() {
+            return Ok(());
+        }
+        self.verify_multicore_prepared_unchecked(&PreparedBatchVerifyingKey::for_one_batch(vk))
+    }
 
+    /// Verify a batch with prepared fixed G2 terms using the global Rayon
+    /// thread pool.
+    #[cfg(feature = "multicore")]
+    pub fn verify_multicore_prepared(
+        self,
+        pvk: &PreparedBatchVerifyingKey<'_, E>,
+    ) -> Result<(), VerificationError> {
+        let vk = pvk.vk;
+        if self
+            .items
+            .iter()
+            .any(|Item { inputs, .. }| inputs.len() + 1 != vk.ic.len())
+        {
+            return Err(VerificationError::InvalidVerifyingKey);
+        }
+        if self.items.is_empty() {
+            return Ok(());
+        }
+        self.verify_multicore_prepared_unchecked(pvk)
+    }
+
+    #[cfg(feature = "multicore")]
+    #[allow(non_snake_case)]
+    fn verify_multicore_prepared_unchecked(
+        self,
+        pvk: &PreparedBatchVerifyingKey<'_, E>,
+    ) -> Result<(), VerificationError> {
+        let vk = pvk.vk;
         struct Accumulator<E: MultiMillerLoop> {
             gammas: Vec<E::Fr>,
             delta: E::G1,
@@ -275,12 +383,9 @@ where
                     .sum();
 
                 ml_result += E::multi_miller_loop(&[
-                    (&acc.delta.to_affine(), &E::G2Prepared::from(vk.delta_g2)),
-                    (&E::G1Affine::from(psi), &E::G2Prepared::from(vk.gamma_g2)),
-                    (
-                        &E::G1Affine::from(vk.alpha_g1 * acc.y),
-                        &E::G2Prepared::from(vk.beta_g2),
-                    ),
+                    (&acc.delta.to_affine(), &pvk.delta_g2),
+                    (&E::G1Affine::from(psi), &pvk.gamma_g2),
+                    (&E::G1Affine::from(vk.alpha_g1 * acc.y), &pvk.beta_g2),
                 ]);
 
                 if ml_result.final_exponentiation() == E::Gt::identity() {

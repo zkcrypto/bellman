@@ -286,3 +286,93 @@ fn batch_verify_multicore() {
         Err(VerificationError::InvalidProof)
     ));
 }
+
+#[test]
+fn prepared_batch_verify() {
+    let mut rng = rng();
+    let constants = (0..MIMC_ROUNDS)
+        .map(|_| Scalar::random(&mut rng))
+        .collect::<Vec<_>>();
+    let params = generate_random_parameters::<Bls12, _, _>(
+        MiMCDemo {
+            xl: None,
+            xr: None,
+            constants: &constants,
+        },
+        &mut rng,
+    )
+    .unwrap();
+    let xl = Scalar::random(&mut rng);
+    let xr = Scalar::random(&mut rng);
+    let image = mimc(xl, xr, &constants);
+    let proof = create_random_proof(
+        MiMCDemo {
+            xl: Some(xl),
+            xr: Some(xr),
+            constants: &constants,
+        },
+        &params,
+        &mut rng,
+    )
+    .unwrap();
+    let prepared = batch::PreparedBatchVerifyingKey::from(&params.vk);
+
+    assert!(
+        batch::Verifier::<Bls12>::new()
+            .verify_prepared(&mut rng, &prepared)
+            .is_ok()
+    );
+    let mut malformed = batch::Verifier::new();
+    malformed.queue((proof.clone(), vec![]));
+    assert!(matches!(
+        malformed.verify_prepared(&mut rng, &prepared),
+        Err(bellman::VerificationError::InvalidVerifyingKey)
+    ));
+    #[cfg(feature = "multicore")]
+    {
+        assert!(
+            batch::Verifier::<Bls12>::new()
+                .verify_multicore_prepared(&prepared)
+                .is_ok()
+        );
+        let mut malformed = batch::Verifier::new();
+        malformed.queue((proof.clone(), vec![]));
+        assert!(matches!(
+            malformed.verify_multicore_prepared(&prepared),
+            Err(bellman::VerificationError::InvalidVerifyingKey)
+        ));
+    }
+
+    for count in [1, 2] {
+        let mut valid = batch::Verifier::new();
+        let mut invalid = batch::Verifier::new();
+        #[cfg(feature = "multicore")]
+        let mut valid_multicore = batch::Verifier::new();
+        #[cfg(feature = "multicore")]
+        let mut invalid_multicore = batch::Verifier::new();
+
+        for i in 0..count {
+            let valid_item = (proof.clone(), vec![image]);
+            let invalid_item = (proof.clone(), vec![image + Scalar::from((i == 0) as u64)]);
+            valid.queue(valid_item.clone());
+            invalid.queue(invalid_item.clone());
+            #[cfg(feature = "multicore")]
+            {
+                valid_multicore.queue(valid_item);
+                invalid_multicore.queue(invalid_item);
+            }
+        }
+
+        assert!(valid.verify_prepared(&mut rng, &prepared).is_ok());
+        assert!(invalid.verify_prepared(&mut rng, &prepared).is_err());
+        #[cfg(feature = "multicore")]
+        {
+            assert!(valid_multicore.verify_multicore_prepared(&prepared).is_ok());
+            assert!(
+                invalid_multicore
+                    .verify_multicore_prepared(&prepared)
+                    .is_err()
+            );
+        }
+    }
+}

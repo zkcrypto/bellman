@@ -40,5 +40,9 @@ name = "batch"
 harness = false
 
 [[bench]]
+name = "prepared_batch"
+harness = false
+
+[[bench]]
 name = "reusable_verify"
 harness = false
