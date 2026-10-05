@@ -15,7 +15,7 @@
 //! large enough batches, it's manageable and not much worse performance-wise to
 //! keep batches of each statement type, vs one large adaptive batch.
 
-use std::ops::AddAssign;
+use std::{borrow::Cow, ops::AddAssign};
 
 use bellman::VerificationError;
 use ff::Field;
@@ -75,15 +75,58 @@ pub struct Verifier<E: MultiMillerLoop> {
     items: Vec<Item<E>>,
 }
 
+/// Reusable fixed G2 pairing terms from a Groth16 verifying key.
+#[derive(Clone)]
+pub struct PreparedBatchG2<E: MultiMillerLoop> {
+    source_beta_g2: E::G2Affine,
+    source_gamma_g2: E::G2Affine,
+    source_delta_g2: E::G2Affine,
+    beta_g2: E::G2Prepared,
+    gamma_g2: E::G2Prepared,
+    delta_g2: E::G2Prepared,
+}
+
+impl<E: MultiMillerLoop> std::fmt::Debug for PreparedBatchG2<E> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PreparedBatchG2").finish_non_exhaustive()
+    }
+}
+
+impl<E: MultiMillerLoop> From<&VerifyingKey<E>> for PreparedBatchG2<E> {
+    fn from(vk: &VerifyingKey<E>) -> Self {
+        Self {
+            source_beta_g2: vk.beta_g2,
+            source_gamma_g2: vk.gamma_g2,
+            source_delta_g2: vk.delta_g2,
+            beta_g2: E::prepare_reusable_g2(vk.beta_g2),
+            gamma_g2: E::prepare_reusable_g2(vk.gamma_g2),
+            delta_g2: E::prepare_reusable_g2(vk.delta_g2),
+        }
+    }
+}
+
+impl<E: MultiMillerLoop> PreparedBatchG2<E> {
+    // The raw verifier uses each G2 term once, so extra reusable preparation
+    // would cost more than it saves.
+    fn for_one_batch(vk: &VerifyingKey<E>) -> Self {
+        Self {
+            source_beta_g2: vk.beta_g2,
+            source_gamma_g2: vk.gamma_g2,
+            source_delta_g2: vk.delta_g2,
+            beta_g2: vk.beta_g2.into(),
+            gamma_g2: vk.gamma_g2.into(),
+            delta_g2: vk.delta_g2.into(),
+        }
+    }
+}
+
 /// Fixed G2 pairing terms for repeated batches under one verifying key.
 ///
 /// Creating this once prepares beta, gamma, and delta for repeated batches.
 /// Engines can spend more time preparing these terms to speed up verification.
 pub struct PreparedBatchVerifyingKey<'a, E: MultiMillerLoop> {
     vk: &'a VerifyingKey<E>,
-    beta_g2: E::G2Prepared,
-    gamma_g2: E::G2Prepared,
-    delta_g2: E::G2Prepared,
+    g2: Cow<'a, PreparedBatchG2<E>>,
 }
 
 struct PreparedBatchTerms<E: MultiMillerLoop> {
@@ -104,9 +147,9 @@ impl<E: MultiMillerLoop> PreparedBatchTerms<E> {
             .map(|(a, b)| (a, b))
             .collect::<Vec<_>>();
         terms.extend([
-            (&self.delta, &key.delta_g2),
-            (&self.gamma, &key.gamma_g2),
-            (&self.beta, &key.beta_g2),
+            (&self.delta, &key.g2.delta_g2),
+            (&self.gamma, &key.g2.gamma_g2),
+            (&self.beta, &key.g2.beta_g2),
         ]);
         terms
     }
@@ -123,22 +166,37 @@ impl<'a, E: MultiMillerLoop> From<&'a VerifyingKey<E>> for PreparedBatchVerifyin
     fn from(vk: &'a VerifyingKey<E>) -> Self {
         Self {
             vk,
-            beta_g2: E::prepare_reusable_g2(vk.beta_g2),
-            gamma_g2: E::prepare_reusable_g2(vk.gamma_g2),
-            delta_g2: E::prepare_reusable_g2(vk.delta_g2),
+            g2: Cow::Owned(PreparedBatchG2::from(vk)),
         }
     }
 }
 
 impl<'a, E: MultiMillerLoop> PreparedBatchVerifyingKey<'a, E> {
+    /// Borrows fixed G2 terms from [`PreparedBatchG2`].
+    ///
+    /// Returns an error if the key has different beta, gamma, or delta G2 terms.
+    pub fn from_cached(
+        vk: &'a VerifyingKey<E>,
+        g2: &'a PreparedBatchG2<E>,
+    ) -> Result<Self, VerificationError> {
+        if g2.source_beta_g2 != vk.beta_g2
+            || g2.source_gamma_g2 != vk.gamma_g2
+            || g2.source_delta_g2 != vk.delta_g2
+        {
+            return Err(VerificationError::InvalidVerifyingKey);
+        }
+        Ok(Self {
+            vk,
+            g2: Cow::Borrowed(g2),
+        })
+    }
+
     // The raw verifier uses each G2 term once, so extra reusable preparation
     // would cost more than it saves.
     fn for_one_batch(vk: &'a VerifyingKey<E>) -> Self {
         Self {
             vk,
-            beta_g2: vk.beta_g2.into(),
-            gamma_g2: vk.gamma_g2.into(),
-            delta_g2: vk.delta_g2.into(),
+            g2: Cow::Owned(PreparedBatchG2::for_one_batch(vk)),
         }
     }
 }
@@ -459,9 +517,9 @@ where
                     .sum();
 
                 ml_result += E::multi_miller_loop(&[
-                    (&acc.delta.to_affine(), &pvk.delta_g2),
-                    (&E::G1Affine::from(psi), &pvk.gamma_g2),
-                    (&E::G1Affine::from(vk.alpha_g1 * acc.y), &pvk.beta_g2),
+                    (&acc.delta.to_affine(), &pvk.g2.delta_g2),
+                    (&E::G1Affine::from(psi), &pvk.g2.gamma_g2),
+                    (&E::G1Affine::from(vk.alpha_g1 * acc.y), &pvk.g2.beta_g2),
                 ]);
 
                 if ml_result.final_exponentiation() == E::Gt::identity() {

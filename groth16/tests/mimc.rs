@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 use ff::Field;
 
 // We're going to use the BLS12-381 pairing-friendly elliptic curve.
-use bls12_381::{Bls12, Scalar};
+use bls12_381::{Bls12, G2Affine, Scalar};
 
 // We're going to use the Groth16 proving system.
 use groth16::{
@@ -316,6 +316,25 @@ fn prepared_batch_verify() {
     )
     .unwrap();
     let prepared = batch::PreparedBatchVerifyingKey::from(&params.vk);
+    let reusable_g2 = batch::PreparedBatchG2::from(&params.vk);
+    let borrowed = batch::PreparedBatchVerifyingKey::from_cached(&params.vk, &reusable_g2).unwrap();
+
+    let mut valid_borrowed = batch::Verifier::new();
+    valid_borrowed.queue((proof.clone(), vec![image]));
+    assert!(valid_borrowed.verify_prepared(&mut rng, &borrowed).is_ok());
+
+    for term in 0..3 {
+        let mut mismatched = params.vk.clone();
+        match term {
+            0 => mismatched.beta_g2 = G2Affine::identity(),
+            1 => mismatched.gamma_g2 = G2Affine::identity(),
+            _ => mismatched.delta_g2 = G2Affine::identity(),
+        }
+        assert!(matches!(
+            batch::PreparedBatchVerifyingKey::from_cached(&mismatched, &reusable_g2),
+            Err(bellman::VerificationError::InvalidVerifyingKey)
+        ));
+    }
 
     assert!(
         batch::Verifier::<Bls12>::new()
