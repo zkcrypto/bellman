@@ -1,7 +1,7 @@
-use groth16::{batch, create_random_proof, generate_random_parameters};
 use bls12_381::{Bls12, Scalar};
 use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
 use ff::Field;
+use groth16::{batch, create_random_proof, generate_random_parameters};
 use rand::rng;
 
 #[path = "../tests/common/mod.rs"]

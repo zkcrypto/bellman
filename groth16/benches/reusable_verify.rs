@@ -1,9 +1,9 @@
-use groth16::{
-    create_random_proof, generate_random_parameters, prepare_verifying_key, verify_proof,
-};
 use bls12_381::{Bls12, Scalar};
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use ff::Field;
+use groth16::{
+    create_random_proof, generate_random_parameters, prepare_verifying_key, verify_proof,
+};
 use rand::{SeedableRng, rngs::StdRng};
 
 #[path = "../tests/common/mod.rs"]
