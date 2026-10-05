@@ -210,10 +210,15 @@ where
 
         let ic_len = vk.ic.len();
 
+        // Give each Rayon thread a Miller-loop work item while retaining
+        // batching within each loop when parallelism is scarce.
+        const MAX_CHUNK_SIZE: usize = 8;
+        let threads = rayon::current_num_threads();
+        let chunk_size = self.items.len().div_ceil(threads).clamp(1, MAX_CHUNK_SIZE);
+
         let acc = self
             .items
-            // This chunk size was obtained heuristically.
-            .par_chunks(8)
+            .par_chunks(chunk_size)
             .map(|items| {
                 let mut acc = Accumulator::<E>::new(ic_len);
                 let mut ml_terms: Vec<(E::G1Affine, E::G2Prepared)> = vec![];

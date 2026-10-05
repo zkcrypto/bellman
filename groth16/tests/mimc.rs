@@ -110,6 +110,10 @@ fn batch_verify() {
     let mut rng = rng();
 
     let mut batch = batch::Verifier::new();
+    #[cfg(feature = "multicore")]
+    let mut multicore_batch = batch::Verifier::new();
+    #[cfg(feature = "multicore")]
+    let mut invalid_multicore_batch = batch::Verifier::new();
 
     // Generate the MiMC round constants
     let constants = (0..MIMC_ROUNDS)
@@ -143,7 +147,7 @@ fn batch_verify() {
     // benchmark deserialization.
     let mut proof_vec = vec![];
 
-    for _ in 0..SAMPLES {
+    for _sample in 0..SAMPLES {
         // Generate a random preimage and compute the image
         let xl = Scalar::random(&mut rng);
         let xr = Scalar::random(&mut rng);
@@ -178,6 +182,16 @@ fn batch_verify() {
         total_verifying += start.elapsed();
 
         // Queue the proof and inputs for batch verification.
+        #[cfg(feature = "multicore")]
+        {
+            multicore_batch.queue((proof.clone(), [image].into()));
+            let invalid_image = if _sample == 0 {
+                image + Scalar::ONE
+            } else {
+                image
+            };
+            invalid_multicore_batch.queue((proof.clone(), [invalid_image].into()));
+        }
         batch.queue((proof, [image].into()));
     }
 
@@ -186,6 +200,15 @@ fn batch_verify() {
 
     // Verify this batch for this specific verifying key
     assert!(batch.verify(rng, &params.vk).is_ok());
+    #[cfg(feature = "multicore")]
+    {
+        assert!(multicore_batch.verify_multicore(&params.vk).is_ok());
+        assert!(
+            invalid_multicore_batch
+                .verify_multicore(&params.vk)
+                .is_err()
+        );
+    }
 
     batch_verifying += batch_start.elapsed();
 
