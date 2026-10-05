@@ -38,3 +38,7 @@ default = ["multicore"]
 [[bench]]
 name = "batch"
 harness = false
+
+[[bench]]
+name = "reusable_verify"
+harness = false
