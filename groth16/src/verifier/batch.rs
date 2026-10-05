@@ -86,6 +86,32 @@ pub struct PreparedBatchVerifyingKey<'a, E: MultiMillerLoop> {
     delta_g2: E::G2Prepared,
 }
 
+struct PreparedBatchTerms<E: MultiMillerLoop> {
+    variable: Vec<(E::G1Affine, E::G2Prepared)>,
+    delta: E::G1Affine,
+    gamma: E::G1Affine,
+    beta: E::G1Affine,
+}
+
+impl<E: MultiMillerLoop> PreparedBatchTerms<E> {
+    fn with_key<'a>(
+        &'a self,
+        key: &'a PreparedBatchVerifyingKey<'_, E>,
+    ) -> Vec<(&'a E::G1Affine, &'a E::G2Prepared)> {
+        let mut terms = self
+            .variable
+            .iter()
+            .map(|(a, b)| (a, b))
+            .collect::<Vec<_>>();
+        terms.extend([
+            (&self.delta, &key.delta_g2),
+            (&self.gamma, &key.gamma_g2),
+            (&self.beta, &key.beta_g2),
+        ]);
+        terms
+    }
+}
+
 impl<E: MultiMillerLoop> std::fmt::Debug for PreparedBatchVerifyingKey<'_, E> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("PreparedBatchVerifyingKey")
@@ -180,14 +206,70 @@ where
         self.verify_prepared_unchecked(rng, pvk)
     }
 
+    /// Verify two batches using different [`PreparedBatchVerifyingKey`] values
+    /// in one Miller loop.
+    ///
+    /// Independent nonzero randomizers are sampled for every proof in both
+    /// batches. This shares the Miller-loop squares and final exponentiation.
+    pub fn verify_joint_prepared<R: Rng + CryptoRng>(
+        self,
+        other: Self,
+        mut rng: R,
+        key: &PreparedBatchVerifyingKey<'_, E>,
+        other_key: &PreparedBatchVerifyingKey<'_, E>,
+    ) -> Result<(), VerificationError> {
+        if self
+            .items
+            .iter()
+            .any(|item| item.inputs.len() + 1 != key.vk.ic.len())
+            || other
+                .items
+                .iter()
+                .any(|item| item.inputs.len() + 1 != other_key.vk.ic.len())
+        {
+            return Err(VerificationError::InvalidVerifyingKey);
+        }
+        if self.items.is_empty() {
+            return other.verify_prepared(rng, other_key);
+        }
+        if other.items.is_empty() {
+            return self.verify_prepared(rng, key);
+        }
+
+        let first = self.randomize_terms(&mut rng, key);
+        let second = other.randomize_terms(&mut rng, other_key);
+        let mut terms = first.with_key(key);
+        terms.extend(second.with_key(other_key));
+
+        if E::multi_miller_loop(&terms).final_exponentiation() == E::Gt::identity() {
+            Ok(())
+        } else {
+            Err(VerificationError::InvalidProof)
+        }
+    }
+
     #[allow(non_snake_case)]
     fn verify_prepared_unchecked<R: Rng + CryptoRng>(
         self,
-        mut rng: R,
+        rng: R,
         pvk: &PreparedBatchVerifyingKey<'_, E>,
     ) -> Result<(), VerificationError> {
+        let terms = self.randomize_terms(rng, pvk);
+        if E::multi_miller_loop(&terms.with_key(pvk)).final_exponentiation() == E::Gt::identity() {
+            Ok(())
+        } else {
+            Err(VerificationError::InvalidProof)
+        }
+    }
+
+    #[allow(non_snake_case)]
+    fn randomize_terms<R: Rng + CryptoRng>(
+        self,
+        mut rng: R,
+        pvk: &PreparedBatchVerifyingKey<'_, E>,
+    ) -> PreparedBatchTerms<E> {
         let vk = pvk.vk;
-        let mut ml_terms = Vec::<(E::G1Affine, E::G2Prepared)>::new();
+        let mut ml_terms = Vec::<(E::G1Affine, E::G2Prepared)>::with_capacity(self.items.len());
         let mut acc_Gammas = vec![E::Fr::ZERO; vk.ic.len()];
         let mut acc_Delta = E::G1::identity();
         let mut acc_Y = E::Fr::ZERO;
@@ -237,17 +319,11 @@ where
         //     [acc_Y]⋅e(alpha_g1, beta_g2) = e([acc_Y]⋅alpha_g1, beta_g2)
         let beta = E::G1Affine::from(vk.alpha_g1 * acc_Y);
 
-        let mut ml_terms = ml_terms.iter().map(|(a, b)| (a, b)).collect::<Vec<_>>();
-        ml_terms.extend([
-            (&delta, &pvk.delta_g2),
-            (&gamma, &pvk.gamma_g2),
-            (&beta, &pvk.beta_g2),
-        ]);
-
-        if E::multi_miller_loop(&ml_terms[..]).final_exponentiation() == E::Gt::identity() {
-            Ok(())
-        } else {
-            Err(VerificationError::InvalidProof)
+        PreparedBatchTerms {
+            variable: ml_terms,
+            delta,
+            gamma,
+            beta,
         }
     }
 
