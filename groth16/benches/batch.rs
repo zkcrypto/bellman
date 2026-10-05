@@ -1,4 +1,4 @@
-use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
+use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
 
 use bls12_381::Bls12;
 use ff::Field;
@@ -70,7 +70,7 @@ fn bench_batch_verify(c: &mut Criterion) {
             |b, proofs| {
                 b.iter(|| {
                     for (proof, input) in proofs.iter() {
-                        let _ = verify_proof(&pvk, proof, &[*input]);
+                        let _ = black_box(verify_proof(&pvk, proof, &[*input]));
                     }
                 })
             },
@@ -85,7 +85,22 @@ fn bench_batch_verify(c: &mut Criterion) {
                     for (proof, input) in proofs.iter() {
                         batch.queue((proof.clone(), vec![*input]));
                     }
-                    batch.verify(&mut rng, &params.vk)
+                    black_box(batch.verify(&mut rng, &params.vk))
+                })
+            },
+        );
+
+        #[cfg(feature = "multicore")]
+        group.bench_with_input(
+            BenchmarkId::new("Multicore batched verification", n),
+            &proofs,
+            |b, proofs| {
+                b.iter(|| {
+                    let mut batch = batch::Verifier::new();
+                    for (proof, input) in proofs.iter() {
+                        batch.queue((proof.clone(), vec![*input]));
+                    }
+                    black_box(batch.verify_multicore(&params.vk))
                 })
             },
         );
