@@ -591,9 +591,17 @@ mod test_with_bls12_381 {
                                 .ok_or(SynthesisError::AssignmentMissing)
                         },
                     )?;
+                    let witness = cs.alloc(
+                        || "private copy",
+                        || {
+                            self.values
+                                .map(|values| values[index])
+                                .ok_or(SynthesisError::AssignmentMissing)
+                        },
+                    )?;
                     cs.enforce(
                         || "value times one is value",
-                        |lc| lc + input,
+                        |lc| lc + witness,
                         |lc| lc + CS::one(),
                         |lc| lc + input,
                     );
