@@ -71,7 +71,7 @@ impl<G: PrimeCurveAffine> Source<G> for (Arc<Vec<G>>, usize) {
     }
 
     fn skip(&mut self, amt: usize) -> Result<(), SynthesisError> {
-        if self.0.len() <= self.1 {
+        if self.0.len() < self.1 + amt {
             return Err(io::Error::new(
                 io::ErrorKind::UnexpectedEof,
                 "expected more bases from source",
