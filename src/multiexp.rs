@@ -279,7 +279,7 @@ where
     // Split the exponents into chunks.
     let exponents = Arc::new(
         exponents
-            .iter()
+            .par_iter()
             .map(|exp| exp.chunks(c as usize))
             .collect::<Vec<_>>(),
     );
