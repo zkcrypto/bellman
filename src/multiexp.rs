@@ -145,10 +145,52 @@ impl DensityTracker {
         self.bv.push(false);
     }
 
-    pub fn inc(&mut self, idx: usize) {
-        if !self.bv.get(idx).unwrap() {
-            self.bv.set(idx, true);
+    /// Sets the element at the given index to true in the density tracking bit vector.
+    /// Returns an error if the index is out of bounds.
+    ///
+    /// # Arguments
+    /// * `idx` - The index of the element to set
+    ///
+    /// # Errors
+    /// Returns `Err` if the index is out of bounds
+    ///
+    /// # Examples
+    /// ```
+    /// # use crate::DensityTracker;
+    /// # fn main() -> Result<(), crate::SynthesisError> {
+    /// let mut tracker = DensityTracker::new();
+    /// tracker.add_element(); // Add one element
+    /// tracker.set_density(0)?; // Set density for the first element
+    /// 
+    /// // This will return an error because index 1 is out of bounds
+    /// assert!(tracker.set_density(1).is_err());
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn set_density(&mut self, idx: usize) -> Result<(), SynthesisError> {
+        match self.bv.get_mut(idx) {
+            Some(bit) => {
+                if !*bit {
+                    *bit = true;
+                }
+                Ok(())
+            }
+            None => Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("density tracker index out of bounds: {} (len: {})", idx, self.bv.len()),
+            ).into()),
         }
+    }
+
+    /// Increment the density at the given index.
+    /// This is a legacy method that may panic if the index is out of bounds.
+    /// Consider using `set_density` instead.
+    #[deprecated(
+        since = "0.1.0",
+        note = "please use `set_density` instead, which properly handles errors"
+    )]
+    pub fn inc(&mut self, idx: usize) {
+        self.set_density(idx).unwrap()
     }
 
     pub fn get_total_density(&self) -> usize {
