@@ -15,6 +15,11 @@
 //! large enough batches, it's manageable and not much worse performance-wise to
 //! keep batches of each statement type, vs one large adaptive batch.
 //!
+//! Each verification gives one proof the weight one, and every other proof an independent
+//! uniform nonzero scalar weight. Serial and multicore verification use the same
+//! distribution, with a false-acceptance bound of `1 / (r - 1)` for scalar-field
+//! order `r`. A batch whose only invalid proof has the unit weight is always rejected.
+//!
 //! Proofs, public inputs and verifying keys are public, and the weights only need to
 //! be unpredictable until the proofs are fixed, so this module uses variable-time
 //! arithmetic.
@@ -33,7 +38,10 @@ use rand::rngs::SysRng;
 use rand_core::UnwrapErr;
 
 #[cfg(feature = "multicore")]
-use rayon::{iter::ParallelIterator, prelude::ParallelSlice};
+use rayon::{
+    iter::{IndexedParallelIterator, ParallelIterator},
+    prelude::ParallelSlice,
+};
 
 use crate::{PreparedVerifyingKey, Proof, VerifyingKey, multiexp::multiexp_vartime};
 
@@ -337,8 +345,9 @@ where
     /// Verify two batches using different [`PreparedBatchVerifyingKey`] values
     /// in one Miller loop.
     ///
-    /// Independent nonzero randomizers are sampled for every proof in both
-    /// batches. This shares the Miller-loop squares and final exponentiation.
+    /// The first proof in the combined batches has weight one; every other proof
+    /// has an independent nonzero weight as described in the module documentation.
+    /// This shares the Miller-loop squares and final exponentiation.
     pub fn verify_joint_prepared<R: Rng + CryptoRng>(
         self,
         other: Self,
@@ -364,8 +373,9 @@ where
             return self.verify_prepared(rng, key);
         }
 
-        let mut first = self.randomize_terms(&mut rng, key);
-        let second = other.randomize_terms(&mut rng, other_key);
+        let mut first = self.randomize_terms(&mut rng, key, true);
+        // Only one proof across both batches may have a fixed unit weight.
+        let second = other.randomize_terms(&mut rng, other_key, false);
         first.g1.extend_from_slice(&second.g1);
         let mut g2 = first.with_key(key);
         g2.extend(second.with_key(other_key));
@@ -382,7 +392,7 @@ where
         rng: R,
         pvk: &PreparedBatchVerifyingKey<'_, E>,
     ) -> Result<(), VerificationError> {
-        let terms = self.randomize_terms(rng, pvk);
+        let terms = self.randomize_terms(rng, pvk, true);
         if miller_loop::<E>(&terms.g1, &terms.with_key(pvk)).final_exponentiation()
             == E::Gt::identity()
         {
@@ -396,9 +406,16 @@ where
         self,
         mut rng: R,
         pvk: &PreparedBatchVerifyingKey<'_, E>,
+        first_is_unit: bool,
     ) -> PreparedBatchTerms<E> {
         let weights = (0..self.items.len())
-            .map(|_| random_weight(&mut rng))
+            .map(|i| {
+                if first_is_unit && i == 0 {
+                    E::Fr::ONE
+                } else {
+                    random_weight(&mut rng)
+                }
+            })
             .collect::<Vec<_>>();
         let (mut g1, neg_b, ic_scalars, c_sum) = weigh(&self.items, &weights, pvk.vk.ic.len());
         g1.extend(shared_terms(pvk.vk, &ic_scalars, c_sum));
@@ -479,14 +496,18 @@ where
         let acc = self
             .items
             .par_chunks(chunk_size)
-            .map(|items| {
-                let z = random_weight::<E::Fr>(&mut UnwrapErr(SysRng));
-                let mut cur_z = z;
+            .enumerate()
+            .map(|(chunk, items)| {
+                let mut rng = UnwrapErr(SysRng);
+                // Exactly one item in the whole batch has the unit weight. Other weights
+                // are independent, rather than powers of one random value.
                 let weights = (0..items.len())
-                    .map(|_| {
-                        let weight = cur_z;
-                        cur_z *= z;
-                        weight
+                    .map(|i| {
+                        if chunk == 0 && i == 0 {
+                            E::Fr::ONE
+                        } else {
+                            random_weight(&mut rng)
+                        }
                     })
                     .collect::<Vec<_>>();
                 let (g1, neg_b, ic_scalars, c_sum) = weigh(items, &weights, ic_len);

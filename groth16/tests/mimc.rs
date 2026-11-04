@@ -575,7 +575,7 @@ fn batch_rejects_each_invalid_proof() {
     let (vk, pvk, proofs) = batch_fixture();
     let mut rng = StdRng::seed_from_u64(1);
     // Cover empty and singleton batches, and both sides of the multicore chunk
-    // boundary.
+    // boundary. The first item has the unit weight.
     for size in [0, 1, 2, 8, 9, 17] {
         let mut items = proofs
             .iter()
@@ -643,6 +643,40 @@ fn batch_rejects_cancelling_errors() {
         items[first].0.c = (items[first].0.c + G1Projective::generator()).into();
         items[second].0.c = (items[second].0.c - G1Projective::generator()).into();
         assert_batch_matches_single(&vk, &pvk, &items, &mut rng);
+    }
+}
+
+#[test]
+fn joint_prepared_batch_rejects_cancelling_errors() {
+    let (vk, pvk, proofs) = batch_fixture();
+    let cache = batch::PreparedBatchG2::from(&vk);
+    let key = batch::PreparedBatchVerifyingKey::from_cached(&vk, &cache).unwrap();
+    let make_batch = |items: &[Item]| {
+        let mut verifier = batch::Verifier::new();
+        for item in items {
+            verifier.queue(item.clone());
+        }
+        verifier
+    };
+    let mut rng = StdRng::seed_from_u64(3);
+
+    for size in [1, 3] {
+        for invalid in [false, true] {
+            let mut first = proofs[..size].to_vec();
+            let mut second = proofs[..size].to_vec();
+            if invalid {
+                // Opposite errors cancel if the first proof of each side gets weight one.
+                first[0].0.c = (first[0].0.c + G1Projective::generator()).into();
+                second[0].0.c = (second[0].0.c - G1Projective::generator()).into();
+                assert!(verify_proof(&pvk, &first[0].0, &first[0].1).is_err());
+                assert!(verify_proof(&pvk, &second[0].0, &second[0].1).is_err());
+            }
+
+            assert!(is_expected(
+                make_batch(&first).verify_joint_prepared(make_batch(&second), &mut rng, &key, &key),
+                !invalid,
+            ));
+        }
     }
 }
 
