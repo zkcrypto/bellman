@@ -1,5 +1,5 @@
 // For randomness (during paramgen and proof generation)
-use rand::rng;
+use rand::{RngExt, SeedableRng, rng, rngs::StdRng, seq::IndexedRandom};
 
 // For benchmarking
 use std::time::{Duration, Instant};
@@ -8,15 +8,14 @@ use std::time::{Duration, Instant};
 use ff::Field;
 
 // We're going to use the BLS12-381 pairing-friendly elliptic curve.
-use bls12_381::{Bls12, G2Affine, Scalar};
+use bls12_381::{Bls12, G1Projective, G2Affine, G2Projective, Scalar};
 
 // We're going to use the Groth16 proving system.
 use groth16::{
-    Proof, batch, create_random_proof, generate_random_parameters, prepare_verifying_key,
-    verify_proof,
+    PreparedVerifyingKey, Proof, VerifyingKey, batch, create_random_proof,
+    generate_random_parameters, prepare_verifying_key, verify_proof,
 };
 
-#[cfg(feature = "multicore")]
 use bellman::VerificationError;
 
 mod common;
@@ -103,6 +102,88 @@ fn test_mimc() {
 
     println!("Average proving time: {:?} seconds", proving_avg);
     println!("Average verifying time: {:?} seconds", verifying_avg);
+}
+
+type Item = (Proof<Bls12>, Vec<Scalar>);
+
+/// Returns a verifying key and a few valid proofs, generated deterministically.
+fn batch_fixture() -> (VerifyingKey<Bls12>, PreparedVerifyingKey<Bls12>, Vec<Item>) {
+    let mut rng = StdRng::seed_from_u64(0);
+    let constants = (0..MIMC_ROUNDS)
+        .map(|_| Scalar::random(&mut rng))
+        .collect::<Vec<_>>();
+    let params = generate_random_parameters::<Bls12, _, _>(
+        MiMCDemo {
+            xl: None,
+            xr: None,
+            constants: &constants,
+        },
+        &mut rng,
+    )
+    .unwrap();
+    let items = (0..4)
+        .map(|_| {
+            let xl = Scalar::random(&mut rng);
+            let xr = Scalar::random(&mut rng);
+            let circuit = MiMCDemo {
+                xl: Some(xl),
+                xr: Some(xr),
+                constants: &constants,
+            };
+            let proof = create_random_proof(circuit, &params, &mut rng).unwrap();
+            (proof, vec![mimc(xl, xr, &constants)])
+        })
+        .collect();
+    let pvk = prepare_verifying_key(&params.vk);
+    (params.vk, pvk, items)
+}
+
+/// Makes an item invalid, in one of four ways selected by `kind`.
+fn corrupt((proof, inputs): &mut Item, kind: usize) {
+    match kind % 4 {
+        0 => proof.a = (proof.a + G1Projective::generator()).into(),
+        1 => proof.b = (proof.b + G2Projective::generator()).into(),
+        2 => proof.c = (proof.c + G1Projective::generator()).into(),
+        _ => inputs[0] += Scalar::ONE,
+    }
+}
+
+/// Returns whether a batch result is the expected success, or a proof failure.
+fn is_expected(result: Result<(), VerificationError>, valid: bool) -> bool {
+    matches!(
+        (result, valid),
+        (Ok(()), true) | (Err(VerificationError::InvalidProof), false)
+    )
+}
+
+/// Asserts that batch verification accepts `items` exactly when each item verifies alone.
+fn assert_batch_matches_single(
+    vk: &VerifyingKey<Bls12>,
+    pvk: &PreparedVerifyingKey<Bls12>,
+    items: &[Item],
+    rng: &mut StdRng,
+) {
+    let valid = items
+        .iter()
+        .all(|(proof, inputs)| verify_proof(pvk, proof, inputs).is_ok());
+    let batch = || {
+        let mut batch = batch::Verifier::new();
+        for item in items {
+            batch.queue(item.clone());
+        }
+        batch
+    };
+    assert!(is_expected(batch().verify(&mut *rng, vk), valid));
+    let prepared = batch::PreparedBatchVerifyingKey::from(vk);
+    assert!(is_expected(batch().verify_prepared(rng, &prepared), valid));
+    #[cfg(feature = "multicore")]
+    {
+        assert!(is_expected(batch().verify_multicore(vk), valid));
+        assert!(is_expected(
+            batch().verify_multicore_prepared(&prepared),
+            valid
+        ));
+    }
 }
 
 #[test]
@@ -487,4 +568,92 @@ fn joint_prepared_batch_verify() {
         make_batch(&proof_a, image_a).verify_joint_prepared(malformed, &mut rng, &key_a, &key_b),
         Err(bellman::VerificationError::InvalidVerifyingKey)
     ));
+}
+
+#[test]
+fn batch_rejects_each_invalid_proof() {
+    let (vk, pvk, proofs) = batch_fixture();
+    let mut rng = StdRng::seed_from_u64(1);
+    // Cover empty and singleton batches, and both sides of the multicore chunk
+    // boundary.
+    for size in [0, 1, 2, 8, 9, 17] {
+        let mut items = proofs
+            .iter()
+            .cycle()
+            .take(size)
+            .cloned()
+            .collect::<Vec<_>>();
+        assert_batch_matches_single(&vk, &pvk, &items, &mut rng);
+        for position in 0..size {
+            let valid = items[position].clone();
+            corrupt(&mut items[position], size + position);
+            let (proof, inputs) = &items[position];
+            assert!(verify_proof(&pvk, proof, inputs).is_err());
+            assert_batch_matches_single(&vk, &pvk, &items, &mut rng);
+            items[position] = valid;
+        }
+    }
+}
+
+#[test]
+fn batch_matches_single_verification() {
+    let (vk, pvk, proofs) = batch_fixture();
+    for seed in 0..64 {
+        let mut rng = StdRng::seed_from_u64(seed);
+        let size = rng.random_range(1..=20);
+        let mut items = (0..size)
+            .map(|_| proofs.choose(&mut rng).unwrap().clone())
+            .collect::<Vec<_>>();
+        for _ in 0..rng.random_range(0..3) {
+            let position = rng.random_range(0..size);
+            corrupt(&mut items[position], rng.random_range(0..4));
+        }
+        assert_batch_matches_single(&vk, &pvk, &items, &mut rng);
+    }
+}
+
+#[test]
+fn batch_rejects_cancelling_errors() {
+    let (vk, pvk, proofs) = batch_fixture();
+    let mut rng = StdRng::seed_from_u64(2);
+
+    // Match the adaptive chunk size in `verify_multicore_prepared_unchecked`.
+    const BATCH_SIZE: usize = 17;
+    #[cfg(feature = "multicore")]
+    let threads = rayon::current_num_threads();
+    #[cfg(not(feature = "multicore"))]
+    let threads = 1;
+    let chunk_size = BATCH_SIZE.div_ceil(threads).clamp(1, 8);
+
+    // These errors cancel if both items get the same weight. In particular, errors at
+    // chunk starts catch assigning the unit weight to the first item of every chunk.
+    for (first, second) in [
+        (0, 1),
+        (0, chunk_size),
+        (1, chunk_size + 1),
+        (chunk_size - 1, chunk_size),
+        (chunk_size, 2 * chunk_size),
+    ] {
+        let mut items = proofs
+            .iter()
+            .cycle()
+            .take(BATCH_SIZE)
+            .cloned()
+            .collect::<Vec<_>>();
+        items[first].0.c = (items[first].0.c + G1Projective::generator()).into();
+        items[second].0.c = (items[second].0.c - G1Projective::generator()).into();
+        assert_batch_matches_single(&vk, &pvk, &items, &mut rng);
+    }
+}
+
+#[test]
+fn batch_accepts_empty_batch() {
+    let (mut vk, _, _) = batch_fixture();
+    // A key with no `ic` points can be deserialized, and has no valid proofs.
+    for ic_len in [1, 0] {
+        vk.ic.truncate(ic_len);
+        assert!(batch::Verifier::new().verify(rng(), &vk).is_ok());
+        #[cfg(feature = "multicore")]
+        assert!(batch::Verifier::new().verify_multicore(&vk).is_ok());
+    }
 }
