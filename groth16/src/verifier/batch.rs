@@ -19,7 +19,7 @@ use std::{borrow::Cow, ops::AddAssign};
 
 use bellman::VerificationError;
 use ff::{Field, PrimeField};
-use group::{Curve, Group};
+use group::{Curve, CurveAffine, Group};
 use pairing::{MillerLoopResult, MultiMillerLoop};
 use rand_core::{CryptoRng, Rng};
 
@@ -105,9 +105,10 @@ fn shared_terms<E: MultiMillerLoop>(
     [c_sum, psi, alpha]
 }
 
-/// Runs a Miller loop, converting its G1 inputs to affine form.
+/// Runs a Miller loop, normalizing all G1 points with one shared inversion.
 fn miller_loop<E: MultiMillerLoop>(g1: &[E::G1], g2: &[&E::G2Prepared]) -> E::Result {
-    let affine = g1.iter().map(|point| point.to_affine()).collect::<Vec<_>>();
+    let mut affine = vec![E::G1Affine::identity(); g1.len()];
+    E::G1::batch_normalize(g1, &mut affine);
     let terms = affine.iter().zip(g2.iter().copied()).collect::<Vec<_>>();
     E::multi_miller_loop(&terms)
 }
