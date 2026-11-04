@@ -14,6 +14,10 @@
 //! need to refer to or lookup a particular `VerifyingKey`. In practice, with
 //! large enough batches, it's manageable and not much worse performance-wise to
 //! keep batches of each statement type, vs one large adaptive batch.
+//!
+//! Proofs, public inputs and verifying keys are public, and the weights only need to
+//! be unpredictable until the proofs are fixed, so this module uses variable-time
+//! arithmetic.
 
 use std::{borrow::Cow, ops::AddAssign};
 
@@ -31,7 +35,7 @@ use rand_core::UnwrapErr;
 #[cfg(feature = "multicore")]
 use rayon::{iter::ParallelIterator, prelude::ParallelSlice};
 
-use crate::{PreparedVerifyingKey, Proof, VerifyingKey};
+use crate::{PreparedVerifyingKey, Proof, VerifyingKey, multiexp::multiexp_vartime};
 
 /// Samples a uniformly random nonzero scalar for batch verification.
 fn random_weight<F: PrimeField>(rng: &mut impl Rng) -> F {
@@ -61,18 +65,21 @@ fn weigh<E: MultiMillerLoop>(
 ) -> (Vec<E::G1>, Vec<E::G2Prepared>, Vec<E::Fr>, E::G1) {
     let mut a = Vec::with_capacity(items.len());
     let mut neg_b = Vec::with_capacity(items.len());
-    let mut delta = E::G1::identity();
+    let mut c = Vec::with_capacity(items.len());
     let mut ic_scalars = vec![E::Fr::ZERO; ic_len];
     for (Item { proof, inputs }, weight) in items.iter().zip(weights) {
-        a.push(proof.a * weight);
+        a.push(multiexp_vartime(
+            &[proof.a.to_curve()],
+            std::slice::from_ref(weight),
+        ));
         neg_b.push((-proof.b).into());
-        delta += proof.c * weight;
+        c.push(proof.c.to_curve());
         ic_scalars[0] += weight; // a_0 is implicitly set to 1
         for (input, ic_scalar) in inputs.iter().zip(&mut ic_scalars[1..]) {
             *ic_scalar += *weight * input;
         }
     }
-    (a, neg_b, ic_scalars, delta)
+    (a, neg_b, ic_scalars, multiexp_vartime(&c, weights))
 }
 
 /// Returns the G1 terms that pair the batch sums with the verifying key.
@@ -84,12 +91,8 @@ fn shared_terms<E: MultiMillerLoop>(
     ic_scalars: &[E::Fr],
     c_sum: E::G1,
 ) -> [E::G1; 3] {
-    let psi = vk
-        .ic
-        .iter()
-        .zip(ic_scalars)
-        .map(|(&psi_i, ic_scalar_i)| psi_i * ic_scalar_i)
-        .sum();
+    let ic = vk.ic.iter().map(|ic| ic.to_curve()).collect::<Vec<_>>();
+    let psi = multiexp_vartime(&ic, ic_scalars);
     // The first public input is implicitly one, so its scalar is the sum of the weights.
     let weight_sum = ic_scalars[0];
     // Covers the [weight_sum] e(alpha_g1, beta_g2) component.
@@ -101,7 +104,7 @@ fn shared_terms<E: MultiMillerLoop>(
     //     ([weight_sum] alpha_g1, beta_g2)
     // to our Miller loop terms because
     //     [weight_sum] e(alpha_g1, beta_g2) = e([weight_sum] alpha_g1, beta_g2)
-    let alpha = vk.alpha_g1 * weight_sum;
+    let alpha = multiexp_vartime(&[vk.alpha_g1.to_curve()], &[weight_sum]);
     [c_sum, psi, alpha]
 }
 

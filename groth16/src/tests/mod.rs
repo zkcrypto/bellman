@@ -1,6 +1,6 @@
 use ff::{Field, PrimeField};
 
-mod dummy_engine;
+pub(crate) mod dummy_engine;
 use self::dummy_engine::*;
 
 use std::marker::PhantomData;
@@ -439,8 +439,8 @@ fn zero_coeff_non_one_var() {
     zero_coeff_test(false);
 }
 
-/// Exercises batch verification over a small scalar field. A fixed seed keeps the
-/// `1 / (r - 1)` chance of
+/// Exercises batch verification over a small scalar field, which uses full-field weights
+/// and the group's own multiplication. A fixed seed keeps the `1 / (r - 1)` chance of
 /// accepting an invalid batch over this field from making the test flaky.
 #[test]
 fn batch_verify_small_field() {
