@@ -1,5 +1,5 @@
 // For randomness (during paramgen and proof generation)
-use rand::{RngExt, SeedableRng, rng, rngs::StdRng, seq::IndexedRandom};
+use rand::{RngExt, SeedableRng, TryCryptoRng, TryRng, rng, rngs::StdRng, seq::IndexedRandom};
 
 // For benchmarking
 use std::time::{Duration, Instant};
@@ -658,7 +658,6 @@ fn joint_prepared_batch_rejects_cancelling_errors() {
         }
         verifier
     };
-    let mut rng = StdRng::seed_from_u64(3);
 
     for size in [1, 3] {
         for invalid in [false, true] {
@@ -672,10 +671,14 @@ fn joint_prepared_batch_rejects_cancelling_errors() {
                 assert!(verify_proof(&pvk, &second[0].0, &second[0].1).is_err());
             }
 
+            // Every proof except the first across both batches draws exactly 16 bytes.
+            // Repeated 0x02 bytes select a nonzero weight different from one.
+            let mut rng = FixedBytes(vec![2; 16 * (2 * size - 1)].into_iter());
             assert!(is_expected(
                 make_batch(&first).verify_joint_prepared(make_batch(&second), &mut rng, &key, &key),
                 !invalid,
             ));
+            assert_eq!(rng.0.len(), 0);
         }
     }
 }
@@ -689,5 +692,53 @@ fn batch_accepts_empty_batch() {
         assert!(batch::Verifier::new().verify(rng(), &vk).is_ok());
         #[cfg(feature = "multicore")]
         assert!(batch::Verifier::new().verify_multicore(&vk).is_ok());
+    }
+}
+
+/// Supplies fixed bytes, so that a test can choose the batch weights.
+struct FixedBytes(std::vec::IntoIter<u8>);
+
+impl TryRng for FixedBytes {
+    type Error = std::convert::Infallible;
+
+    fn try_next_u32(&mut self) -> Result<u32, Self::Error> {
+        let mut bytes = [0; 4];
+        self.try_fill_bytes(&mut bytes)?;
+        Ok(u32::from_le_bytes(bytes))
+    }
+
+    fn try_next_u64(&mut self) -> Result<u64, Self::Error> {
+        let mut bytes = [0; 8];
+        self.try_fill_bytes(&mut bytes)?;
+        Ok(u64::from_le_bytes(bytes))
+    }
+
+    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), Self::Error> {
+        for byte in dest {
+            *byte = self.0.next().expect("the test supplies every random byte");
+        }
+        Ok(())
+    }
+}
+
+impl TryCryptoRng for FixedBytes {}
+
+#[test]
+fn batch_retries_zero_weight() {
+    let (vk, _, proofs) = batch_fixture();
+    for valid in [true, false] {
+        let mut items = proofs[..2].to_vec();
+        if !valid {
+            corrupt(&mut items[1], 3);
+        }
+        let mut batch = batch::Verifier::new();
+        for item in items {
+            batch.queue(item);
+        }
+        // The unit-weight item draws nothing. The other item first draws zero, which
+        // would drop it from the batch, then draws the largest weight, 2^128 - 1.
+        let mut rng = FixedBytes([[0; 16], [0xff; 16]].concat().into_iter());
+        assert!(is_expected(batch.verify(&mut rng, &vk), valid));
+        assert_eq!(rng.0.len(), 0);
     }
 }
