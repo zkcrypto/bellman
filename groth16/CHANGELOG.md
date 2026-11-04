@@ -27,6 +27,11 @@ and this project adheres to Rust's notion of
     `PreparedVerifyingKey`s are normally loaded into a global lock and reused
     through shared references, and neither initialization nor ordinary
     verification requires these traits.
+- `groth16::batch::Verifier::{verify, verify_multicore}` are faster. For scalar
+  fields wider than 128 bits, a batch containing an invalid proof is now
+  accepted with probability at most `1 / (2^128 - 1)` (previously `1 / (r - 1)`
+  for `verify` and `8 / (r - 1)` for `verify_multicore`, where `r` is the scalar
+  field order).
 
 ## [0.2.0] - 2026-09-26
 ### Added
