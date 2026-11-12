@@ -1,5 +1,7 @@
+use std::hint::black_box;
+
 use bls12_381::{Bls12, Scalar};
-use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
+use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use ff::Field;
 use groth16::{batch, create_random_proof, generate_random_parameters};
 use rand::rng;

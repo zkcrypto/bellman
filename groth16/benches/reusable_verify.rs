@@ -1,5 +1,7 @@
+use std::hint::black_box;
+
 use bls12_381::{Bls12, Scalar};
-use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use criterion::{Criterion, criterion_group, criterion_main};
 use ff::Field;
 use groth16::{
     create_random_proof, generate_random_parameters, prepare_verifying_key, verify_proof,
