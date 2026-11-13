@@ -6,6 +6,27 @@ and this project adheres to Rust's notion of
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+- `groth16::batch` APIs for reusing verifying-key terms across batches:
+  - `PreparedBatchG2`
+  - `PreparedBatchVerifyingKey`
+  - `Verifier::verify_prepared`
+  - `Verifier::verify_multicore_prepared`, behind the `multicore` feature.
+  - `Verifier::verify_joint_prepared` for verifying two batches under different
+    verifying keys.
+
+### Changed
+- Raised `pairing` minimum version to `0.24.2`, to improve prepared verifying
+  key performance.
+- Improved verification performance, with additional preparation work and memory
+  usage for `groth16::PreparedVerifyingKey`.
+  - **Breaking change:** The `Unpin`, `UnwindSafe`, and `RefUnwindSafe` auto
+    trait impls for `PreparedVerifyingKey<E>` now additionally require the
+    corresponding trait on `E::G1`. Generic downstream code relying on the
+    previous bounds may need updating. The impact is considered negligible:
+    `PreparedVerifyingKey`s are normally loaded into a global lock and reused
+    through shared references, and neither initialization nor ordinary
+    verification requires these traits.
 
 ## [0.2.0] - 2026-09-26
 ### Added

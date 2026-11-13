@@ -397,6 +397,8 @@ impl<E: Engine> Parameters<E> {
     }
 }
 
+const PUBLIC_INPUT_WINDOW: usize = 5;
+
 pub struct PreparedVerifyingKey<E: MultiMillerLoop> {
     /// Pairing result of alpha*beta
     alpha_g1_beta_g2: E::Gt,
@@ -406,6 +408,8 @@ pub struct PreparedVerifyingKey<E: MultiMillerLoop> {
     neg_delta_g2: E::G2Prepared,
     /// Copy of IC from `VerifiyingKey`.
     ic: Vec<E::G1Affine>,
+    /// Window tables for the public-input bases after the constant term.
+    ic_wnaf: Vec<group::WnafBase<E::G1, PUBLIC_INPUT_WINDOW>>,
 }
 
 pub trait ParameterSource<E: Engine> {
@@ -563,6 +567,69 @@ mod test_with_bls12_381 {
 
             assert!(verify_proof(&pvk, &proof, &[c]).is_ok());
             assert!(verify_proof(&pvk, &proof, &[a]).is_err());
+        }
+    }
+
+    #[test]
+    fn verify_seven_public_inputs() {
+        struct SevenInputs {
+            values: Option<[Scalar; 7]>,
+        }
+
+        impl Circuit<Scalar> for SevenInputs {
+            fn synthesize<CS: ConstraintSystem<Scalar>>(
+                self,
+                cs: &mut CS,
+            ) -> Result<(), SynthesisError> {
+                for index in 0..7 {
+                    let mut cs = cs.namespace(|| format!("input {index}"));
+                    let input = cs.alloc_input(
+                        || "value",
+                        || {
+                            self.values
+                                .map(|values| values[index])
+                                .ok_or(SynthesisError::AssignmentMissing)
+                        },
+                    )?;
+                    let witness = cs.alloc(
+                        || "private copy",
+                        || {
+                            self.values
+                                .map(|values| values[index])
+                                .ok_or(SynthesisError::AssignmentMissing)
+                        },
+                    )?;
+                    cs.enforce(
+                        || "value times one is value",
+                        |lc| lc + witness,
+                        |lc| lc + CS::one(),
+                        |lc| lc + input,
+                    );
+                }
+                Ok(())
+            }
+        }
+
+        let mut rng = rng();
+        let params =
+            generate_random_parameters::<Bls12, _, _>(SevenInputs { values: None }, &mut rng)
+                .unwrap();
+        let pvk = prepare_verifying_key(&params.vk);
+        let inputs = core::array::from_fn(|_| Scalar::random(&mut rng));
+        let proof = create_random_proof(
+            SevenInputs {
+                values: Some(inputs),
+            },
+            &params,
+            &mut rng,
+        )
+        .unwrap();
+
+        assert!(verify_proof(&pvk, &proof, &inputs).is_ok());
+        for index in 0..inputs.len() {
+            let mut changed = inputs;
+            changed[index] += Scalar::ONE;
+            assert!(verify_proof(&pvk, &proof, &changed).is_err());
         }
     }
 }

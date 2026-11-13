@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 use ff::Field;
 
 // We're going to use the BLS12-381 pairing-friendly elliptic curve.
-use bls12_381::{Bls12, Scalar};
+use bls12_381::{Bls12, G2Affine, Scalar};
 
 // We're going to use the Groth16 proving system.
 use groth16::{
@@ -110,6 +110,10 @@ fn batch_verify() {
     let mut rng = rng();
 
     let mut batch = batch::Verifier::new();
+    #[cfg(feature = "multicore")]
+    let mut multicore_batch = batch::Verifier::new();
+    #[cfg(feature = "multicore")]
+    let mut invalid_multicore_batch = batch::Verifier::new();
 
     // Generate the MiMC round constants
     let constants = (0..MIMC_ROUNDS)
@@ -143,7 +147,7 @@ fn batch_verify() {
     // benchmark deserialization.
     let mut proof_vec = vec![];
 
-    for _ in 0..SAMPLES {
+    for _sample in 0..SAMPLES {
         // Generate a random preimage and compute the image
         let xl = Scalar::random(&mut rng);
         let xr = Scalar::random(&mut rng);
@@ -178,6 +182,16 @@ fn batch_verify() {
         total_verifying += start.elapsed();
 
         // Queue the proof and inputs for batch verification.
+        #[cfg(feature = "multicore")]
+        {
+            multicore_batch.queue((proof.clone(), [image].into()));
+            let invalid_image = if _sample == 0 {
+                image + Scalar::ONE
+            } else {
+                image
+            };
+            invalid_multicore_batch.queue((proof.clone(), [invalid_image].into()));
+        }
         batch.queue((proof, [image].into()));
     }
 
@@ -186,6 +200,15 @@ fn batch_verify() {
 
     // Verify this batch for this specific verifying key
     assert!(batch.verify(rng, &params.vk).is_ok());
+    #[cfg(feature = "multicore")]
+    {
+        assert!(multicore_batch.verify_multicore(&params.vk).is_ok());
+        assert!(
+            invalid_multicore_batch
+                .verify_multicore(&params.vk)
+                .is_err()
+        );
+    }
 
     batch_verifying += batch_start.elapsed();
 
@@ -261,5 +284,207 @@ fn batch_verify_multicore() {
     assert!(matches!(
         tampered.verify_multicore(&params.vk),
         Err(VerificationError::InvalidProof)
+    ));
+}
+
+#[test]
+fn prepared_batch_verify() {
+    let mut rng = rng();
+    let constants = (0..MIMC_ROUNDS)
+        .map(|_| Scalar::random(&mut rng))
+        .collect::<Vec<_>>();
+    let params = generate_random_parameters::<Bls12, _, _>(
+        MiMCDemo {
+            xl: None,
+            xr: None,
+            constants: &constants,
+        },
+        &mut rng,
+    )
+    .unwrap();
+    let xl = Scalar::random(&mut rng);
+    let xr = Scalar::random(&mut rng);
+    let image = mimc(xl, xr, &constants);
+    let proof = create_random_proof(
+        MiMCDemo {
+            xl: Some(xl),
+            xr: Some(xr),
+            constants: &constants,
+        },
+        &params,
+        &mut rng,
+    )
+    .unwrap();
+    let prepared = batch::PreparedBatchVerifyingKey::from(&params.vk);
+    let reusable_g2 = batch::PreparedBatchG2::from(&params.vk);
+    let borrowed = batch::PreparedBatchVerifyingKey::from_cached(&params.vk, &reusable_g2).unwrap();
+
+    let mut valid_borrowed = batch::Verifier::new();
+    valid_borrowed.queue((proof.clone(), vec![image]));
+    assert!(valid_borrowed.verify_prepared(&mut rng, &borrowed).is_ok());
+
+    for term in 0..3 {
+        let mut mismatched = params.vk.clone();
+        match term {
+            0 => mismatched.beta_g2 = G2Affine::identity(),
+            1 => mismatched.gamma_g2 = G2Affine::identity(),
+            _ => mismatched.delta_g2 = G2Affine::identity(),
+        }
+        assert!(matches!(
+            batch::PreparedBatchVerifyingKey::from_cached(&mismatched, &reusable_g2),
+            Err(bellman::VerificationError::InvalidVerifyingKey)
+        ));
+    }
+
+    assert!(
+        batch::Verifier::<Bls12>::new()
+            .verify_prepared(&mut rng, &prepared)
+            .is_ok()
+    );
+    let mut malformed = batch::Verifier::new();
+    malformed.queue((proof.clone(), vec![]));
+    assert!(matches!(
+        malformed.verify_prepared(&mut rng, &prepared),
+        Err(bellman::VerificationError::InvalidVerifyingKey)
+    ));
+    #[cfg(feature = "multicore")]
+    {
+        assert!(
+            batch::Verifier::<Bls12>::new()
+                .verify_multicore_prepared(&prepared)
+                .is_ok()
+        );
+        let mut malformed = batch::Verifier::new();
+        malformed.queue((proof.clone(), vec![]));
+        assert!(matches!(
+            malformed.verify_multicore_prepared(&prepared),
+            Err(bellman::VerificationError::InvalidVerifyingKey)
+        ));
+    }
+
+    for count in [1, 2] {
+        let mut valid = batch::Verifier::new();
+        let mut invalid = batch::Verifier::new();
+        #[cfg(feature = "multicore")]
+        let mut valid_multicore = batch::Verifier::new();
+        #[cfg(feature = "multicore")]
+        let mut invalid_multicore = batch::Verifier::new();
+
+        for i in 0..count {
+            let valid_item = (proof.clone(), vec![image]);
+            let invalid_item = (proof.clone(), vec![image + Scalar::from((i == 0) as u64)]);
+            valid.queue(valid_item.clone());
+            invalid.queue(invalid_item.clone());
+            #[cfg(feature = "multicore")]
+            {
+                valid_multicore.queue(valid_item);
+                invalid_multicore.queue(invalid_item);
+            }
+        }
+
+        assert!(valid.verify_prepared(&mut rng, &prepared).is_ok());
+        assert!(invalid.verify_prepared(&mut rng, &prepared).is_err());
+        #[cfg(feature = "multicore")]
+        {
+            assert!(valid_multicore.verify_multicore_prepared(&prepared).is_ok());
+            assert!(
+                invalid_multicore
+                    .verify_multicore_prepared(&prepared)
+                    .is_err()
+            );
+        }
+    }
+}
+
+#[test]
+fn joint_prepared_batch_verify() {
+    let mut rng = rng();
+    let constants = (0..MIMC_ROUNDS)
+        .map(|_| Scalar::random(&mut rng))
+        .collect::<Vec<_>>();
+    let circuit = || MiMCDemo {
+        xl: None,
+        xr: None,
+        constants: &constants,
+    };
+    let params_a = generate_random_parameters::<Bls12, _, _>(circuit(), &mut rng).unwrap();
+    let params_b = generate_random_parameters::<Bls12, _, _>(circuit(), &mut rng).unwrap();
+    let key_a = batch::PreparedBatchVerifyingKey::from(&params_a.vk);
+    let key_b = batch::PreparedBatchVerifyingKey::from(&params_b.vk);
+
+    let (xl_a, xr_a) = (Scalar::random(&mut rng), Scalar::random(&mut rng));
+    let (xl_b, xr_b) = (Scalar::random(&mut rng), Scalar::random(&mut rng));
+    let image_a = mimc(xl_a, xr_a, &constants);
+    let image_b = mimc(xl_b, xr_b, &constants);
+    let proof_a = create_random_proof(
+        MiMCDemo {
+            xl: Some(xl_a),
+            xr: Some(xr_a),
+            constants: &constants,
+        },
+        &params_a,
+        &mut rng,
+    )
+    .unwrap();
+    let proof_b = create_random_proof(
+        MiMCDemo {
+            xl: Some(xl_b),
+            xr: Some(xr_b),
+            constants: &constants,
+        },
+        &params_b,
+        &mut rng,
+    )
+    .unwrap();
+    let make_batch = |proof: &Proof<Bls12>, image| {
+        let mut verifier = batch::Verifier::new();
+        verifier.queue((proof.clone(), vec![image]));
+        verifier
+    };
+
+    assert!(
+        make_batch(&proof_a, image_a)
+            .verify_joint_prepared(make_batch(&proof_b, image_b), &mut rng, &key_a, &key_b)
+            .is_ok()
+    );
+    assert!(matches!(
+        make_batch(&proof_a, image_a + Scalar::ONE).verify_joint_prepared(
+            make_batch(&proof_b, image_b),
+            &mut rng,
+            &key_a,
+            &key_b
+        ),
+        Err(bellman::VerificationError::InvalidProof)
+    ));
+    assert!(matches!(
+        make_batch(&proof_a, image_a).verify_joint_prepared(
+            make_batch(&proof_b, image_b + Scalar::ONE),
+            &mut rng,
+            &key_a,
+            &key_b,
+        ),
+        Err(bellman::VerificationError::InvalidProof)
+    ));
+    assert!(
+        batch::Verifier::new()
+            .verify_joint_prepared(make_batch(&proof_b, image_b), &mut rng, &key_a, &key_b)
+            .is_ok()
+    );
+    assert!(
+        make_batch(&proof_a, image_a)
+            .verify_joint_prepared(batch::Verifier::new(), &mut rng, &key_a, &key_b)
+            .is_ok()
+    );
+    assert!(
+        batch::Verifier::<Bls12>::new()
+            .verify_joint_prepared(batch::Verifier::new(), &mut rng, &key_a, &key_b)
+            .is_ok()
+    );
+
+    let mut malformed = batch::Verifier::new();
+    malformed.queue((proof_b, vec![]));
+    assert!(matches!(
+        make_batch(&proof_a, image_a).verify_joint_prepared(malformed, &mut rng, &key_a, &key_b),
+        Err(bellman::VerificationError::InvalidVerifyingKey)
     ));
 }
