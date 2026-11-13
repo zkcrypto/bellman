@@ -120,11 +120,27 @@ impl<E: MultiMillerLoop> AddAssign for WeightedSums<E> {
 /// A weighted batch: the per-proof Miller loop inputs, and the sums paired with the
 /// verifying key.
 struct WeightedBatch<E: MultiMillerLoop> {
-    /// `[weight] A` for each proof.
-    a: Vec<E::G1>,
-    /// `-B` for each proof.
-    neg_b: Vec<E::G2Prepared>,
+    /// `([weight] A, -B)` for each proof.
+    proofs: Vec<(E::G1, E::G2Prepared)>,
     sums: WeightedSums<E>,
+}
+
+impl<E: MultiMillerLoop> WeightedBatch<E> {
+    /// Returns the per-proof Miller loop terms.
+    fn proof_terms(&self) -> impl Iterator<Item = (E::G1, &E::G2Prepared)> {
+        self.proofs.iter().map(|(a, neg_b)| (*a, neg_b))
+    }
+
+    /// Returns all Miller loop terms of this batch under `key`.
+    fn terms<'a>(
+        &'a self,
+        key: &'a PreparedBatchVerifyingKey<'_, E>,
+    ) -> Vec<(E::G1, &'a E::G2Prepared)> {
+        let mut terms = self.proof_terms().collect::<Vec<_>>();
+        let g2 = [&key.g2.delta_g2, &key.g2.gamma_g2, &key.g2.beta_g2];
+        terms.extend(shared_terms(key.vk, &self.sums).into_iter().zip(g2));
+        terms
+    }
 }
 
 /// Weighs batch items.
@@ -133,16 +149,12 @@ fn weigh<E: MultiMillerLoop>(
     weights: &[E::Fr],
     ic_len: usize,
 ) -> WeightedBatch<E> {
-    let mut a = Vec::with_capacity(items.len());
-    let mut neg_b = Vec::with_capacity(items.len());
+    let mut proofs = Vec::with_capacity(items.len());
     let mut c = Vec::with_capacity(items.len());
     let mut ic_scalars = vec![E::Fr::ZERO; ic_len];
     for (Item { proof, inputs }, weight) in items.iter().zip(weights) {
-        a.push(multiexp_vartime(
-            &[proof.a.to_curve()],
-            std::slice::from_ref(weight),
-        ));
-        neg_b.push((-proof.b).into());
+        let a = multiexp_vartime(&[proof.a.to_curve()], std::slice::from_ref(weight));
+        proofs.push((a, (-proof.b).into()));
         c.push(proof.c.to_curve());
         ic_scalars[0] += weight; // a_0 is implicitly set to 1
         for (input, ic_scalar) in inputs.iter().zip(&mut ic_scalars[1..]) {
@@ -150,8 +162,7 @@ fn weigh<E: MultiMillerLoop>(
         }
     }
     WeightedBatch {
-        a,
-        neg_b,
+        proofs,
         sums: WeightedSums {
             ic_scalars,
             c_sum: multiexp_vartime(&c, weights),
@@ -178,10 +189,14 @@ fn shared_terms<E: MultiMillerLoop>(vk: &VerifyingKey<E>, sums: &WeightedSums<E>
 }
 
 /// Runs a Miller loop, normalizing all G1 points with one shared inversion.
-fn miller_loop<E: MultiMillerLoop>(g1: &[E::G1], g2: &[&E::G2Prepared]) -> E::Result {
+fn miller_loop<E: MultiMillerLoop>(terms: &[(E::G1, &E::G2Prepared)]) -> E::Result {
+    let g1 = terms.iter().map(|(g1, _)| *g1).collect::<Vec<_>>();
     let mut affine = vec![E::G1Affine::identity(); g1.len()];
-    E::G1::batch_normalize(g1, &mut affine);
-    let terms = affine.iter().zip(g2.iter().copied()).collect::<Vec<_>>();
+    E::G1::batch_normalize(&g1, &mut affine);
+    let terms = affine
+        .iter()
+        .zip(terms.iter().map(|(_, g2)| *g2))
+        .collect::<Vec<_>>();
     E::multi_miller_loop(&terms)
 }
 
@@ -279,19 +294,6 @@ impl<E: MultiMillerLoop> PreparedBatchG2<E> {
 pub struct PreparedBatchVerifyingKey<'a, E: MultiMillerLoop> {
     vk: &'a VerifyingKey<E>,
     g2: Cow<'a, PreparedBatchG2<E>>,
-}
-
-struct PreparedBatchTerms<E: MultiMillerLoop> {
-    g1: Vec<E::G1>,
-    neg_b: Vec<E::G2Prepared>,
-}
-
-impl<E: MultiMillerLoop> PreparedBatchTerms<E> {
-    fn with_key<'a>(&'a self, key: &'a PreparedBatchVerifyingKey<'_, E>) -> Vec<&'a E::G2Prepared> {
-        let mut terms = self.neg_b.iter().collect::<Vec<_>>();
-        terms.extend([&key.g2.delta_g2, &key.g2.gamma_g2, &key.g2.beta_g2]);
-        terms
-    }
 }
 
 impl<E: MultiMillerLoop> std::fmt::Debug for PreparedBatchVerifyingKey<'_, E> {
@@ -434,14 +436,13 @@ where
             return self.verify_prepared(rng, key);
         }
 
-        let mut first = self.randomize_terms(&mut rng, key, true);
+        let first = self.randomize_terms(&mut rng, key, true);
         // Only one proof across both batches may have a fixed unit weight.
         let second = other.randomize_terms(&mut rng, other_key, false);
-        first.g1.extend_from_slice(&second.g1);
-        let mut g2 = first.with_key(key);
-        g2.extend(second.with_key(other_key));
+        let mut terms = first.terms(key);
+        terms.extend(second.terms(other_key));
 
-        if miller_loop::<E>(&first.g1, &g2).final_exponentiation() == E::Gt::identity() {
+        if miller_loop::<E>(&terms).final_exponentiation() == E::Gt::identity() {
             Ok(())
         } else {
             Err(VerificationError::InvalidProof)
@@ -453,10 +454,8 @@ where
         rng: R,
         pvk: &PreparedBatchVerifyingKey<'_, E>,
     ) -> Result<(), VerificationError> {
-        let terms = self.randomize_terms(rng, pvk, true);
-        if miller_loop::<E>(&terms.g1, &terms.with_key(pvk)).final_exponentiation()
-            == E::Gt::identity()
-        {
+        let batch = self.randomize_terms(rng, pvk, true);
+        if miller_loop::<E>(&batch.terms(pvk)).final_exponentiation() == E::Gt::identity() {
             Ok(())
         } else {
             Err(VerificationError::InvalidProof)
@@ -468,7 +467,7 @@ where
         mut rng: R,
         pvk: &PreparedBatchVerifyingKey<'_, E>,
         first_is_unit: bool,
-    ) -> PreparedBatchTerms<E> {
+    ) -> WeightedBatch<E> {
         let weights = (0..self.items.len())
             .map(|i| {
                 if first_is_unit && i == 0 {
@@ -478,10 +477,7 @@ where
                 }
             })
             .collect::<Vec<_>>();
-        let WeightedBatch { mut a, neg_b, sums } = weigh(&self.items, &weights, pvk.vk.ic.len());
-        a.extend(shared_terms(pvk.vk, &sums));
-
-        PreparedBatchTerms { g1: a, neg_b }
+        weigh(&self.items, &weights, pvk.vk.ic.len())
     }
 
     /// Perform batch verification using the global Rayon thread pool.
@@ -571,9 +567,9 @@ where
                     })
                     .collect::<Vec<_>>();
                 let batch = weigh(items, &weights, ic_len);
-                let g2 = batch.neg_b.iter().collect::<Vec<_>>();
+                let terms = batch.proof_terms().collect::<Vec<_>>();
                 Accumulator {
-                    ml_result: Some(miller_loop::<E>(&batch.a, &g2)),
+                    ml_result: Some(miller_loop::<E>(&terms)),
                     sums: batch.sums,
                 }
             })
@@ -595,7 +591,8 @@ where
             Some(mut ml_result) => {
                 let g1 = shared_terms(vk, &acc.sums);
                 let g2 = [&pvk.g2.delta_g2, &pvk.g2.gamma_g2, &pvk.g2.beta_g2];
-                ml_result += miller_loop::<E>(&g1, &g2);
+                let terms = g1.into_iter().zip(g2).collect::<Vec<_>>();
+                ml_result += miller_loop::<E>(&terms);
 
                 if ml_result.final_exponentiation() == E::Gt::identity() {
                     Ok(())
