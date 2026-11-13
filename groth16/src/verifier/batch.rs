@@ -137,8 +137,7 @@ impl<E: MultiMillerLoop> WeightedBatch<E> {
         key: &'a PreparedBatchVerifyingKey<'_, E>,
     ) -> Vec<(E::G1, &'a E::G2Prepared)> {
         let mut terms = self.proof_terms().collect::<Vec<_>>();
-        let g2 = [&key.g2.delta_g2, &key.g2.gamma_g2, &key.g2.beta_g2];
-        terms.extend(shared_terms(key.vk, &self.sums).into_iter().zip(g2));
+        terms.extend(key_terms(key, &self.sums));
         terms
     }
 }
@@ -170,8 +169,12 @@ fn weigh<E: MultiMillerLoop>(
     }
 }
 
-/// Returns the G1 terms that pair the batch sums with the verifying key.
-fn shared_terms<E: MultiMillerLoop>(vk: &VerifyingKey<E>, sums: &WeightedSums<E>) -> [E::G1; 3] {
+/// Returns the Miller loop terms that pair the batch sums with the verifying key.
+fn key_terms<'k, E: MultiMillerLoop>(
+    key: &'k PreparedBatchVerifyingKey<'_, E>,
+    sums: &WeightedSums<E>,
+) -> [(E::G1, &'k E::G2Prepared); 3] {
+    let vk = key.vk;
     let ic = vk.ic.iter().map(|ic| ic.to_curve()).collect::<Vec<_>>();
     let psi = multiexp_vartime(&ic, &sums.ic_scalars);
     let weight_sum = sums.weight_sum();
@@ -185,7 +188,11 @@ fn shared_terms<E: MultiMillerLoop>(vk: &VerifyingKey<E>, sums: &WeightedSums<E>
     // to our Miller loop terms because
     //     [weight_sum] e(alpha_g1, beta_g2) = e([weight_sum] alpha_g1, beta_g2)
     let alpha = multiexp_vartime(&[vk.alpha_g1.to_curve()], &[weight_sum]);
-    [sums.c_sum, psi, alpha]
+    [
+        (sums.c_sum, &key.g2.delta_g2),
+        (psi, &key.g2.gamma_g2),
+        (alpha, &key.g2.beta_g2),
+    ]
 }
 
 /// Runs a Miller loop, normalizing all G1 points with one shared inversion.
@@ -589,10 +596,7 @@ where
         match acc.ml_result {
             None => Ok(()),
             Some(mut ml_result) => {
-                let g1 = shared_terms(vk, &acc.sums);
-                let g2 = [&pvk.g2.delta_g2, &pvk.g2.gamma_g2, &pvk.g2.beta_g2];
-                let terms = g1.into_iter().zip(g2).collect::<Vec<_>>();
-                ml_result += miller_loop::<E>(&terms);
+                ml_result += miller_loop::<E>(&key_terms(pvk, &acc.sums));
 
                 if ml_result.final_exponentiation() == E::Gt::identity() {
                     Ok(())
