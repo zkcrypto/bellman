@@ -7,6 +7,7 @@ and this project adheres to Rust's notion of
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-11-14
 ### Fixed
 - Fixed a regression introduced in 0.2.1 in single-proof verification using
   `PreparedVerifyingKey`, affecting `groth16::verify_proof` and
