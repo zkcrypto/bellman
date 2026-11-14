@@ -1,6 +1,6 @@
 [package]
 name = "groth16"
-version = "0.2.0"
+version = "0.2.2"
 authors = [
     "Sean Bowe <ewillbefull@gmail.com>",
     "Jack Grigg <thestr4d@gmail.com>",
@@ -28,7 +28,7 @@ rayon = { workspace = true, optional = true }
 [dev-dependencies]
 bls12_381.workspace = true
 criterion.workspace = true
-rand = { workspace = true, features = ["thread_rng"] }
+rand = { workspace = true, features = ["std_rng", "thread_rng"] }
 subtle.workspace = true
 
 [features]
@@ -37,4 +37,12 @@ default = ["multicore"]
 
 [[bench]]
 name = "batch"
+harness = false
+
+[[bench]]
+name = "prepared_batch"
+harness = false
+
+[[bench]]
+name = "reusable_verify"
 harness = false

@@ -15,6 +15,7 @@ use std::sync::Arc;
 mod tests;
 
 mod generator;
+mod multiexp;
 mod prover;
 mod verifier;
 
@@ -563,6 +564,69 @@ mod test_with_bls12_381 {
 
             assert!(verify_proof(&pvk, &proof, &[c]).is_ok());
             assert!(verify_proof(&pvk, &proof, &[a]).is_err());
+        }
+    }
+
+    #[test]
+    fn verify_seven_public_inputs() {
+        struct SevenInputs {
+            values: Option<[Scalar; 7]>,
+        }
+
+        impl Circuit<Scalar> for SevenInputs {
+            fn synthesize<CS: ConstraintSystem<Scalar>>(
+                self,
+                cs: &mut CS,
+            ) -> Result<(), SynthesisError> {
+                for index in 0..7 {
+                    let mut cs = cs.namespace(|| format!("input {index}"));
+                    let input = cs.alloc_input(
+                        || "value",
+                        || {
+                            self.values
+                                .map(|values| values[index])
+                                .ok_or(SynthesisError::AssignmentMissing)
+                        },
+                    )?;
+                    let witness = cs.alloc(
+                        || "private copy",
+                        || {
+                            self.values
+                                .map(|values| values[index])
+                                .ok_or(SynthesisError::AssignmentMissing)
+                        },
+                    )?;
+                    cs.enforce(
+                        || "value times one is value",
+                        |lc| lc + witness,
+                        |lc| lc + CS::one(),
+                        |lc| lc + input,
+                    );
+                }
+                Ok(())
+            }
+        }
+
+        let mut rng = rng();
+        let params =
+            generate_random_parameters::<Bls12, _, _>(SevenInputs { values: None }, &mut rng)
+                .unwrap();
+        let pvk = prepare_verifying_key(&params.vk);
+        let inputs = core::array::from_fn(|_| Scalar::random(&mut rng));
+        let proof = create_random_proof(
+            SevenInputs {
+                values: Some(inputs),
+            },
+            &params,
+            &mut rng,
+        )
+        .unwrap();
+
+        assert!(verify_proof(&pvk, &proof, &inputs).is_ok());
+        for index in 0..inputs.len() {
+            let mut changed = inputs;
+            changed[index] += Scalar::ONE;
+            assert!(verify_proof(&pvk, &proof, &changed).is_err());
         }
     }
 }

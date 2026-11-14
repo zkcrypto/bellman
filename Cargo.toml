@@ -20,7 +20,7 @@ blake2s_simd = "1"
 byteorder = "1"
 ff = "0.14"
 group = "0.14"
-pairing = "0.24.0"
+pairing = "0.24.2"
 rand_core = "0.10"
 subtle = "2.3"
 
