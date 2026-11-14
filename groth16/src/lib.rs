@@ -398,8 +398,6 @@ impl<E: Engine> Parameters<E> {
     }
 }
 
-const PUBLIC_INPUT_WINDOW: usize = 5;
-
 pub struct PreparedVerifyingKey<E: MultiMillerLoop> {
     /// Pairing result of alpha*beta
     alpha_g1_beta_g2: E::Gt,
@@ -409,8 +407,6 @@ pub struct PreparedVerifyingKey<E: MultiMillerLoop> {
     neg_delta_g2: E::G2Prepared,
     /// Copy of IC from `VerifiyingKey`.
     ic: Vec<E::G1Affine>,
-    /// Window tables for the public-input bases after the constant term.
-    ic_wnaf: Vec<group::WnafBase<E::G1, PUBLIC_INPUT_WINDOW>>,
 }
 
 pub trait ParameterSource<E: Engine> {

@@ -1,8 +1,8 @@
-use group::{Curve, CurveAffine, WnafBase, WnafScalar};
+use group::{Curve, CurveAffine};
 use pairing::{MillerLoopResult, MultiMillerLoop};
-use std::ops::{AddAssign, Neg};
+use std::ops::Neg;
 
-use super::{PUBLIC_INPUT_WINDOW, PreparedVerifyingKey, Proof, VerifyingKey};
+use super::{PreparedVerifyingKey, Proof, VerifyingKey, multiexp::multiexp_vartime};
 
 use bellman::VerificationError;
 
@@ -17,12 +17,6 @@ pub fn prepare_verifying_key<E: MultiMillerLoop>(vk: &VerifyingKey<E>) -> Prepar
         neg_gamma_g2: E::prepare_reusable_g2(gamma),
         neg_delta_g2: E::prepare_reusable_g2(delta),
         ic: vk.ic.clone(),
-        ic_wnaf: vk
-            .ic
-            .iter()
-            .skip(1)
-            .map(|base| WnafBase::new(base.to_curve()))
-            .collect(),
     }
 }
 
@@ -35,13 +29,12 @@ pub fn verify_proof<E: MultiMillerLoop>(
         return Err(VerificationError::InvalidVerifyingKey);
     }
 
+    let bases = pvk.ic[1..]
+        .iter()
+        .map(|base| base.to_curve())
+        .collect::<Vec<_>>();
     let mut acc = pvk.ic[0].to_curve();
-
-    for (input, base) in public_inputs.iter().zip(pvk.ic_wnaf.iter()) {
-        // Public inputs may be multiplied with a variable-time window method.
-        let term = base * &WnafScalar::<E::Fr, PUBLIC_INPUT_WINDOW>::new(input);
-        AddAssign::<&E::G1>::add_assign(&mut acc, &term);
-    }
+    acc += &multiexp_vartime(&bases, public_inputs);
 
     // The original verification equation is:
     // A * B = alpha * beta + inputs * gamma + C * delta

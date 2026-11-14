@@ -7,6 +7,23 @@ and this project adheres to Rust's notion of
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-11-14
+### Fixed
+- Fixed a regression introduced in 0.2.1 in single-proof verification using
+  `PreparedVerifyingKey`, affecting `groth16::verify_proof` and
+  `groth16::batch::Item::verify_single`. These APIs now correctly handle:
+  - Public inputs whose scalar field uses a big-endian `PrimeField::Repr`.
+  - Public inputs whose scalar field uses a full-width little-endian
+    representation, when wNAF recoding generates a carry beyond its last byte.
+
+  Batch verification APIs were not affected.
+
+### Changed
+- Improved single-proof verification performance for proofs with multiple public
+  inputs over groups with little-endian scalars.
+- The breaking change to the auto trait impls of `PreparedVerifyingKey` in 0.2.1
+  has been reverted.
+
 ## [0.2.1] - 2026-11-14
 ### Added
 - `groth16::batch` APIs for reusing verifying-key terms across batches:

@@ -1,5 +1,8 @@
 use ff::{Field, PrimeField};
 
+const DUMMY_REPR_BYTES: usize = 8;
+const DUMMY_REPR_BIG_ENDIAN: bool = false;
+
 pub(crate) mod dummy_engine;
 use self::dummy_engine::*;
 
@@ -437,6 +440,84 @@ fn zero_coeff_one_var() {
 #[test]
 fn zero_coeff_non_one_var() {
     zero_coeff_test(false);
+}
+
+mod big_endian_public_input {
+    use super::{Field, PrimeField, prepare_verifying_key, verify_proof};
+
+    const DUMMY_REPR_BYTES: usize = 8;
+    const DUMMY_REPR_BIG_ENDIAN: bool = true;
+
+    mod dummy_engine {
+        include!("dummy_engine.rs");
+    }
+    use dummy_engine::{DummyEngine, Fr};
+
+    #[test]
+    fn verify_proof_with_big_endian_public_input() {
+        let input = Fr::from(2);
+        let repr = input.to_repr();
+        assert_eq!(repr.as_ref(), &[0, 0, 0, 0, 0, 0, 0, 2]);
+        assert_eq!(Option::<Fr>::from(Fr::from_repr(repr)), Some(input));
+
+        let vk = super::super::VerifyingKey::<DummyEngine> {
+            alpha_g1: Fr::ONE,
+            beta_g1: Fr::ONE,
+            beta_g2: Fr::ONE,
+            gamma_g2: Fr::ONE,
+            delta_g1: Fr::ONE,
+            delta_g2: Fr::ONE,
+            ic: vec![Fr::ONE, Fr::ONE],
+        };
+        // 1 * (3 + input) = 1 * 1 + (1 + input) * 1 + 1 * 1.
+        let proof = super::super::Proof::<DummyEngine> {
+            a: Fr::ONE,
+            b: Fr::from(3) + input,
+            c: Fr::ONE,
+        };
+        let pvk = prepare_verifying_key(&vk);
+        assert!(verify_proof(&pvk, &proof, &[input]).is_ok());
+        assert!(verify_proof(&pvk, &proof, &[Fr::ONE]).is_err());
+    }
+}
+
+mod little_endian_full_width_public_input {
+    use super::{Field, PrimeField, prepare_verifying_key, verify_proof};
+
+    const DUMMY_REPR_BYTES: usize = 2;
+    const DUMMY_REPR_BIG_ENDIAN: bool = false;
+
+    mod dummy_engine {
+        include!("dummy_engine.rs");
+    }
+    use dummy_engine::{DummyEngine, Fr};
+
+    #[test]
+    fn verify_proof_with_full_width_little_endian_carry() {
+        let input = Fr::from(64512); // -1, represented with all 16 bits.
+        let repr = input.to_repr();
+        assert_eq!(repr.as_ref(), &[0, 252]);
+        assert_eq!(Option::<Fr>::from(Fr::from_repr(repr)), Some(input));
+
+        let vk = super::super::VerifyingKey::<DummyEngine> {
+            alpha_g1: Fr::ONE,
+            beta_g1: Fr::ONE,
+            beta_g2: Fr::ONE,
+            gamma_g2: Fr::ONE,
+            delta_g1: Fr::ONE,
+            delta_g2: Fr::ONE,
+            ic: vec![Fr::ONE, Fr::ONE],
+        };
+        // 1 * (3 + input) = 1 * 1 + (1 + input) * 1 + 1 * 1.
+        let proof = super::super::Proof::<DummyEngine> {
+            a: Fr::ONE,
+            b: Fr::from(3) + input,
+            c: Fr::ONE,
+        };
+        let pvk = prepare_verifying_key(&vk);
+        assert!(verify_proof(&pvk, &proof, &[input]).is_ok());
+        assert!(verify_proof(&pvk, &proof, &[Fr::ONE]).is_err());
+    }
 }
 
 /// Exercises batch verification over a small scalar field, which uses full-field weights
