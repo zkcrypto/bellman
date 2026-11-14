@@ -15,6 +15,7 @@ use std::sync::Arc;
 mod tests;
 
 mod generator;
+mod multiexp;
 mod prover;
 mod verifier;
 

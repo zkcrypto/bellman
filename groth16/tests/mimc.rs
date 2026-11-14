@@ -1,5 +1,5 @@
 // For randomness (during paramgen and proof generation)
-use rand::rng;
+use rand::{RngExt, SeedableRng, TryCryptoRng, TryRng, rng, rngs::StdRng, seq::IndexedRandom};
 
 // For benchmarking
 use std::time::{Duration, Instant};
@@ -8,15 +8,14 @@ use std::time::{Duration, Instant};
 use ff::Field;
 
 // We're going to use the BLS12-381 pairing-friendly elliptic curve.
-use bls12_381::{Bls12, G2Affine, Scalar};
+use bls12_381::{Bls12, G1Projective, G2Affine, G2Projective, Scalar};
 
 // We're going to use the Groth16 proving system.
 use groth16::{
-    Proof, batch, create_random_proof, generate_random_parameters, prepare_verifying_key,
-    verify_proof,
+    PreparedVerifyingKey, Proof, VerifyingKey, batch, create_random_proof,
+    generate_random_parameters, prepare_verifying_key, verify_proof,
 };
 
-#[cfg(feature = "multicore")]
 use bellman::VerificationError;
 
 mod common;
@@ -103,6 +102,88 @@ fn test_mimc() {
 
     println!("Average proving time: {:?} seconds", proving_avg);
     println!("Average verifying time: {:?} seconds", verifying_avg);
+}
+
+type Item = (Proof<Bls12>, Vec<Scalar>);
+
+/// Returns a verifying key and a few valid proofs, generated deterministically.
+fn batch_fixture() -> (VerifyingKey<Bls12>, PreparedVerifyingKey<Bls12>, Vec<Item>) {
+    let mut rng = StdRng::seed_from_u64(0);
+    let constants = (0..MIMC_ROUNDS)
+        .map(|_| Scalar::random(&mut rng))
+        .collect::<Vec<_>>();
+    let params = generate_random_parameters::<Bls12, _, _>(
+        MiMCDemo {
+            xl: None,
+            xr: None,
+            constants: &constants,
+        },
+        &mut rng,
+    )
+    .unwrap();
+    let items = (0..4)
+        .map(|_| {
+            let xl = Scalar::random(&mut rng);
+            let xr = Scalar::random(&mut rng);
+            let circuit = MiMCDemo {
+                xl: Some(xl),
+                xr: Some(xr),
+                constants: &constants,
+            };
+            let proof = create_random_proof(circuit, &params, &mut rng).unwrap();
+            (proof, vec![mimc(xl, xr, &constants)])
+        })
+        .collect();
+    let pvk = prepare_verifying_key(&params.vk);
+    (params.vk, pvk, items)
+}
+
+/// Makes an item invalid, in one of four ways selected by `kind`.
+fn corrupt((proof, inputs): &mut Item, kind: usize) {
+    match kind % 4 {
+        0 => proof.a = (proof.a + G1Projective::generator()).into(),
+        1 => proof.b = (proof.b + G2Projective::generator()).into(),
+        2 => proof.c = (proof.c + G1Projective::generator()).into(),
+        _ => inputs[0] += Scalar::ONE,
+    }
+}
+
+/// Returns whether a batch result is the expected success, or a proof failure.
+fn is_expected(result: Result<(), VerificationError>, valid: bool) -> bool {
+    matches!(
+        (result, valid),
+        (Ok(()), true) | (Err(VerificationError::InvalidProof), false)
+    )
+}
+
+/// Asserts that batch verification accepts `items` exactly when each item verifies alone.
+fn assert_batch_matches_single(
+    vk: &VerifyingKey<Bls12>,
+    pvk: &PreparedVerifyingKey<Bls12>,
+    items: &[Item],
+    rng: &mut StdRng,
+) {
+    let valid = items
+        .iter()
+        .all(|(proof, inputs)| verify_proof(pvk, proof, inputs).is_ok());
+    let batch = || {
+        let mut batch = batch::Verifier::new();
+        for item in items {
+            batch.queue(item.clone());
+        }
+        batch
+    };
+    assert!(is_expected(batch().verify(&mut *rng, vk), valid));
+    let prepared = batch::PreparedBatchVerifyingKey::from(vk);
+    assert!(is_expected(batch().verify_prepared(rng, &prepared), valid));
+    #[cfg(feature = "multicore")]
+    {
+        assert!(is_expected(batch().verify_multicore(vk), valid));
+        assert!(is_expected(
+            batch().verify_multicore_prepared(&prepared),
+            valid
+        ));
+    }
 }
 
 #[test]
@@ -487,4 +568,177 @@ fn joint_prepared_batch_verify() {
         make_batch(&proof_a, image_a).verify_joint_prepared(malformed, &mut rng, &key_a, &key_b),
         Err(bellman::VerificationError::InvalidVerifyingKey)
     ));
+}
+
+#[test]
+fn batch_rejects_each_invalid_proof() {
+    let (vk, pvk, proofs) = batch_fixture();
+    let mut rng = StdRng::seed_from_u64(1);
+    // Cover empty and singleton batches, and both sides of the multicore chunk
+    // boundary. The first item has the unit weight.
+    for size in [0, 1, 2, 8, 9, 17] {
+        let mut items = proofs
+            .iter()
+            .cycle()
+            .take(size)
+            .cloned()
+            .collect::<Vec<_>>();
+        assert_batch_matches_single(&vk, &pvk, &items, &mut rng);
+        for position in 0..size {
+            let valid = items[position].clone();
+            corrupt(&mut items[position], size + position);
+            let (proof, inputs) = &items[position];
+            assert!(verify_proof(&pvk, proof, inputs).is_err());
+            assert_batch_matches_single(&vk, &pvk, &items, &mut rng);
+            items[position] = valid;
+        }
+    }
+}
+
+#[test]
+fn batch_matches_single_verification() {
+    let (vk, pvk, proofs) = batch_fixture();
+    for seed in 0..64 {
+        let mut rng = StdRng::seed_from_u64(seed);
+        let size = rng.random_range(1..=20);
+        let mut items = (0..size)
+            .map(|_| proofs.choose(&mut rng).unwrap().clone())
+            .collect::<Vec<_>>();
+        for _ in 0..rng.random_range(0..3) {
+            let position = rng.random_range(0..size);
+            corrupt(&mut items[position], rng.random_range(0..4));
+        }
+        assert_batch_matches_single(&vk, &pvk, &items, &mut rng);
+    }
+}
+
+#[test]
+fn batch_rejects_cancelling_errors() {
+    let (vk, pvk, proofs) = batch_fixture();
+    let mut rng = StdRng::seed_from_u64(2);
+
+    // Match the adaptive chunk size in `verify_multicore_prepared_unchecked`.
+    const BATCH_SIZE: usize = 17;
+    #[cfg(feature = "multicore")]
+    let threads = rayon::current_num_threads();
+    #[cfg(not(feature = "multicore"))]
+    let threads = 1;
+    let chunk_size = BATCH_SIZE.div_ceil(threads).clamp(1, 8);
+
+    // These errors cancel if both items get the same weight. In particular, errors at
+    // chunk starts catch assigning the unit weight to the first item of every chunk.
+    for (first, second) in [
+        (0, 1),
+        (0, chunk_size),
+        (1, chunk_size + 1),
+        (chunk_size - 1, chunk_size),
+        (chunk_size, 2 * chunk_size),
+    ] {
+        let mut items = proofs
+            .iter()
+            .cycle()
+            .take(BATCH_SIZE)
+            .cloned()
+            .collect::<Vec<_>>();
+        items[first].0.c = (items[first].0.c + G1Projective::generator()).into();
+        items[second].0.c = (items[second].0.c - G1Projective::generator()).into();
+        assert_batch_matches_single(&vk, &pvk, &items, &mut rng);
+    }
+}
+
+#[test]
+fn joint_prepared_batch_rejects_cancelling_errors() {
+    let (vk, pvk, proofs) = batch_fixture();
+    let cache = batch::PreparedBatchG2::from(&vk);
+    let key = batch::PreparedBatchVerifyingKey::from_cached(&vk, &cache).unwrap();
+    let make_batch = |items: &[Item]| {
+        let mut verifier = batch::Verifier::new();
+        for item in items {
+            verifier.queue(item.clone());
+        }
+        verifier
+    };
+
+    for size in [1, 3] {
+        for invalid in [false, true] {
+            let mut first = proofs[..size].to_vec();
+            let mut second = proofs[..size].to_vec();
+            if invalid {
+                // Opposite errors cancel if the first proof of each side gets weight one.
+                first[0].0.c = (first[0].0.c + G1Projective::generator()).into();
+                second[0].0.c = (second[0].0.c - G1Projective::generator()).into();
+                assert!(verify_proof(&pvk, &first[0].0, &first[0].1).is_err());
+                assert!(verify_proof(&pvk, &second[0].0, &second[0].1).is_err());
+            }
+
+            // Every proof except the first across both batches draws exactly 16 bytes.
+            // Repeated 0x02 bytes select a nonzero weight different from one.
+            let mut rng = FixedBytes(vec![2; 16 * (2 * size - 1)].into_iter());
+            assert!(is_expected(
+                make_batch(&first).verify_joint_prepared(make_batch(&second), &mut rng, &key, &key),
+                !invalid,
+            ));
+            assert_eq!(rng.0.len(), 0);
+        }
+    }
+}
+
+#[test]
+fn batch_accepts_empty_batch() {
+    let (mut vk, _, _) = batch_fixture();
+    // A key with no `ic` points can be deserialized, and has no valid proofs.
+    for ic_len in [1, 0] {
+        vk.ic.truncate(ic_len);
+        assert!(batch::Verifier::new().verify(rng(), &vk).is_ok());
+        #[cfg(feature = "multicore")]
+        assert!(batch::Verifier::new().verify_multicore(&vk).is_ok());
+    }
+}
+
+/// Supplies fixed bytes, so that a test can choose the batch weights.
+struct FixedBytes(std::vec::IntoIter<u8>);
+
+impl TryRng for FixedBytes {
+    type Error = std::convert::Infallible;
+
+    fn try_next_u32(&mut self) -> Result<u32, Self::Error> {
+        let mut bytes = [0; 4];
+        self.try_fill_bytes(&mut bytes)?;
+        Ok(u32::from_le_bytes(bytes))
+    }
+
+    fn try_next_u64(&mut self) -> Result<u64, Self::Error> {
+        let mut bytes = [0; 8];
+        self.try_fill_bytes(&mut bytes)?;
+        Ok(u64::from_le_bytes(bytes))
+    }
+
+    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), Self::Error> {
+        for byte in dest {
+            *byte = self.0.next().expect("the test supplies every random byte");
+        }
+        Ok(())
+    }
+}
+
+impl TryCryptoRng for FixedBytes {}
+
+#[test]
+fn batch_retries_zero_weight() {
+    let (vk, _, proofs) = batch_fixture();
+    for valid in [true, false] {
+        let mut items = proofs[..2].to_vec();
+        if !valid {
+            corrupt(&mut items[1], 3);
+        }
+        let mut batch = batch::Verifier::new();
+        for item in items {
+            batch.queue(item);
+        }
+        // The unit-weight item draws nothing. The other item first draws zero, which
+        // would drop it from the batch, then draws the largest weight, 2^128 - 1.
+        let mut rng = FixedBytes([[0; 16], [0xff; 16]].concat().into_iter());
+        assert!(is_expected(batch.verify(&mut rng, &vk), valid));
+        assert_eq!(rng.0.len(), 0);
+    }
 }

@@ -2,7 +2,8 @@ use std::hint::black_box;
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 
-use bls12_381::Bls12;
+use bellman::{Circuit, ConstraintSystem, SynthesisError};
+use bls12_381::{Bls12, Scalar};
 use ff::Field;
 use rand::rng;
 
@@ -10,69 +11,70 @@ use groth16::{
     batch, create_random_proof, generate_random_parameters, prepare_verifying_key, verify_proof,
 };
 
-#[path = "../tests/common/mod.rs"]
-mod common;
+/// A circuit with the seven public inputs of a Sapling Spend. Verification cost depends on
+/// the number of public inputs, not on the constraints.
+struct SaplingSized {
+    witnesses: Option<[Scalar; 7]>,
+}
 
-use common::*;
+impl Circuit<Scalar> for SaplingSized {
+    fn synthesize<CS: ConstraintSystem<Scalar>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
+        for i in 0..7 {
+            let witness = self.witnesses.map(|witnesses| witnesses[i]);
+            let x = cs.alloc(
+                || format!("witness {i}"),
+                || witness.ok_or(SynthesisError::AssignmentMissing),
+            )?;
+            let square = cs.alloc_input(
+                || format!("square {i}"),
+                || {
+                    witness
+                        .map(|witness| witness.square())
+                        .ok_or(SynthesisError::AssignmentMissing)
+                },
+            )?;
+            cs.enforce(
+                || format!("square {i}"),
+                |lc| lc + x,
+                |lc| lc + x,
+                |lc| lc + square,
+            );
+        }
+        Ok(())
+    }
+}
 
 fn bench_batch_verify(c: &mut Criterion) {
-    let mut group = c.benchmark_group("Batch Verification");
+    let mut group = c.benchmark_group("Sapling-sized verification");
+    let mut rng = rng();
 
-    for &n in [8usize, 16, 24, 32, 40, 48, 56, 64].iter() {
-        group.throughput(Throughput::Elements(n as u64));
+    let params =
+        generate_random_parameters::<Bls12, _, _>(SaplingSized { witnesses: None }, &mut rng)
+            .unwrap();
+    let pvk = prepare_verifying_key(&params.vk);
 
-        let mut rng = rng();
-
-        // Generate the MiMC round constants
-        let constants = (0..MIMC_ROUNDS)
-            .map(|_| bls12_381::Scalar::random(&mut rng))
-            .collect::<Vec<_>>();
-
-        // Create parameters for our circuit
-        let params = {
-            let c = MiMCDemo {
-                xl: None,
-                xr: None,
-                constants: &constants,
-            };
-
-            generate_random_parameters::<Bls12, _, _>(c, &mut rng).unwrap()
+    let all_proofs = std::iter::repeat_with(|| {
+        let witnesses: [Scalar; 7] = std::array::from_fn(|_| Scalar::random(&mut rng));
+        let circuit = SaplingSized {
+            witnesses: Some(witnesses),
         };
+        let proof = create_random_proof(circuit, &params, &mut rng).unwrap();
+        (proof, witnesses.map(|witness| witness.square()))
+    })
+    .take(256)
+    .collect::<Vec<_>>();
 
-        // Prepare the verification key (for proof verification)
-        let pvk = prepare_verifying_key(&params.vk);
-
-        let proofs = {
-            std::iter::repeat_with(|| {
-                // Generate a random preimage and compute the image
-                let xl = bls12_381::Scalar::random(&mut rng);
-                let xr = bls12_381::Scalar::random(&mut rng);
-                let image = mimc(xl, xr, &constants);
-
-                // Create an instance of our circuit (with the
-                // witness)
-                let c = MiMCDemo {
-                    xl: Some(xl),
-                    xr: Some(xr),
-                    constants: &constants,
-                };
-
-                // Create a groth16 proof with our parameters.
-                let proof = create_random_proof(c, &params, &mut rng).unwrap();
-
-                (proof, image)
-            })
-        }
-        .take(n)
-        .collect::<Vec<_>>();
+    for n in [1, 8, 64, 256] {
+        let proofs = &all_proofs[..n];
+        group.throughput(Throughput::Elements(n as u64));
 
         group.bench_with_input(
             BenchmarkId::new("Unbatched verification", n),
-            &proofs,
+            proofs,
             |b, proofs| {
                 b.iter(|| {
-                    for (proof, input) in proofs.iter() {
-                        let _ = black_box(verify_proof(&pvk, proof, &[*input]));
+                    for (proof, inputs) in proofs {
+                        assert!(black_box(verify_proof(&pvk, proof, inputs)).is_ok());
                     }
                 })
             },
@@ -80,29 +82,29 @@ fn bench_batch_verify(c: &mut Criterion) {
 
         group.bench_with_input(
             BenchmarkId::new("Batched verification", n),
-            &proofs,
+            proofs,
             |b, proofs| {
                 b.iter(|| {
                     let mut batch = batch::Verifier::new();
-                    for (proof, input) in proofs.iter() {
-                        batch.queue((proof.clone(), vec![*input]));
+                    for (proof, inputs) in proofs {
+                        batch.queue((proof.clone(), inputs.to_vec()));
                     }
-                    black_box(batch.verify(&mut rng, &params.vk))
+                    assert!(black_box(batch.verify(&mut rng, &params.vk)).is_ok());
                 })
             },
         );
 
         #[cfg(feature = "multicore")]
         group.bench_with_input(
-            BenchmarkId::new("Multicore batched verification", n),
-            &proofs,
+            BenchmarkId::new("Batched multicore verification", n),
+            proofs,
             |b, proofs| {
                 b.iter(|| {
                     let mut batch = batch::Verifier::new();
-                    for (proof, input) in proofs.iter() {
-                        batch.queue((proof.clone(), vec![*input]));
+                    for (proof, inputs) in proofs {
+                        batch.queue((proof.clone(), inputs.to_vec()));
                     }
-                    black_box(batch.verify_multicore(&params.vk))
+                    assert!(black_box(batch.verify_multicore(&params.vk)).is_ok());
                 })
             },
         );

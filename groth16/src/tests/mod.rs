@@ -1,6 +1,6 @@
 use ff::{Field, PrimeField};
 
-mod dummy_engine;
+pub(crate) mod dummy_engine;
 use self::dummy_engine::*;
 
 use std::marker::PhantomData;
@@ -437,4 +437,46 @@ fn zero_coeff_one_var() {
 #[test]
 fn zero_coeff_non_one_var() {
     zero_coeff_test(false);
+}
+
+/// Exercises batch verification over a small scalar field, which uses full-field weights
+/// and the group's own multiplication. A fixed seed keeps the `1 / (r - 1)` chance of
+/// accepting an invalid batch over this field from making the test flaky.
+#[test]
+fn batch_verify_small_field() {
+    use rand::{SeedableRng, rngs::StdRng};
+
+    let vk = super::VerifyingKey::<DummyEngine> {
+        alpha_g1: Fr::ONE,
+        beta_g1: Fr::ONE,
+        beta_g2: Fr::ONE,
+        gamma_g2: Fr::ONE,
+        delta_g1: Fr::ONE,
+        delta_g2: Fr::ONE,
+        ic: vec![Fr::ONE],
+    };
+    let proof = super::Proof::<DummyEngine> {
+        a: Fr::from(2),
+        b: Fr::ONE,
+        c: Fr::ZERO,
+    };
+    let pvk = prepare_verifying_key(&vk);
+    assert!(verify_proof(&pvk, &proof, &[]).is_ok());
+
+    for size in [0, 1, 8, 9] {
+        for invalid in std::iter::once(None).chain((0..size).map(Some)) {
+            let mut batch = super::batch::Verifier::new();
+            for index in 0..size {
+                let mut proof = proof.clone();
+                if invalid == Some(index) {
+                    proof.c = Fr::ONE;
+                }
+                batch.queue((proof, vec![]));
+            }
+            assert_eq!(
+                batch.verify(StdRng::seed_from_u64(0), &vk).is_ok(),
+                invalid.is_none()
+            );
+        }
+    }
 }

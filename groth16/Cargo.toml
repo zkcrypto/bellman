@@ -28,7 +28,7 @@ rayon = { workspace = true, optional = true }
 [dev-dependencies]
 bls12_381.workspace = true
 criterion.workspace = true
-rand = { workspace = true, features = ["thread_rng"] }
+rand = { workspace = true, features = ["std_rng", "thread_rng"] }
 subtle.workspace = true
 
 [features]
