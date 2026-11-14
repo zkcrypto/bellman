@@ -265,7 +265,7 @@ impl Field for Fr {
 }
 
 #[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
-pub struct FrRepr([u8; 8]);
+pub struct FrRepr([u8; super::DUMMY_REPR_BYTES]);
 
 impl From<Fr> for FrRepr {
     fn from(v: Fr) -> FrRepr {
@@ -275,7 +275,15 @@ impl From<Fr> for FrRepr {
 
 impl<'a> From<&'a Fr> for FrRepr {
     fn from(v: &'a Fr) -> FrRepr {
-        FrRepr(((v.0).0 as u64).to_le_bytes())
+        let mut repr = [0; super::DUMMY_REPR_BYTES];
+        if super::DUMMY_REPR_BIG_ENDIAN {
+            let bytes = ((v.0).0 as u64).to_be_bytes();
+            repr.copy_from_slice(&bytes[8 - super::DUMMY_REPR_BYTES..]);
+        } else {
+            let bytes = ((v.0).0 as u64).to_le_bytes();
+            repr.copy_from_slice(&bytes[..super::DUMMY_REPR_BYTES]);
+        }
+        FrRepr(repr)
     }
 }
 
@@ -299,7 +307,14 @@ impl PrimeField for Fr {
     const S: u32 = 10;
 
     fn from_repr(repr: FrRepr) -> CtOption<Self> {
-        let v = u64::from_le_bytes(repr.0);
+        let mut bytes = [0; 8];
+        let v = if super::DUMMY_REPR_BIG_ENDIAN {
+            bytes[8 - super::DUMMY_REPR_BYTES..].copy_from_slice(&repr.0);
+            u64::from_be_bytes(bytes)
+        } else {
+            bytes[..super::DUMMY_REPR_BYTES].copy_from_slice(&repr.0);
+            u64::from_le_bytes(bytes)
+        };
         let is_some = Choice::from(if v >= (MODULUS_R.0 as u64) { 0 } else { 1 });
         CtOption::new(Fr(Wrapping(v as u32)), is_some)
     }
